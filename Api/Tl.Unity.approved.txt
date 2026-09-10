@@ -1,39 +1,41 @@
-enum Tl.ClipState
-  field static Tl.ClipState Enter = 0
-  field static Tl.ClipState Exit = 2
-  field static Tl.ClipState Stay = 1
-interface Tl.ITimelineInput<TOutput>
-  method System.Boolean TryBackward(System.UInt16, in Tl.Playback, System.UInt32, ref TOutput, out Tl.Playback)
-  method System.Boolean TryForward(System.UInt16, in Tl.Playback, System.UInt32, ref TOutput, out Tl.Playback)
+enum Tl.FrameFlags
+  field static Tl.FrameFlags ClipEnd = 2
+  field static Tl.FrameFlags ClipStart = 1
+  field static Tl.FrameFlags CompletedAfter = 32
+  field static Tl.FrameFlags CompletedBefore = 16
+  field static Tl.FrameFlags Looping = 64
+  field static Tl.FrameFlags None = 0
+  field static Tl.FrameFlags Reverse = 128
+  field static Tl.FrameFlags TimelineEnd = 8
+  field static Tl.FrameFlags TimelineStart = 4
+struct Tl.Frame<TTrack, TClip>
+  constructor Tl.Frame<TTrack, TClip>(in TTrack, in TClip, System.UInt32, System.UInt32, System.Int64, System.UInt16, Tl.FrameFlags)
+  property TClip& Clip
+  property System.Int64 Cycle
+  property System.Int32 Direction
+  property Tl.FrameFlags Flags
+  property System.UInt32 GameTick
+  property System.UInt32 TimelineTick
+  property TTrack& Track
+  property System.UInt16 TrackIndex
+  method System.Boolean Has(Tl.FrameFlags)
 struct Tl.Playback
-  field readonly System.UInt16 Cycles
   field readonly Tl.PlaybackFlags Flags
+  field readonly System.UInt32 GameTick
   field readonly System.UInt16 Owner
-  field readonly System.UInt32 Tick
-  constructor Tl.Playback(System.UInt32, System.UInt16, System.UInt16, Tl.PlaybackFlags)
+  field readonly System.Int64 Position
+  constructor Tl.Playback(System.Int64, System.UInt32, System.UInt16, Tl.PlaybackFlags)
   method System.Boolean Equals(System.Object)
   method System.Boolean Equals(Tl.Playback)
   method System.Int32 GetHashCode()
   method System.Boolean Has(Tl.PlaybackFlags)
 enum Tl.PlaybackFlags
-  field static Tl.PlaybackFlags Completed = 8
-  field static Tl.PlaybackFlags LastLoopFrame = 4
   field static Tl.PlaybackFlags None = 0
   field static Tl.PlaybackFlags Started = 1
   field static Tl.PlaybackFlags Stopped = 2
 class Tl.Timeline
-  property Tl.TimelineCollection All
   method static Tl.Playback Start(System.UInt16, System.UInt32)
-  method static System.Boolean TryBackward(System.UInt16, in Tl.Playback, System.UInt32, in TInput, ref TOutput, out Tl.Playback)
-  method static System.Boolean TryForward(System.UInt16, in Tl.Playback, System.UInt32, in TInput, ref TOutput, out Tl.Playback)
   method static System.Boolean TryStop(System.UInt16, in Tl.Playback, out Tl.Playback)
-struct Tl.TimelineCollection
-  property Tl.TimelineHandle Item
-struct Tl.TimelineHandle
-  field readonly System.UInt16 Id
-  constructor Tl.TimelineHandle(System.UInt16)
-  method System.Boolean TryBackward(in Tl.Playback, System.UInt32, in TInput, ref TOutput, out Tl.Playback)
-  method System.Boolean TryForward(in Tl.Playback, System.UInt32, in TInput, ref TOutput, out Tl.Playback)
 struct Tl.TimelineReport
   field readonly System.UInt32 BlobBytes
   field readonly System.UInt16 ClipCount

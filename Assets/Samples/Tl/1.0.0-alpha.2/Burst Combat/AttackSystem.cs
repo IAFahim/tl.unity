@@ -7,7 +7,8 @@ namespace Tl.Samples.BurstCombat
     public struct AttackPlayback : IComponentData
     {
         public Playback Value;
-        public uint Tick;
+        public uint StartGameTick;
+        public int Delta;
     }
 
     public struct CurrentPose : IComponentData
@@ -30,16 +31,10 @@ namespace Tl.Samples.BurstCombat
     {
         private void Execute(ref AttackPlayback state, in CurrentPose currentPose, ref NextPose nextPose, ref FighterCombat combat)
         {
-            var playback = state.Value.Has(PlaybackFlags.Started)
-                ? state.Value
-                : Timeline.Start(Attack.Id);
-            var input = new Attack.Input(in currentPose.Value);
-            var output = new Attack.Output(ref nextPose.Value, ref combat.Value);
-            Playback next;
-            if (!Timeline.TryForward(Attack.Id, in playback, state.Tick, in input, ref output, out next))
-                return;
-            state.Value = next;
-            state.Tick++;
+            if (!state.Value.Has(PlaybackFlags.Started))
+                state.Value = Attack.Start(state.StartGameTick);
+            var data = new Attack.Data(ref state.Value, in currentPose.Value, ref nextPose.Value, ref combat.Value);
+            Attack.TrySeek(ref data, state.Delta);
         }
     }
 

@@ -17,102 +17,239 @@ namespace TlUnity.PlayerProbe
         public float Value;
     }
 
+    public struct Receipt
+    {
+        public int Calls;
+        public int Starts;
+        public int Interiors;
+        public int Ends;
+        public int ReverseCalls;
+        public int DirectionTotal;
+        public int TimelineStarts;
+        public int TimelineEnds;
+        public int CompletedBefore;
+        public int CompletedAfter;
+        public uint LastGameTick;
+        public uint LastTimelineTick;
+        public long LastCycle;
+        public FrameFlags LastFlags;
+    }
+
+    public readonly struct PoseClip
+    {
+        public readonly float X;
+        public readonly float Y;
+
+        public PoseClip(float x, float y)
+        {
+            X = x;
+            Y = y;
+        }
+    }
+
+    public readonly struct DamageClip
+    {
+        public readonly float Amount;
+
+        public DamageClip(float amount)
+        {
+            Amount = amount;
+        }
+    }
+
+    public readonly struct PoseTrack
+    {
+        public static void Seek(in Frame<PoseTrack, PoseClip> frame, in Pose current, ref Pose next, ref Receipt receipt)
+        {
+            next.X = current.X + frame.Direction * frame.Clip.X;
+            next.Y = current.Y + frame.Direction * frame.Clip.Y;
+            Gate.Observe(frame.GameTick, frame.TimelineTick, frame.Cycle, frame.Flags, frame.Direction, ref receipt);
+        }
+    }
+
+    public readonly struct DamageTrack
+    {
+        public static void Seek(in Frame<DamageTrack, DamageClip> frame, ref Health health, ref Receipt receipt)
+        {
+            health.Value -= frame.Direction * frame.Clip.Amount;
+            Gate.Observe(frame.GameTick, frame.TimelineTick, frame.Cycle, frame.Flags, frame.Direction, ref receipt);
+        }
+    }
+
     public static unsafe class Gate
     {
         public const ushort Id = 7;
-        public const uint Duration = 32;
+        public const uint Duration = 4;
 
-        public readonly struct Input : ITimelineInput<Output>
+        public struct Data
         {
-            internal readonly Pose* CurrentPose;
+            internal Playback* Playback;
+            internal Pose* Current;
+            internal Pose* Next;
+            internal Health* Health;
+            internal Receipt* Receipt;
 
-            public Input(in Pose currentPose)
+            public Data(ref Playback playback, in Pose current, ref Pose next, ref Health health, ref Receipt receipt)
             {
-                CurrentPose = (Pose*)UnsafeUtilityExtensions.AddressOf(in currentPose);
-            }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public bool TryForward(ushort id, in Playback playback, uint tick, ref Output output, out Playback next)
-            {
-                return Gate.TryForward(id, in playback, tick, in this, ref output, out next);
-            }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public bool TryBackward(ushort id, in Playback playback, uint tick, ref Output output, out Playback next)
-            {
-                return Gate.TryBackward(id, in playback, tick, in this, ref output, out next);
-            }
-        }
-
-        public struct Output
-        {
-            internal Pose* NextPose;
-            internal Health* TargetHealth;
-
-            public Output(ref Pose nextPose, ref Health targetHealth)
-            {
-                NextPose = (Pose*)UnsafeUtility.AddressOf(ref nextPose);
-                TargetHealth = (Health*)UnsafeUtility.AddressOf(ref targetHealth);
+                Playback = (Playback*)UnsafeUtility.AddressOf(ref playback);
+                Current = (Pose*)UnsafeUtilityExtensions.AddressOf(in current);
+                Next = (Pose*)UnsafeUtility.AddressOf(ref next);
+                Health = (Health*)UnsafeUtility.AddressOf(ref health);
+                Receipt = (Receipt*)UnsafeUtility.AddressOf(ref receipt);
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool TryForward(ushort id, in Playback playback, uint tick, in Input input, ref Output output, out Playback next)
+        public static Playback Start(uint gameTick)
         {
-            if (!CanRun(id, in playback, in input, ref output))
-            {
-                next = playback;
+            return Timeline.Start(Id, gameTick);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool TryStop(in Playback playback, out Playback stopped)
+        {
+            return Timeline.TryStop(Id, in playback, out stopped);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool TrySeek(ref Data data, int delta)
+        {
+            if (!CanRun(ref data))
                 return false;
-            }
 
-            if (tick < Duration)
+            var before = *data.Playback;
+            var distance = (long)delta;
+            if (before.Position < 0L
+                || before.Position > Duration
+                || distance > 0L && before.Position > long.MaxValue - distance
+                || distance < 0L && before.Position < long.MinValue - distance)
+                return false;
+
+            var targetPosition = before.Position + distance;
+            if (targetPosition < 0L || targetPosition > Duration)
+                return false;
+            if (delta == 0)
+                return true;
+
+            var position = before.Position;
+            var gameTick = before.GameTick;
+            if (delta > 0)
             {
-                output.NextPose->X = input.CurrentPose->X + 2;
-                output.NextPose->Y = input.CurrentPose->Y + 1;
+                while (position < targetPosition)
+                {
+                    Apply((uint)position, gameTick, position, false, ref data);
+                    position++;
+                    gameTick++;
+                }
             }
-            if (tick == 10)
-                output.TargetHealth->Value -= 10;
+            else
+            {
+                while (position > targetPosition)
+                {
+                    gameTick--;
+                    position--;
+                    Apply((uint)position, gameTick, position, true, ref data);
+                }
+            }
 
-            var flags = PlaybackFlags.Started;
-            if (tick >= Duration - 1)
-                flags |= PlaybackFlags.Completed;
-            next = new Playback(tick, playback.Cycles, id, flags);
+            *data.Playback = new Playback(targetPosition, unchecked(before.GameTick + (uint)delta), Id, before.Flags);
             return true;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool TryBackward(ushort id, in Playback playback, uint tick, in Input input, ref Output output, out Playback next)
+        private static bool CanRun(ref Data data)
         {
-            if (!CanRun(id, in playback, in input, ref output))
-            {
-                next = playback;
+            if (data.Playback == null
+                || data.Current == null
+                || data.Next == null
+                || data.Health == null
+                || data.Receipt == null)
                 return false;
-            }
-
-            if (tick < Duration)
-            {
-                output.NextPose->X = input.CurrentPose->X - 2;
-                output.NextPose->Y = input.CurrentPose->Y - 1;
-            }
-            if (tick == 10)
-                output.TargetHealth->Value += 10;
-
-            var flags = PlaybackFlags.Started;
-            if (tick == 0)
-                flags |= PlaybackFlags.Completed;
-            next = new Playback(tick, playback.Cycles, id, flags);
-            return true;
+            var before = *data.Playback;
+            return before.Owner == Id
+                && (before.Flags & (PlaybackFlags.Started | PlaybackFlags.Stopped)) == PlaybackFlags.Started;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool CanRun(ushort id, in Playback playback, in Input input, ref Output output)
+        private static void Apply(uint local, uint gameTick, long position, bool reverse, ref Data data)
         {
-            return id == Id
-                && playback.Owner == id
-                && (playback.Flags & (PlaybackFlags.Started | PlaybackFlags.Stopped)) == PlaybackFlags.Started
-                && input.CurrentPose != null
-                && output.NextPose != null
-                && output.TargetHealth != null;
+            var flags = reverse ? FrameFlags.Reverse : FrameFlags.None;
+            if (local == 0u)
+                flags |= FrameFlags.TimelineStart;
+            if (local == Duration - 1u)
+                flags |= FrameFlags.TimelineEnd;
+            if (position == Duration - 1u)
+                flags |= reverse ? FrameFlags.CompletedBefore : FrameFlags.CompletedAfter;
+
+            if (reverse)
+            {
+                if (local == 1u)
+                    ApplyDamage(local, gameTick, flags, ref data);
+                ApplyPose(local, gameTick, flags, ref data);
+            }
+            else
+            {
+                ApplyPose(local, gameTick, flags, ref data);
+                if (local == 1u)
+                    ApplyDamage(local, gameTick, flags, ref data);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void ApplyPose(uint local, uint gameTick, FrameFlags flags, ref Data data)
+        {
+            var track = default(PoseTrack);
+            var clip = new PoseClip(2f, 1f);
+            if (local == 0u)
+                flags |= FrameFlags.ClipStart;
+            if (local == Duration - 1u)
+                flags |= FrameFlags.ClipEnd;
+            var frame = new Frame<PoseTrack, PoseClip>(in track, in clip, gameTick, local, 0L, 0, flags);
+            PoseTrack.Seek(in frame, in *data.Current, ref *data.Next, ref *data.Receipt);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void ApplyDamage(uint local, uint gameTick, FrameFlags flags, ref Data data)
+        {
+            var track = default(DamageTrack);
+            var clip = new DamageClip(10f);
+            flags |= FrameFlags.ClipStart | FrameFlags.ClipEnd;
+            var frame = new Frame<DamageTrack, DamageClip>(in track, in clip, gameTick, local, 0L, 1, flags);
+            DamageTrack.Seek(in frame, ref *data.Health, ref *data.Receipt);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static void Observe(
+            uint gameTick,
+            uint timelineTick,
+            long cycle,
+            FrameFlags flags,
+            int direction,
+            ref Receipt receipt)
+        {
+            receipt.Calls++;
+            receipt.DirectionTotal += direction;
+            if ((flags & FrameFlags.Reverse) != 0)
+                receipt.ReverseCalls++;
+            var boundaries = flags & (FrameFlags.ClipStart | FrameFlags.ClipEnd);
+            if ((boundaries & FrameFlags.ClipStart) != 0)
+                receipt.Starts++;
+            if (boundaries == 0)
+                receipt.Interiors++;
+            if ((boundaries & FrameFlags.ClipEnd) != 0)
+                receipt.Ends++;
+            if ((flags & FrameFlags.TimelineStart) != 0)
+                receipt.TimelineStarts++;
+            if ((flags & FrameFlags.TimelineEnd) != 0)
+                receipt.TimelineEnds++;
+            if ((flags & FrameFlags.CompletedBefore) != 0)
+                receipt.CompletedBefore++;
+            if ((flags & FrameFlags.CompletedAfter) != 0)
+                receipt.CompletedAfter++;
+            receipt.LastGameTick = gameTick;
+            receipt.LastTimelineTick = timelineTick;
+            receipt.LastCycle = cycle;
+            receipt.LastFlags = flags;
         }
 
         public static BlobAssetReference<TimelineBlob> CreateBlob(Allocator allocator)
@@ -125,23 +262,138 @@ namespace TlUnity.PlayerProbe
                 root.Duration = Duration;
                 root.TrackCount = 2;
                 root.ClipCount = 2;
-                root.TrackKindCount = 2;
-                root.ClipKindCount = 2;
                 root.Loops = 0;
-                var regions = builder.Allocate(ref root.Regions, 3);
-                regions[0] = new TimelineRegionBlob { Start = 0, End = 10, FrameStart = 0, FrameCount = 1 };
-                regions[1] = new TimelineRegionBlob { Start = 10, End = 11, FrameStart = 1, FrameCount = 2 };
-                regions[2] = new TimelineRegionBlob { Start = 11, End = Duration, FrameStart = 3, FrameCount = 1 };
-                var frames = builder.Allocate(ref root.Frames, 4);
-                frames[0] = new TimelineFrameBlob { Start = 0, End = Duration, TrackIndex = 0, Operation = 0, TrackKind = 0, ClipKind = 0, DataWord = 0 };
-                frames[1] = frames[0];
-                frames[2] = new TimelineFrameBlob { Start = 10, End = 11, TrackIndex = 1, Operation = 1, TrackKind = 1, ClipKind = 1, DataWord = 1 };
-                frames[3] = frames[0];
-                var data = builder.Allocate(ref root.StaticData, 2);
-                data[0] = 0x3f80000040000000UL;
-                data[1] = 0x0000000041200000UL;
+                var tracks = builder.Allocate(ref root.Tracks, 2);
+                tracks[0] = new TimelineTrackBlob { Index = 0, Operation = 0, Payload = 0 };
+                tracks[1] = new TimelineTrackBlob { Index = 1, Operation = 1, Payload = 0 };
+                var clips = builder.Allocate(ref root.Clips, 2);
+                clips[0] = new TimelineClipBlob { TrackIndex = 0, Payload = 0, Start = 0, End = Duration };
+                clips[1] = new TimelineClipBlob { TrackIndex = 1, Payload = 1, Start = 1, End = 2 };
                 return builder.CreateBlobAssetReference<TimelineBlob>(allocator);
             }
+        }
+    }
+
+    public readonly struct LoopClip
+    {
+        public readonly int Value;
+
+        public LoopClip(int value)
+        {
+            Value = value;
+        }
+    }
+
+    public readonly struct LoopTrack
+    {
+        public static void Seek(in Frame<LoopTrack, LoopClip> frame, ref Receipt receipt)
+        {
+            Gate.Observe(frame.GameTick, frame.TimelineTick, frame.Cycle, frame.Flags, frame.Direction, ref receipt);
+        }
+    }
+
+    public static unsafe class LoopGate
+    {
+        public const ushort Id = 8;
+        public const uint Duration = 3;
+
+        public struct Data
+        {
+            internal Playback* Playback;
+            internal Receipt* Receipt;
+
+            public Data(ref Playback playback, ref Receipt receipt)
+            {
+                Playback = (Playback*)UnsafeUtility.AddressOf(ref playback);
+                Receipt = (Receipt*)UnsafeUtility.AddressOf(ref receipt);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Playback Start(uint gameTick)
+        {
+            return Timeline.Start(Id, gameTick);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool TrySeek(ref Data data, int delta)
+        {
+            if (data.Playback == null || data.Receipt == null)
+                return false;
+            var before = *data.Playback;
+            if (before.Owner != Id
+                || (before.Flags & (PlaybackFlags.Started | PlaybackFlags.Stopped)) != PlaybackFlags.Started)
+                return false;
+
+            var distance = (long)delta;
+            if (distance > 0L && before.Position > long.MaxValue - distance
+                || distance < 0L && before.Position < long.MinValue - distance)
+                return false;
+            var targetPosition = before.Position + distance;
+            if (delta == 0)
+                return true;
+
+            var cycle = before.Position / Duration;
+            var remainder = before.Position - cycle * Duration;
+            if (remainder < 0L)
+            {
+                remainder += Duration;
+                cycle--;
+            }
+            var local = (uint)remainder;
+            var position = before.Position;
+            var gameTick = before.GameTick;
+            if (delta > 0)
+            {
+                while (position < targetPosition)
+                {
+                    Apply(local, gameTick, cycle, false, ref data);
+                    position++;
+                    gameTick++;
+                    if (local == Duration - 1u)
+                    {
+                        local = 0u;
+                        cycle++;
+                    }
+                    else
+                        local++;
+                }
+            }
+            else
+            {
+                while (position > targetPosition)
+                {
+                    gameTick--;
+                    if (local == 0u)
+                    {
+                        local = Duration - 1u;
+                        cycle--;
+                    }
+                    else
+                        local--;
+                    position--;
+                    Apply(local, gameTick, cycle, true, ref data);
+                }
+            }
+
+            *data.Playback = new Playback(targetPosition, unchecked(before.GameTick + (uint)delta), Id, before.Flags);
+            return true;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void Apply(uint local, uint gameTick, long cycle, bool reverse, ref Data data)
+        {
+            var flags = FrameFlags.Looping;
+            if (reverse)
+                flags |= FrameFlags.Reverse;
+            if (local == 0u)
+                flags |= FrameFlags.TimelineStart | FrameFlags.ClipStart;
+            if (local == Duration - 1u)
+                flags |= FrameFlags.TimelineEnd | FrameFlags.ClipEnd;
+            var track = default(LoopTrack);
+            var clip = new LoopClip(1);
+            var frame = new Frame<LoopTrack, LoopClip>(in track, in clip, gameTick, local, cycle, 0, flags);
+            LoopTrack.Seek(in frame, ref *data.Receipt);
         }
     }
 }

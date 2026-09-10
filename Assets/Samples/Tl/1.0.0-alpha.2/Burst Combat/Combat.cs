@@ -37,29 +37,23 @@ namespace Tl.Samples.BurstCombat
 
     public readonly struct AnimationTrack
     {
-        public static void Forward(in AnimationTrack track, in AnimationClip clip, ClipState state, uint tick, in FighterPose currentPose, ref FighterPose nextPose)
+        public static void Seek(
+            in Frame<AnimationTrack, AnimationClip> frame,
+            in FighterPose currentPose,
+            ref FighterPose nextPose)
         {
-            nextPose.X = currentPose.X + clip.X;
-            nextPose.Y = currentPose.Y + clip.Y;
-        }
-
-        public static void Backward(in AnimationTrack track, in AnimationClip clip, ClipState state, uint tick, in FighterPose currentPose, ref FighterPose nextPose)
-        {
-            nextPose.X = currentPose.X - clip.X;
-            nextPose.Y = currentPose.Y - clip.Y;
+            nextPose.X = currentPose.X + frame.Direction * frame.Clip.X;
+            nextPose.Y = currentPose.Y + frame.Direction * frame.Clip.Y;
         }
     }
 
     public readonly struct DamageTrack
     {
-        public static void Forward(in DamageTrack track, in DamageClip clip, ClipState state, uint tick, ref CombatStats combat)
+        public static void Seek(
+            in Frame<DamageTrack, DamageClip> frame,
+            ref CombatStats combat)
         {
-            combat.Health -= clip.Amount;
-        }
-
-        public static void Backward(in DamageTrack track, in DamageClip clip, ClipState state, uint tick, ref CombatStats combat)
-        {
-            combat.Health += clip.Amount;
+            combat.Health -= frame.Direction * frame.Clip.Amount;
         }
     }
 }

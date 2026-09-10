@@ -53,9 +53,11 @@ namespace Tl.Unity.Tests
         {
             var name = Path.GetFileNameWithoutExtension(path);
             return name == "Tl.Compiler"
+                || name == "Tl.Gen"
+                || name == "Tl.Gen.CSharp"
                 || name == "Tl.Gen.Unity"
-                || name == "Microsoft.CodeAnalysis"
-                || name == "Microsoft.CodeAnalysis.CSharp";
+                || name.StartsWith("Microsoft.CodeAnalysis.")
+                || name == "Microsoft.CodeAnalysis";
         }
     }
 }
