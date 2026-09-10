@@ -1,0 +1,16 @@
+{
+  "name": "Tl.Unity.Runtime.Tests",
+  "rootNamespace": "Tl.Unity.Tests",
+  "references": [
+    "Tl.Unity",
+    "Tl.Unity.Entities",
+    "Tl.Unity.PlayerProbe",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "allowUnsafeCode": true
+}
