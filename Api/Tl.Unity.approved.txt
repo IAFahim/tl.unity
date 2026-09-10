@@ -1,50 +1,55 @@
-enum Tl.FrameFlags
-  field static Tl.FrameFlags ClipEnd = 2
-  field static Tl.FrameFlags ClipStart = 1
-  field static Tl.FrameFlags CompletedAfter = 32
-  field static Tl.FrameFlags CompletedBefore = 16
-  field static Tl.FrameFlags Looping = 64
-  field static Tl.FrameFlags None = 0
-  field static Tl.FrameFlags Reverse = 128
-  field static Tl.FrameFlags TimelineEnd = 8
-  field static Tl.FrameFlags TimelineStart = 4
-struct Tl.Frame<TTrack, TClip>
+public enum Tl.FrameFlags
+  field const Tl.FrameFlags None = 0
+  field const Tl.FrameFlags ClipStart = 1
+  field const Tl.FrameFlags ClipEnd = 2
+  field const Tl.FrameFlags TimelineStart = 4
+  field const Tl.FrameFlags TimelineEnd = 8
+  field const Tl.FrameFlags CompletedBefore = 16
+  field const Tl.FrameFlags CompletedAfter = 32
+  field const Tl.FrameFlags Looping = 64
+  field const Tl.FrameFlags Reverse = 128
+public readonly ref struct Tl.Frame<TTrack, TClip> where TTrack : unmanaged where TClip : unmanaged
+  layout Sequential pack 8 size 0
   constructor Tl.Frame<TTrack, TClip>(in TTrack, in TClip, System.UInt32, System.UInt32, System.Int64, System.UInt16, Tl.FrameFlags)
-  property TClip& Clip
-  property System.Int64 Cycle
-  property System.Int32 Direction
-  property Tl.FrameFlags Flags
+  property ref readonly TTrack Track
+  property ref readonly TClip Clip
   property System.UInt32 GameTick
   property System.UInt32 TimelineTick
-  property TTrack& Track
+  property System.Int64 Cycle
   property System.UInt16 TrackIndex
+  property Tl.FrameFlags Flags
+  property System.Int32 Direction
   method System.Boolean Has(Tl.FrameFlags)
-struct Tl.Playback
-  field readonly Tl.PlaybackFlags Flags
-  field readonly System.UInt32 GameTick
-  field readonly System.UInt16 Owner
-  field readonly System.Int64 Position
-  constructor Tl.Playback(System.Int64, System.UInt32, System.UInt16, Tl.PlaybackFlags)
-  method System.Boolean Equals(System.Object)
-  method System.Boolean Equals(Tl.Playback)
-  method System.Int32 GetHashCode()
+public interface Tl.ITimeline
+public enum Tl.PlaybackFlags
+  field const Tl.PlaybackFlags None = 0
+  field const Tl.PlaybackFlags Started = 1
+  field const Tl.PlaybackFlags Stopped = 2
+public readonly struct Tl.Playback<TTimeline> where TTimeline : unmanaged, Tl.ITimeline
+  layout Sequential pack 8 size 0 runtime-size 16
+  field readonly System.Int64 Position offset 0
+  field readonly System.UInt32 GameTick offset 8
+  field readonly Tl.PlaybackFlags Flags offset 12
   method System.Boolean Has(Tl.PlaybackFlags)
-enum Tl.PlaybackFlags
-  field static Tl.PlaybackFlags None = 0
-  field static Tl.PlaybackFlags Started = 1
-  field static Tl.PlaybackFlags Stopped = 2
-class Tl.Timeline
-  method static Tl.Playback Start(System.UInt16, System.UInt32)
-  method static System.Boolean TryStop(System.UInt16, in Tl.Playback, out Tl.Playback)
-struct Tl.TimelineReport
-  field readonly System.UInt32 BlobBytes
-  field readonly System.UInt16 ClipCount
-  field readonly System.UInt32 Duration
-  field readonly System.UInt32 GeneratedSourceBytes
-  field readonly System.UInt16 PlanVersion
-  field readonly System.UInt16 RegionCount
-  field readonly System.UInt32 RuntimeHeapBytes
-  field readonly System.UInt32 StaticDataBytes
-  field readonly System.UInt16 TimelineId
-  field readonly System.UInt16 TrackCount
+  method System.Boolean Equals(Tl.Playback<TTimeline>)
+  method System.Boolean Equals(System.Object)
+  method System.Int32 GetHashCode()
+  method static System.Boolean op_Equality(Tl.Playback<TTimeline>, Tl.Playback<TTimeline>)
+  method static System.Boolean op_Inequality(Tl.Playback<TTimeline>, Tl.Playback<TTimeline>)
+public static class Tl.Timeline
+  method static Tl.Playback<TTimeline> Start<TTimeline>(System.UInt32) where TTimeline : unmanaged, Tl.ITimeline
+  method static System.Boolean TryStop<TTimeline>(in Tl.Playback<TTimeline>, out Tl.Playback<TTimeline>) where TTimeline : unmanaged, Tl.ITimeline
+  method static Tl.Playback<TTimeline> CreateTypedPlayback<TTimeline>(System.Int64, System.UInt32, Tl.PlaybackFlags) where TTimeline : unmanaged, Tl.ITimeline
+public readonly struct Tl.TimelineReport
+  layout Sequential pack 8 size 0 runtime-size 32
+  field readonly System.UInt16 PlanVersion offset 0
+  field readonly System.UInt16 TimelineId offset 2
+  field readonly System.UInt32 Duration offset 4
+  field readonly System.UInt16 TrackCount offset 8
+  field readonly System.UInt16 ClipCount offset 10
+  field readonly System.UInt16 RegionCount offset 12
+  field readonly System.UInt32 GeneratedSourceBytes offset 16
+  field readonly System.UInt32 StaticDataBytes offset 20
+  field readonly System.UInt32 BlobBytes offset 24
+  field readonly System.UInt32 RuntimeHeapBytes offset 28
   constructor Tl.TimelineReport(System.UInt16, System.UInt16, System.UInt32, System.UInt16, System.UInt16, System.UInt16, System.UInt32, System.UInt32, System.UInt32, System.UInt32)

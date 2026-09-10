@@ -1,18 +1,21 @@
-struct Tl.TimelineBlob
-  field System.UInt16 ClipCount
-  field Unity.Entities.BlobArray<Tl.TimelineClipBlob> Clips
-  field System.UInt32 Duration
-  field System.Byte Loops
-  field System.UInt16 PlanVersion
-  field System.UInt16 TimelineId
-  field System.UInt16 TrackCount
-  field Unity.Entities.BlobArray<Tl.TimelineTrackBlob> Tracks
-struct Tl.TimelineClipBlob
-  field System.UInt32 End
-  field System.UInt32 Payload
-  field System.UInt32 Start
-  field System.UInt16 TrackIndex
-struct Tl.TimelineTrackBlob
-  field System.UInt16 Index
-  field System.UInt16 Operation
-  field System.UInt32 Payload
+public struct Tl.TimelineBlob
+  layout Sequential pack 8 size 0 runtime-size 32
+  field System.UInt16 PlanVersion offset 0
+  field System.UInt16 TimelineId offset 2
+  field System.UInt32 Duration offset 4
+  field System.UInt16 TrackCount offset 8
+  field System.UInt16 ClipCount offset 10
+  field System.Byte Loops offset 12
+  field Unity.Entities.BlobArray<Tl.TimelineTrackBlob> Tracks offset 16
+  field Unity.Entities.BlobArray<Tl.TimelineClipBlob> Clips offset 24
+public struct Tl.TimelineClipBlob
+  layout Sequential pack 8 size 0 runtime-size 16
+  field System.UInt16 TrackIndex offset 0
+  field System.UInt32 Payload offset 4
+  field System.UInt32 Start offset 8
+  field System.UInt32 End offset 12
+public struct Tl.TimelineTrackBlob
+  layout Sequential pack 8 size 0 runtime-size 8
+  field System.UInt16 Index offset 0
+  field System.UInt16 Operation offset 2
+  field System.UInt32 Payload offset 4
