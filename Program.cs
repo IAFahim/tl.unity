@@ -9,6 +9,7 @@ using Tl;
 if (typeof(CSharpCompilation).Assembly.GetName().Version != new Version(4, 3, 0, 0))
     return 1;
 var analyzer = Path.Combine(AppContext.BaseDirectory, "Tl.Gen.CSharp.dll");
+AssemblyLoadContext.Default.LoadFromAssemblyPath(Path.Combine(AppContext.BaseDirectory, "Tl.Compiler.dll"));
 var reference = new AnalyzerFileReference(analyzer, new Loader());
 var generator = reference.GetGenerators(LanguageNames.CSharp).Single();
 var source = """
