@@ -144,6 +144,22 @@ namespace Tl.Unity.Tests
         }
 
         [Test]
+        public void CheckedCompilationPreservesExplicitGameTickWrap()
+        {
+            Assert.Throws<OverflowException>(() => AmbientCheckedIncrement(uint.MaxValue));
+            var pose = default(Pose);
+            var health = new Health { Value = 100 };
+            var receipt = default(Receipt);
+            var playback = Gate.Start(uint.MaxValue);
+            var data = new Gate.Data(ref playback, in pose, ref pose, ref health, ref receipt);
+
+            Assert.IsTrue(Gate.TrySeek(ref data, 2));
+            Assert.AreEqual(1u, playback.GameTick);
+            Assert.IsTrue(Gate.TrySeek(ref data, -2));
+            Assert.AreEqual(uint.MaxValue, playback.GameTick);
+        }
+
+        [Test]
         public void RejectionsAreAtomicAndStopIsIdempotent()
         {
             var current = new Pose { X = 3, Y = 4 };
@@ -245,6 +261,11 @@ namespace Tl.Unity.Tests
                 beforeReceipt.TimelineEnds,
                 beforeReceipt.CompletedBefore,
                 beforeReceipt.CompletedAfter);
+        }
+
+        private static uint AmbientCheckedIncrement(uint value)
+        {
+            return value + 1u;
         }
 
         private static void AssertReceipt(

@@ -139,14 +139,14 @@ namespace TlUnity.PlayerProbe
                 {
                     Apply((uint)position, gameTick, position, false, ref data);
                     position++;
-                    gameTick++;
+                    gameTick = unchecked(gameTick + 1u);
                 }
             }
             else
             {
                 while (position > targetPosition)
                 {
-                    gameTick--;
+                    gameTick = unchecked(gameTick - 1u);
                     position--;
                     Apply((uint)position, gameTick, position, true, ref data);
                 }
@@ -350,7 +350,7 @@ namespace TlUnity.PlayerProbe
                 {
                     Apply(local, gameTick, cycle, false, ref data);
                     position++;
-                    gameTick++;
+                    gameTick = unchecked(gameTick + 1u);
                     if (local == Duration - 1u)
                     {
                         local = 0u;
@@ -364,7 +364,7 @@ namespace TlUnity.PlayerProbe
             {
                 while (position > targetPosition)
                 {
-                    gameTick--;
+                    gameTick = unchecked(gameTick - 1u);
                     if (local == 0u)
                     {
                         local = Duration - 1u;

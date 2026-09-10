@@ -35,6 +35,20 @@ namespace Tl.Unity.Tests
                 .Any(assembly => assembly.name == "Tl.Unity.BurstCombat"));
         }
 
+        [Test]
+        public void GeneratedAndTestAssembliesEnableCheckedArithmetic()
+        {
+            var assets = Path.GetFullPath("Assets");
+            var files = new[]
+            {
+                "Player/csc.rsp",
+                "Samples/Tl/1.0.0-alpha.2/Burst Combat/csc.rsp",
+                "Tests/Runtime/csc.rsp"
+            };
+            foreach (var file in files)
+                Assert.AreEqual("-checked+\n", File.ReadAllText(Path.Combine(assets, file)).Replace("\r\n", "\n"));
+        }
+
         private static bool Forbidden(string path)
         {
             var name = Path.GetFileNameWithoutExtension(path);

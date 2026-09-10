@@ -11,7 +11,7 @@ namespace Tl.Samples.BurstCombat
         public const ushort TrackCount = 2;
         public const ushort ClipCount = 2;
         public const ushort RegionCount = 3;
-        public const uint GeneratedSourceBytes = 8142;
+        public const uint GeneratedSourceBytes = 8293;
         public const uint StaticDataBytes = 14;
         public const uint RuntimeHeapBytes = 0;
 
@@ -76,14 +76,14 @@ namespace Tl.Samples.BurstCombat
                     var local = (uint)position;
                     Apply(local, gameTick, position, false, ref data);
                     position++;
-                    gameTick++;
+                    gameTick = unchecked(gameTick + 1u);
                 }
             }
             else
             {
                 while (position > targetPosition)
                 {
-                    gameTick--;
+                    gameTick = unchecked(gameTick - 1u);
                     position--;
                     var local = (uint)position;
                     Apply(local, gameTick, position, true, ref data);
