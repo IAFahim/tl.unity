@@ -14,17 +14,28 @@ var generator = reference.GetGenerators(LanguageNames.CSharp).Single();
 var source = """
     using Tl;
     public readonly record struct Clip(int Value);
-    public readonly struct Track : ITrack<Clip>
+    public readonly struct Track : IBlend<Clip>
     {
         public void Blend(in Clip first, in Clip second, float factor, out Clip result) => result = first;
-        public static void Seek(in Frame<Track, Clip> frame, ref int value) => value += frame.Clip.Value;
+    }
+    public readonly struct Job : ITimelineJob<Track, Clip>
+    {
+        public static void Execute(in Frame<Track, Clip> frame, ref int value) => value += frame.Clip.Value;
     }
     public readonly partial struct UnityTimeline : ITimeline
     {
         public static void Define(scoped Builder builder)
         {
-            var track = builder.Track(new Track());
+            var track = builder.Track(new Track()).Use<Job>();
             builder.Clip(track, new Clip(3), 0u, 1u);
+        }
+    }
+    public readonly struct UnityRows;
+    public readonly partial struct UnityCatalog : ITimelineCatalog
+    {
+        public static void Define(scoped CatalogBuilder builder)
+        {
+            builder.Schema<UnityRows>().Asset<UnityTimeline>();
         }
     }
     """;
@@ -43,13 +54,13 @@ GeneratorDriver driver = CSharpGeneratorDriver.Create([generator], parseOptions:
 driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out var output, out var diagnostics);
 var generated = driver.GetRunResult().Results.Single().GeneratedSources;
 if (diagnostics.Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
-    || generated.Length != 3)
+    || generated.Length != 2)
 {
     Console.Error.WriteLine(string.Join(Environment.NewLine, diagnostics));
     Console.Error.WriteLine($"generated sources: {generated.Length}");
     return 2;
 }
-Console.WriteLine($"Unity 6000 Roslyn {typeof(CSharpCompilation).Assembly.GetName().Version}: analyzer loaded; 3 sources generated");
+Console.WriteLine($"Unity 6000 Roslyn {typeof(CSharpCompilation).Assembly.GetName().Version}: analyzer loaded; job and catalog sources generated");
 return 0;
 
 sealed class Loader : IAnalyzerAssemblyLoader
