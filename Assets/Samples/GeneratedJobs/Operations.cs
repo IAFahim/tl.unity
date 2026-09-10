@@ -1,16 +1,21 @@
 using Tl;
-using Unity.Entities;
-
 namespace Tl.Samples.GeneratedJobs
 {
-    public struct Bias : IComponentData
+    public struct Bias
     {
         public int Value;
     }
 
-    public struct Total : IComponentData
+    public struct Scale
     {
         public int Value;
+    }
+
+    public struct Trace
+    {
+        public long Order;
+        public long ClipSum;
+        public long CycleOrder;
         public int Calls;
         public uint LastGameTick;
         public FrameFlags Flags;
@@ -37,18 +42,43 @@ namespace Tl.Samples.GeneratedJobs
 
         public void Blend(in ValueClip first, in ValueClip second, float factor, out ValueClip result)
         {
-            result = first;
+            result = new ValueClip((int)(first.Value + (second.Value - first.Value) * factor));
         }
     }
 
-    public readonly struct ValueJob : ITimelineJob<ValueTrack, ValueClip>
+    public readonly struct BeforeAfter : IHook
     {
-        public static void Execute(in Frame<ValueTrack, ValueClip> frame, in Bias bias, ref Total total)
+        public static void Execute(in TimelineFrame frame, ref Trace trace)
         {
-            total.Value += frame.Direction * (frame.Track.Value + frame.Clip.Value + bias.Value);
-            total.Calls++;
-            total.LastGameTick = frame.GameTick;
-            total.Flags |= frame.Flags;
+            trace.Order = unchecked(trace.Order * 10 + 8);
+            trace.Calls++;
+            trace.LastGameTick = frame.GameTick;
+            trace.Flags |= frame.Flags;
+        }
+    }
+
+    public readonly struct A : ITimelineJob<ValueTrack, ValueClip>
+    {
+        public static void Execute(in Frame<ValueTrack, ValueClip> frame, in Bias bias, ref Trace trace)
+        {
+            trace.Order = unchecked(trace.Order * 10 + frame.Track.Value + bias.Value);
+            trace.ClipSum += frame.Clip.Value;
+            trace.CycleOrder = unchecked(trace.CycleOrder * 10 + frame.Cycle);
+            trace.Calls++;
+            trace.LastGameTick = frame.GameTick;
+            trace.Flags |= frame.Flags;
+        }
+    }
+
+    public readonly struct B : ITimelineJob<ValueTrack, ValueClip>
+    {
+        public static void Execute(in Frame<ValueTrack, ValueClip> frame, in Bias secondary, in Scale scale, ref Trace trace)
+        {
+            trace.Order = unchecked(trace.Order * 10 + frame.Track.Value * scale.Value + secondary.Value);
+            trace.ClipSum += frame.Clip.Value;
+            trace.Calls++;
+            trace.LastGameTick = frame.GameTick;
+            trace.Flags |= frame.Flags;
         }
     }
 }

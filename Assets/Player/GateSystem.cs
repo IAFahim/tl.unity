@@ -16,23 +16,27 @@ namespace TlUnity.PlayerProbe
                 var entity = manager.CreateEntity(
                     typeof(GeneratedJobs.Combat.TimelineComponent),
                     typeof(GeneratedJobs.Combat.Rows),
-                    typeof(GeneratedJobs.Combat.Stage0),
-                    typeof(GeneratedJobs.Bias),
-                    typeof(GeneratedJobs.Total));
+                    typeof(GeneratedJobs.Combat.Role0Bias),
+                    typeof(GeneratedJobs.Combat.Role1Scale),
+                    typeof(GeneratedJobs.Combat.Role2Secondary),
+                    typeof(GeneratedJobs.Combat.Role3Trace));
                 manager.SetComponentData(entity, new GeneratedJobs.Combat.TimelineComponent
                 {
                     Value = new GeneratedJobs.Combat.State(GeneratedJobs.Combat.Asset.Attack)
                 });
-                manager.SetComponentData(entity, new GeneratedJobs.Bias { Value = 1 });
-                manager.SetComponentEnabled<GeneratedJobs.Combat.Stage0>(entity, false);
+                manager.SetComponentData(entity, new GeneratedJobs.Combat.Role0Bias(new GeneratedJobs.Bias { Value = 2 }));
+                manager.SetComponentData(entity, new GeneratedJobs.Combat.Role1Scale(new GeneratedJobs.Scale { Value = 1 }));
+                manager.SetComponentData(entity, new GeneratedJobs.Combat.Role2Secondary(new GeneratedJobs.Bias { Value = 7 }));
+                manager.SetComponentData(entity, new GeneratedJobs.Combat.Role3Trace(new GeneratedJobs.Trace()));
                 world.CreateSystem<GeneratedJobs.GeneratedTimelineSystem>().Update(world.Unmanaged);
                 manager.CompleteAllTrackedJobs();
                 var timeline = manager.GetComponentData<GeneratedJobs.Combat.TimelineComponent>(entity).Value;
-                var total = manager.GetComponentData<GeneratedJobs.Total>(entity);
+                var trace = manager.GetComponentData<GeneratedJobs.Combat.Role3Trace>(entity).Value;
                 var valid = timeline.Position == 2u
-                    && total.Value == 12
-                    && total.Calls == 2
-                    && total.LastGameTick == 11u;
+                    && trace.Order == 8395883958L
+                    && trace.ClipSum == 54L
+                    && trace.Calls == 10
+                    && trace.LastGameTick == 11u;
                 Debug.Log(valid ? "TL_UNITY_PLAYER_OK" : "TL_UNITY_PLAYER_FAILED");
                 Application.Quit(valid ? 0 : 1);
             }
