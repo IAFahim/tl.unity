@@ -1,0 +1,25 @@
+struct Tl.TimelineBlob
+  field System.UInt16 ClipCount
+  field System.Byte ClipKindCount
+  field System.UInt32 Duration
+  field Unity.Entities.BlobArray<Tl.TimelineFrameBlob> Frames
+  field System.Byte Loops
+  field System.UInt16 PlanVersion
+  field Unity.Entities.BlobArray<Tl.TimelineRegionBlob> Regions
+  field Unity.Entities.BlobArray<System.UInt64> StaticData
+  field System.UInt16 TimelineId
+  field System.UInt16 TrackCount
+  field System.Byte TrackKindCount
+struct Tl.TimelineFrameBlob
+  field System.Byte ClipKind
+  field System.UInt16 DataWord
+  field System.UInt32 End
+  field System.UInt16 Operation
+  field System.UInt32 Start
+  field System.UInt16 TrackIndex
+  field System.Byte TrackKind
+struct Tl.TimelineRegionBlob
+  field System.UInt32 End
+  field System.UInt16 FrameCount
+  field System.UInt16 FrameStart
+  field System.UInt32 Start

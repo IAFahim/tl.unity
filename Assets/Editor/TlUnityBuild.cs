@@ -1,10 +1,7 @@
 using System;
-using TlUnity.PlayerProbe;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
-using UnityEditor.SceneManagement;
-using UnityEngine;
 
 public static class TlUnityBuild
 {
@@ -22,10 +19,7 @@ public static class TlUnityBuild
 
     private static void BuildPlayer()
     {
-        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-        new GameObject("Tl Unity Player Gate").AddComponent<GatePlayer>();
         const string scenePath = "Assets/TlUnityPlayer.unity";
-        EditorSceneManager.SaveScene(scene, scenePath);
         var output = Environment.GetEnvironmentVariable("TL_UNITY_PLAYER_OUTPUT");
         if (string.IsNullOrEmpty(output))
             output = "Build/TlUnityPlayer";

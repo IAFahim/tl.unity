@@ -1,0 +1,13 @@
+{
+  "name": "Tl.Unity.BurstCombat",
+  "rootNamespace": "Tl.Samples.BurstCombat",
+  "references": [
+    "Tl.Unity",
+    "Tl.Unity.Entities",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Entities.Hybrid"
+  ],
+  "allowUnsafeCode": true
+}
