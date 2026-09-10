@@ -6,6 +6,7 @@
     "Tl.Unity.Entities",
     "Tl.Unity.PlayerProbe",
     "Tl.Unity.BurstCombat",
+    "Tl.Unity.GeneratedJobs",
     "Unity.Burst",
     "Unity.Collections",
     "Unity.Entities"
