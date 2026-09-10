@@ -108,14 +108,14 @@ namespace Tl.Unity.Tests
             Assert.AreEqual(0L, receipt.LastCycle);
             Assert.AreEqual(2u, receipt.LastGameTick);
 
-            playback = new Playback(long.MaxValue, 11u, LoopGate.Id, PlaybackFlags.Started);
+            playback = Timeline.CreateTypedPlayback<LoopGate>(long.MaxValue, 11u, PlaybackFlags.Started);
             data = new LoopGate.Data(ref playback, ref receipt);
             var before = receipt;
             Assert.IsFalse(LoopGate.TrySeek(ref data, 1));
             Assert.AreEqual(long.MaxValue, playback.Position);
             Assert.AreEqual(before.Calls, receipt.Calls);
 
-            playback = new Playback(long.MinValue, 11u, LoopGate.Id, PlaybackFlags.Started);
+            playback = Timeline.CreateTypedPlayback<LoopGate>(long.MinValue, 11u, PlaybackFlags.Started);
             data = new LoopGate.Data(ref playback, ref receipt);
             Assert.IsFalse(LoopGate.TrySeek(ref data, -1));
             Assert.AreEqual(long.MinValue, playback.Position);
@@ -187,9 +187,12 @@ namespace Tl.Unity.Tests
         [Test]
         public void RuntimeStateAndPlanBlobHaveCurrentLayouts()
         {
-            Assert.IsTrue(UnsafeUtility.IsUnmanaged<Playback>());
-            Assert.IsTrue(UnsafeUtility.IsUnmanaged<Gate.Data>());
-            Assert.AreEqual(16, UnsafeUtility.SizeOf<Playback>());
+            Assert.IsTrue(UnsafeUtility.IsUnmanaged<Playback<Gate>>());
+            Assert.IsTrue(typeof(Gate.Data).IsByRefLike);
+            Assert.IsTrue(typeof(LoopGate.Data).IsByRefLike);
+            Assert.AreEqual(16, UnsafeUtility.SizeOf<Playback<Gate>>());
+            Assert.AreEqual(16, UnsafeUtility.SizeOf<Playback<LoopGate>>());
+            Assert.AreNotEqual(typeof(Playback<Gate>), typeof(Playback<LoopGate>));
             Assert.AreEqual(1, UnsafeUtility.SizeOf<PlaybackFlags>());
             Assert.AreEqual(1, UnsafeUtility.SizeOf<FrameFlags>());
             Assert.AreEqual(1, (byte)FrameFlags.ClipStart);
@@ -215,7 +218,7 @@ namespace Tl.Unity.Tests
 
         private static void AssertRejected(
             ref Gate.Data data,
-            ref Playback playback,
+            ref Playback<Gate> playback,
             ref Pose next,
             ref Health health,
             ref Receipt receipt,

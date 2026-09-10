@@ -1,8 +1,8 @@
 using System.IO;
+using System.Linq;
 using NUnit.Framework;
 using UnityEditor.Compilation;
 using UnityEditor.PackageManager;
-using UnityEngine;
 
 namespace Tl.Unity.Tests
 {
@@ -26,27 +26,13 @@ namespace Tl.Unity.Tests
         }
 
         [Test]
-        public void ImportedBurstCombatMatchesPackage()
+        public void ExternalBurstCombatIsCanonicalAndCompilesForPlayer()
         {
             var package = PackageInfo.FindForAssetPath("Packages/com.iafahim.tl/package.json");
             Assert.IsNotNull(package);
-            var packageSample = Path.Combine(package.resolvedPath, "Samples~", "BurstCombat");
-            var importedSample = Path.Combine(Application.dataPath, "Samples", "Tl", package.version, "Burst Combat");
-            var names = new[]
-            {
-                "Attack.Generated.cs",
-                "AttackAuthoring.cs",
-                "AttackBlob.Generated.cs",
-                "AttackSystem.cs",
-                "Combat.cs",
-                "README.md",
-                "Tl.Unity.BurstCombat.asmdef"
-            };
-            foreach (var name in names)
-                CollectionAssert.AreEqual(
-                    File.ReadAllBytes(Path.Combine(packageSample, name)),
-                    File.ReadAllBytes(Path.Combine(importedSample, name)),
-                    name);
+            Assert.IsFalse(Directory.Exists(Path.Combine(package.resolvedPath, "Samples~")));
+            Assert.IsTrue(CompilationPipeline.GetAssemblies(AssembliesType.PlayerWithoutTestAssemblies)
+                .Any(assembly => assembly.name == "Tl.Unity.BurstCombat"));
         }
 
         private static bool Forbidden(string path)

@@ -6,7 +6,7 @@ namespace Tl.Samples.BurstCombat
 {
     public struct AttackPlayback : IComponentData
     {
-        public Playback Value;
+        public Playback<Attack> Value;
         public uint StartGameTick;
         public int Delta;
     }

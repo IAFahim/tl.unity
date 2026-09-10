@@ -5,7 +5,7 @@ using Unity.Entities;
 
 namespace Tl.Samples.BurstCombat
 {
-    public static unsafe partial class Attack
+    public readonly unsafe partial struct Attack
     {
         public static TimelineReport Report
         {

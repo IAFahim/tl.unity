@@ -4,7 +4,7 @@ using Unity.Collections.LowLevel.Unsafe;
 
 namespace Tl.Samples.BurstCombat
 {
-    public static unsafe partial class Attack
+    public readonly unsafe partial struct Attack : ITimeline
     {
         public const ushort Id = 0;
         public const uint Duration = 40;
@@ -15,20 +15,20 @@ namespace Tl.Samples.BurstCombat
         public const uint StaticDataBytes = 14;
         public const uint RuntimeHeapBytes = 0;
 
-        public struct Data
+        public ref struct Data
         {
-            internal Playback* Playback;
+            internal Playback<Attack>* Playback;
             internal FighterPose* CurrentPose;
             internal FighterPose* NextPose;
             internal CombatStats* Combat;
 
             public Data(
-                ref Playback playback,
+                ref Playback<Attack> playback,
                 in FighterPose currentPose,
                 ref FighterPose nextPose,
                 ref CombatStats combat)
             {
-                Playback = (Playback*)UnsafeUtility.AddressOf(ref playback);
+                Playback = (Playback<Attack>*)UnsafeUtility.AddressOf(ref playback);
                 CurrentPose = (FighterPose*)UnsafeUtilityExtensions.AddressOf(in currentPose);
                 NextPose = (FighterPose*)UnsafeUtility.AddressOf(ref nextPose);
                 Combat = (CombatStats*)UnsafeUtility.AddressOf(ref combat);
@@ -36,15 +36,15 @@ namespace Tl.Samples.BurstCombat
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Playback Start(uint gameTick)
+        public static Playback<Attack> Start(uint gameTick)
         {
-            return Timeline.Start(Id, gameTick);
+            return Timeline.Start<Attack>(gameTick);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool TryStop(in Playback playback, out Playback stopped)
+        public static bool TryStop(in Playback<Attack> playback, out Playback<Attack> stopped)
         {
-            return Timeline.TryStop(Id, in playback, out stopped);
+            return Timeline.TryStop(in playback, out stopped);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -90,7 +90,10 @@ namespace Tl.Samples.BurstCombat
                 }
             }
 
-            *data.Playback = new Playback(targetPosition, unchecked(before.GameTick + (uint)delta), Id, before.Flags);
+            *data.Playback = Timeline.CreateTypedPlayback<Attack>(
+                targetPosition,
+                unchecked(before.GameTick + (uint)delta),
+                before.Flags);
             return true;
         }
 
@@ -103,8 +106,7 @@ namespace Tl.Samples.BurstCombat
                 || data.Combat == null)
                 return false;
             var before = *data.Playback;
-            return before.Owner == Id
-                && (before.Flags & (PlaybackFlags.Started | PlaybackFlags.Stopped)) == PlaybackFlags.Started;
+            return (before.Flags & (PlaybackFlags.Started | PlaybackFlags.Stopped)) == PlaybackFlags.Started;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

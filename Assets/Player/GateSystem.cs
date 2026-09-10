@@ -7,7 +7,7 @@ namespace TlUnity.PlayerProbe
 {
     public struct GatePlayback : IComponentData
     {
-        public Playback Value;
+        public Playback<Gate> Value;
         public uint StartGameTick;
         public int Delta;
     }

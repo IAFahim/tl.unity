@@ -76,22 +76,22 @@ namespace TlUnity.PlayerProbe
         }
     }
 
-    public static unsafe class Gate
+    public readonly unsafe struct Gate : ITimeline
     {
         public const ushort Id = 7;
         public const uint Duration = 4;
 
-        public struct Data
+        public ref struct Data
         {
-            internal Playback* Playback;
+            internal Playback<Gate>* Playback;
             internal Pose* Current;
             internal Pose* Next;
             internal Health* Health;
             internal Receipt* Receipt;
 
-            public Data(ref Playback playback, in Pose current, ref Pose next, ref Health health, ref Receipt receipt)
+            public Data(ref Playback<Gate> playback, in Pose current, ref Pose next, ref Health health, ref Receipt receipt)
             {
-                Playback = (Playback*)UnsafeUtility.AddressOf(ref playback);
+                Playback = (Playback<Gate>*)UnsafeUtility.AddressOf(ref playback);
                 Current = (Pose*)UnsafeUtilityExtensions.AddressOf(in current);
                 Next = (Pose*)UnsafeUtility.AddressOf(ref next);
                 Health = (Health*)UnsafeUtility.AddressOf(ref health);
@@ -100,15 +100,15 @@ namespace TlUnity.PlayerProbe
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Playback Start(uint gameTick)
+        public static Playback<Gate> Start(uint gameTick)
         {
-            return Timeline.Start(Id, gameTick);
+            return Timeline.Start<Gate>(gameTick);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool TryStop(in Playback playback, out Playback stopped)
+        public static bool TryStop(in Playback<Gate> playback, out Playback<Gate> stopped)
         {
-            return Timeline.TryStop(Id, in playback, out stopped);
+            return Timeline.TryStop(in playback, out stopped);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -152,7 +152,10 @@ namespace TlUnity.PlayerProbe
                 }
             }
 
-            *data.Playback = new Playback(targetPosition, unchecked(before.GameTick + (uint)delta), Id, before.Flags);
+            *data.Playback = Timeline.CreateTypedPlayback<Gate>(
+                targetPosition,
+                unchecked(before.GameTick + (uint)delta),
+                before.Flags);
             return true;
         }
 
@@ -166,8 +169,7 @@ namespace TlUnity.PlayerProbe
                 || data.Receipt == null)
                 return false;
             var before = *data.Playback;
-            return before.Owner == Id
-                && (before.Flags & (PlaybackFlags.Started | PlaybackFlags.Stopped)) == PlaybackFlags.Started;
+            return (before.Flags & (PlaybackFlags.Started | PlaybackFlags.Stopped)) == PlaybackFlags.Started;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -292,27 +294,27 @@ namespace TlUnity.PlayerProbe
         }
     }
 
-    public static unsafe class LoopGate
+    public readonly unsafe struct LoopGate : ITimeline
     {
         public const ushort Id = 8;
         public const uint Duration = 3;
 
-        public struct Data
+        public ref struct Data
         {
-            internal Playback* Playback;
+            internal Playback<LoopGate>* Playback;
             internal Receipt* Receipt;
 
-            public Data(ref Playback playback, ref Receipt receipt)
+            public Data(ref Playback<LoopGate> playback, ref Receipt receipt)
             {
-                Playback = (Playback*)UnsafeUtility.AddressOf(ref playback);
+                Playback = (Playback<LoopGate>*)UnsafeUtility.AddressOf(ref playback);
                 Receipt = (Receipt*)UnsafeUtility.AddressOf(ref receipt);
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Playback Start(uint gameTick)
+        public static Playback<LoopGate> Start(uint gameTick)
         {
-            return Timeline.Start(Id, gameTick);
+            return Timeline.Start<LoopGate>(gameTick);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -321,8 +323,7 @@ namespace TlUnity.PlayerProbe
             if (data.Playback == null || data.Receipt == null)
                 return false;
             var before = *data.Playback;
-            if (before.Owner != Id
-                || (before.Flags & (PlaybackFlags.Started | PlaybackFlags.Stopped)) != PlaybackFlags.Started)
+            if ((before.Flags & (PlaybackFlags.Started | PlaybackFlags.Stopped)) != PlaybackFlags.Started)
                 return false;
 
             var distance = (long)delta;
@@ -376,7 +377,10 @@ namespace TlUnity.PlayerProbe
                 }
             }
 
-            *data.Playback = new Playback(targetPosition, unchecked(before.GameTick + (uint)delta), Id, before.Flags);
+            *data.Playback = Timeline.CreateTypedPlayback<LoopGate>(
+                targetPosition,
+                unchecked(before.GameTick + (uint)delta),
+                before.Flags);
             return true;
         }
 
