@@ -1,3 +1,14 @@
+public readonly ref struct Tl.Builder
+  layout Sequential pack 8 size 1
+  method Tl.TrackRef<TTrack> Track<TTrack>(in TTrack) where TTrack : unmanaged
+  method System.Void Clip<TTrack, TJob, TClip>(in Tl.TrackRef<TTrack, TJob>, in TClip, System.UInt32, System.UInt32) where TTrack : unmanaged, Tl.IBlend<TClip> where TJob : unmanaged, Tl.ITimelineJob<TTrack, TClip> where TClip : unmanaged
+  method System.Void Looping()
+  method System.Void Before<THook>() where THook : unmanaged, Tl.IHook
+  method System.Void After<THook>() where THook : unmanaged, Tl.IHook
+  method System.Void Include<TTimeline>() where TTimeline : unmanaged, Tl.ITimeline
+public readonly ref struct Tl.CatalogBuilder
+  layout Sequential pack 8 size 1
+  method Tl.SchemaBuilder<TSchema> Schema<TSchema>() where TSchema : unmanaged
 public enum Tl.FrameFlags
   field const Tl.FrameFlags None = 0
   field const Tl.FrameFlags ClipStart = 1
@@ -20,26 +31,26 @@ public readonly ref struct Tl.Frame<TTrack, TClip> where TTrack : unmanaged wher
   property Tl.FrameFlags Flags
   property System.Int32 Direction
   method System.Boolean Has(Tl.FrameFlags)
+public interface Tl.IBlend<TClip> where TClip : unmanaged
+  method System.Void Blend(in TClip, in TClip, System.Single, out TClip)
+public interface Tl.IHook
 public interface Tl.ITimeline
-public enum Tl.PlaybackFlags
-  field const Tl.PlaybackFlags None = 0
-  field const Tl.PlaybackFlags Started = 1
-  field const Tl.PlaybackFlags Stopped = 2
-public readonly struct Tl.Playback<TTimeline> where TTimeline : unmanaged, Tl.ITimeline
-  layout Sequential pack 8 size 0 runtime-size 16
-  field readonly System.Int64 Position offset 0
-  field readonly System.UInt32 GameTick offset 8
-  field readonly Tl.PlaybackFlags Flags offset 12
-  method System.Boolean Has(Tl.PlaybackFlags)
-  method System.Boolean Equals(Tl.Playback<TTimeline>)
-  method System.Boolean Equals(System.Object)
-  method System.Int32 GetHashCode()
-  method static System.Boolean op_Equality(Tl.Playback<TTimeline>, Tl.Playback<TTimeline>)
-  method static System.Boolean op_Inequality(Tl.Playback<TTimeline>, Tl.Playback<TTimeline>)
-public static class Tl.Timeline
-  method static Tl.Playback<TTimeline> Start<TTimeline>(System.UInt32) where TTimeline : unmanaged, Tl.ITimeline
-  method static System.Boolean TryStop<TTimeline>(in Tl.Playback<TTimeline>, out Tl.Playback<TTimeline>) where TTimeline : unmanaged, Tl.ITimeline
-  method static Tl.Playback<TTimeline> CreateTypedPlayback<TTimeline>(System.Int64, System.UInt32, Tl.PlaybackFlags) where TTimeline : unmanaged, Tl.ITimeline
+public interface Tl.ITimelineCatalog
+public interface Tl.ITimelineJob<TTrack, TClip> where TTrack : unmanaged, Tl.IBlend<TClip> where TClip : unmanaged
+public readonly ref struct Tl.SchemaBuilder<TSchema> where TSchema : unmanaged
+  layout Sequential pack 8 size 1
+  method Tl.SchemaBuilder<TSchema> Asset<TTimeline>() where TTimeline : unmanaged, Tl.ITimeline
+public readonly struct Tl.TimelineFrame
+  layout Sequential pack 8 size 0 runtime-size 24
+  constructor Tl.TimelineFrame(System.UInt32, System.UInt32, System.Int64, Tl.FrameFlags)
+  property System.UInt32 GameTick
+  property System.UInt32 TimelineTick
+  property System.Int64 Cycle
+  property Tl.FrameFlags Flags
+  property System.Int32 Direction
+  method System.Boolean Has(Tl.FrameFlags)
+public static class Tl.TimelineMovement
+  method static System.Boolean Select(in Tl.TimelineState, System.UInt32, System.Boolean, System.Boolean, out Tl.TimelineState, out System.UInt32, out System.Int64, out Tl.FrameFlags)
 public readonly struct Tl.TimelineReport
   layout Sequential pack 8 size 0 runtime-size 32
   field readonly System.UInt16 PlanVersion offset 0
@@ -53,3 +64,14 @@ public readonly struct Tl.TimelineReport
   field readonly System.UInt32 BlobBytes offset 24
   field readonly System.UInt32 RuntimeHeapBytes offset 28
   constructor Tl.TimelineReport(System.UInt16, System.UInt16, System.UInt32, System.UInt16, System.UInt16, System.UInt16, System.UInt32, System.UInt32, System.UInt32, System.UInt32)
+public readonly struct Tl.TimelineState
+  layout Sequential pack 8 size 0 runtime-size 16
+  field readonly System.UInt32 Asset offset 0
+  field readonly System.UInt32 Position offset 4
+  field readonly System.Int64 Cycle offset 8
+  constructor Tl.TimelineState(System.UInt32, System.UInt32, System.Int64)
+public readonly ref struct Tl.TrackRef<TTrack> where TTrack : unmanaged
+  layout Sequential pack 8 size 1
+  method Tl.TrackRef<TTrack, TJob> Use<TJob>() where TJob : unmanaged
+public readonly ref struct Tl.TrackRef<TTrack, TJob> where TTrack : unmanaged where TJob : unmanaged
+  layout Sequential pack 8 size 1

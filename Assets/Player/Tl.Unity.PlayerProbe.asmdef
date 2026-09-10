@@ -4,6 +4,7 @@
   "references": [
     "Tl.Unity",
     "Tl.Unity.Entities",
+    "Tl.Unity.GeneratedJobs",
     "Unity.Burst",
     "Unity.Collections",
     "Unity.Entities"

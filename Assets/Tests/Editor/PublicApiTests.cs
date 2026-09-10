@@ -11,14 +11,10 @@ namespace Tl.Unity.Tests
 {
     public sealed class PublicApiTests
     {
-        private readonly struct LayoutTimeline : ITimeline
-        {
-        }
-
         [Test]
         public void RuntimeAssembliesMatchApprovals()
         {
-            Match(typeof(Timeline).Assembly, "Tl.Unity.approved.txt");
+            Match(typeof(TimelineState).Assembly, "Tl.Unity.approved.txt");
             Match(typeof(TimelineBlob).Assembly, "Tl.Unity.Entities.approved.txt");
         }
 
@@ -164,8 +160,6 @@ namespace Tl.Unity.Tests
         {
             if (!type.ContainsGenericParameters)
                 return type;
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Playback<>))
-                return typeof(Playback<LayoutTimeline>);
             return null;
         }
 
