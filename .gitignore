@@ -4,5 +4,7 @@
 /UserSettings/
 /Build/
 /Assets/Samples/
+/Assets/Samples.meta
+/Assets/Resources.meta
 *.csproj
 *.sln
