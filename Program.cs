@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Reflection;
 using System.Runtime.Loader;
 using Microsoft.CodeAnalysis;
@@ -52,7 +51,7 @@ var compilation = CSharpCompilation.Create(
     references,
     new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 GeneratorDriver driver = CSharpGeneratorDriver.Create([generator], parseOptions: parseOptions);
-driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out var output, out var diagnostics);
+driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out _, out var diagnostics);
 var generated = driver.GetRunResult().Results.Single().GeneratedSources;
 if (diagnostics.Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
     || generated.Length != 2)
