@@ -5,6 +5,7 @@
     "Tl.Unity",
     "Tl.Unity.Entities",
     "Tl.Unity.PlayerProbe",
+    "Tl.Unity.BurstCombat",
     "Unity.Burst",
     "Unity.Collections",
     "Unity.Entities"

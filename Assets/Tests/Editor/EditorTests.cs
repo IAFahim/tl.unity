@@ -42,7 +42,7 @@ namespace Tl.Unity.Tests
             var files = new[]
             {
                 "Player/csc.rsp",
-                "Samples/Tl/1.0.0-alpha.2/Burst Combat/csc.rsp",
+                "Samples/BurstCombat/csc.rsp",
                 "Tests/Runtime/csc.rsp"
             };
             foreach (var file in files)

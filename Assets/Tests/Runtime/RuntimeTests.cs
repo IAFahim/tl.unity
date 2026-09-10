@@ -1,6 +1,7 @@
 using System;
 using NUnit.Framework;
 using Tl;
+using BurstCombat = Tl.Samples.BurstCombat;
 using TlUnity.PlayerProbe;
 using Unity.Burst;
 using Unity.Collections;
@@ -35,6 +36,55 @@ namespace Tl.Unity.Tests
                 Assert.AreEqual(5f, manager.GetComponentData<NextPose>(entity).Value.Y);
                 Assert.AreEqual(90f, manager.GetComponentData<TargetHealth>(entity).Value.Value);
                 Assert.AreEqual(3, manager.GetComponentData<GateReceipt>(entity).Value.Calls);
+            }
+        }
+
+        [Test]
+        public void ExternalBurstCombatSampleRunsNonzeroSignedSeek()
+        {
+            using (var world = new World("Tl sample gate"))
+            {
+                var manager = world.EntityManager;
+                var entity = manager.CreateEntity(
+                    typeof(BurstCombat.AttackPlayback),
+                    typeof(BurstCombat.CurrentPose),
+                    typeof(BurstCombat.NextPose),
+                    typeof(BurstCombat.FighterCombat));
+                manager.SetComponentData(entity, new BurstCombat.AttackPlayback { StartGameTick = 25, Delta = 11 });
+                manager.SetComponentData(entity, new BurstCombat.CurrentPose
+                {
+                    Value = new BurstCombat.FighterPose { X = 3, Y = 4 }
+                });
+                manager.SetComponentData(entity, new BurstCombat.FighterCombat
+                {
+                    Value = new BurstCombat.CombatStats { Health = 100 }
+                });
+                var system = world.CreateSystem<BurstCombat.AdvanceAttackSystem>();
+
+                system.Update(world.Unmanaged);
+                manager.CompleteAllTrackedJobs();
+                var playback = manager.GetComponentData<BurstCombat.AttackPlayback>(entity);
+                var pose = manager.GetComponentData<BurstCombat.NextPose>(entity);
+                var combat = manager.GetComponentData<BurstCombat.FighterCombat>(entity);
+                Assert.AreEqual(11L, playback.Value.Position);
+                Assert.AreEqual(36u, playback.Value.GameTick);
+                Assert.AreEqual(5f, pose.Value.X);
+                Assert.AreEqual(5f, pose.Value.Y);
+                Assert.AreEqual(90f, combat.Value.Health);
+
+                playback.Delta = -1;
+                manager.SetComponentData(entity, playback);
+                system.Update(world.Unmanaged);
+                manager.CompleteAllTrackedJobs();
+                playback = manager.GetComponentData<BurstCombat.AttackPlayback>(entity);
+                pose = manager.GetComponentData<BurstCombat.NextPose>(entity);
+                combat = manager.GetComponentData<BurstCombat.FighterCombat>(entity);
+                Assert.AreEqual(10L, playback.Value.Position);
+                Assert.AreEqual(35u, playback.Value.GameTick);
+                Assert.AreEqual(1f, pose.Value.X);
+                Assert.AreEqual(3f, pose.Value.Y);
+                Assert.AreEqual(100f, combat.Value.Health);
+                Assert.AreEqual(8293u, BurstCombat.Attack.Report.GeneratedSourceBytes);
             }
         }
 
