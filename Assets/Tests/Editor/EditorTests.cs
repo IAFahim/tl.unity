@@ -38,6 +38,8 @@ namespace Tl.Unity.Tests
             Assert.IsFalse(Directory.Exists(Path.Combine(package.resolvedPath, "Samples~")));
             Assert.IsTrue(CompilationPipeline.GetAssemblies(AssembliesType.PlayerWithoutTestAssemblies)
                 .Any(assembly => assembly.name == "Tl.Unity.GeneratedJobs"));
+            var report = File.ReadAllText("Assets/Samples/GeneratedJobs/Generated/TlGenCompile.report.txt");
+            StringAssert.Contains("catalog\tTl.Samples.GeneratedJobs.Combat\tschemas=3\tassets=4\toperation-kinds=3\tmax-stages=5\tscheduled-jobs-per-step=20", report);
         }
 
         [Test]

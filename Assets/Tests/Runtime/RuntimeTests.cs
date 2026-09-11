@@ -1,3 +1,5 @@
+using System;
+using System.Diagnostics;
 using NUnit.Framework;
 using Tl;
 using GeneratedJobs = Tl.Samples.GeneratedJobs;
@@ -125,6 +127,45 @@ namespace Tl.Unity.Tests
                 Assert.AreEqual(210L, reverse.CycleOrder);
                 Assert.AreEqual(FrameFlags.Looping | FrameFlags.Reverse | FrameFlags.TimelineStart | FrameFlags.TimelineEnd,
                     reverse.Flags & (FrameFlags.Looping | FrameFlags.Reverse | FrameFlags.TimelineStart | FrameFlags.TimelineEnd));
+            }
+        }
+
+        [Test]
+        public void WarmSchedulingAllocatesNoManagedMemoryAndReportsCost()
+        {
+            const int warmup = 32;
+            const int iterations = 128;
+            using (var world = new World("Tl generated jobs allocation gate"))
+            {
+                var manager = world.EntityManager;
+                var clock = CreateClock(manager, 500u, 1);
+                var entity = CreateLoopEntity(manager);
+                var system = world.CreateSystem<GeneratedJobs.GeneratedTimelineSystem>();
+                for (var index = 0; index < warmup; index++)
+                {
+                    manager.SetComponentData(clock, new GeneratedJobs.Clock { GameTick = (uint)(500 + index), Delta = 1 });
+                    Update(system, world, manager);
+                }
+
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                var stopwatch = new Stopwatch();
+                var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+                stopwatch.Start();
+                for (var index = 0; index < iterations; index++)
+                {
+                    manager.SetComponentData(clock, new GeneratedJobs.Clock { GameTick = (uint)(500 + warmup + index), Delta = 1 });
+                    Update(system, world, manager);
+                }
+                stopwatch.Stop();
+                var allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+                Assert.AreEqual(0L, allocated);
+                AssertState(manager, entity, 0u, warmup + iterations);
+                TestContext.WriteLine("TL_UNITY_METRICS iterations={0} scheduled_jobs_per_step=20 managed_bytes={1} elapsed_ticks={2} elapsed_ns_per_step={3:F1}",
+                    iterations, allocated, stopwatch.ElapsedTicks,
+                    stopwatch.ElapsedTicks * (1000000000.0 / Stopwatch.Frequency) / iterations);
             }
         }
 
