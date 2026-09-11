@@ -21,5 +21,6 @@ dotnet "$repository_dir/src/Tl.Gen.CSharp/bin/Release/net10.0/Tl.Gen.CSharp.dll"
   --output "$output_dir" \
   --source "$fixture_dir/Operations.cs" \
   --source "$fixture_dir/Catalog.tl" \
+  --source "$fixture_dir/CrossNamespace.tl" \
   --source "$fixture_dir/UnityContracts.tl" \
   --reference-list "$reference_list"

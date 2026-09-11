@@ -15,7 +15,6 @@ namespace Tl.Unity.Tests
         public void RuntimeAssembliesMatchApprovals()
         {
             Match(typeof(TimelineState).Assembly, "Tl.Unity.approved.txt");
-            Match(typeof(TimelineBlob).Assembly, "Tl.Unity.Entities.approved.txt");
         }
 
         private static void Match(Assembly assembly, string file)

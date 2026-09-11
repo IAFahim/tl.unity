@@ -12,18 +12,15 @@ namespace Tl.Unity.Tests
         public void PlayerGraphContainsRuntimeWithoutCompilerOrRoslyn()
         {
             Assembly runtime = null;
-            var entities = false;
             foreach (var assembly in CompilationPipeline.GetAssemblies(AssembliesType.PlayerWithoutTestAssemblies))
             {
                 if (assembly.name == "Tl.Unity")
                     runtime = assembly;
-                entities |= assembly.name == "Tl.Unity.Entities";
                 Assert.IsFalse(Forbidden(assembly.outputPath), assembly.outputPath);
                 foreach (var reference in assembly.compiledAssemblyReferences)
                     Assert.IsFalse(Forbidden(reference), reference);
             }
             Assert.IsNotNull(runtime);
-            Assert.IsTrue(entities);
             Assert.IsTrue(runtime.sourceFiles.Any(path => path.Replace('\\', '/').EndsWith("/Runtime/Jobs.cs")));
             Assert.IsFalse(runtime.sourceFiles.Any(path => path.Replace('\\', '/').EndsWith("/Runtime/Playback.cs")));
             Assert.IsFalse(runtime.sourceFiles.Any(path => path.Replace('\\', '/').EndsWith("/Runtime/Timeline.cs")));

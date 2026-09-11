@@ -31,15 +31,6 @@ public readonly partial struct Defense : ITimeline
     }
 }
 
-public readonly partial struct Gap : ITimeline
-{
-    public static void Define(scoped Builder builder)
-    {
-        var value = builder.Track(new ValueTrack(1)).Use<A>();
-        builder.Clip(value, new ValueClip(9), 1u, 2u);
-    }
-}
-
 public readonly partial struct Loop : ITimeline
 {
     public static void Define(scoped Builder builder)
@@ -59,7 +50,7 @@ public readonly partial struct Combat : ITimelineCatalog
     public static void Define(scoped CatalogBuilder builder)
     {
         builder.Schema<Rows>().Asset<Attack>().Asset<Defense>();
-        builder.Schema<GapRows>().Asset<Gap>();
+        builder.Schema<GapRows>().Asset<Tl.Samples.External.Gap>();
         builder.Schema<LoopRows>().Asset<Loop>();
     }
 }

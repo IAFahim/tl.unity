@@ -51,19 +51,6 @@ public readonly struct Tl.TimelineFrame
   method System.Boolean Has(Tl.FrameFlags)
 public static class Tl.TimelineMovement
   method static System.Boolean Select(in Tl.TimelineState, System.UInt32, System.Boolean, System.Boolean, out Tl.TimelineState, out System.UInt32, out System.Int64, out Tl.FrameFlags)
-public readonly struct Tl.TimelineReport
-  layout Sequential pack 8 size 0 runtime-size 32
-  field readonly System.UInt16 PlanVersion offset 0
-  field readonly System.UInt16 TimelineId offset 2
-  field readonly System.UInt32 Duration offset 4
-  field readonly System.UInt16 TrackCount offset 8
-  field readonly System.UInt16 ClipCount offset 10
-  field readonly System.UInt16 RegionCount offset 12
-  field readonly System.UInt32 GeneratedSourceBytes offset 16
-  field readonly System.UInt32 StaticDataBytes offset 20
-  field readonly System.UInt32 BlobBytes offset 24
-  field readonly System.UInt32 RuntimeHeapBytes offset 28
-  constructor Tl.TimelineReport(System.UInt16, System.UInt16, System.UInt32, System.UInt16, System.UInt16, System.UInt16, System.UInt32, System.UInt32, System.UInt32, System.UInt32)
 public readonly struct Tl.TimelineState
   layout Sequential pack 8 size 0 runtime-size 16
   field readonly System.UInt32 Asset offset 0

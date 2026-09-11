@@ -7,8 +7,6 @@ repository_dir="$(cd "$project_dir/../.." && pwd)"
 output_dir="$1"
 source_dir="$output_dir/Source"
 generated_dir="$output_dir/Generated"
-reference_list="$(mktemp)"
-trap 'rm -f "$reference_list"' EXIT
 mkdir -p "$source_dir" "$generated_dir"
 
 python3 - "$repository_dir/src/Tl.Unity/README.md" "$source_dir" <<'PY'
@@ -54,15 +52,23 @@ cat >"$output_dir/Tl.Unity.ReadmeReceipt.asmdef" <<'JSON'
 }
 JSON
 
-dotnet build "$repository_dir/src/Tl.Core/Tl.Core.csproj" -c Release -m:1 -p:NuGetAudit=false >/dev/null
-dotnet build "$repository_dir/src/Tl.Gen.CSharp/Tl.Gen.CSharp.csproj" -c Release -m:1 -p:NuGetAudit=false >/dev/null
-runtime_dir="$(dotnet --list-runtimes | awk '$1 == "Microsoft.NETCore.App" { path=$3; gsub(/[][]/, "", path); found=path "/" $2 } END { print found }')"
-find "$runtime_dir" -maxdepth 1 -type f -name '*.dll' -print | sort >"$reference_list"
-printf '%s\n' "$repository_dir/src/Tl.Core/bin/Release/net10.0/Tl.Core.dll" >>"$reference_list"
-dotnet "$repository_dir/src/Tl.Gen.CSharp/bin/Release/net10.0/Tl.Gen.CSharp.dll" \
-    --compile \
-    --backend unity-entities \
-    --output "$generated_dir" \
-    --source "$source_dir/DomainJobs.cs" \
-    --source "$source_dir/Combat.tl" \
-    --reference-list "$reference_list"
+cat >"$source_dir/Timeline.Authoring.csproj" <<XML
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>enable</Nullable>
+    <TlGenBackend>unity-entities</TlGenBackend>
+    <TlGenOutput>$generated_dir</TlGenOutput>
+    <TlGenAssembly>$repository_dir/src/Tl.Gen.CSharp/bin/Release/net10.0/Tl.Gen.CSharp.dll</TlGenAssembly>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="DomainJobs.cs" />
+    <Compile Include="Combat.tl" />
+    <ProjectReference Include="$repository_dir/src/Tl.Core/Tl.Core.csproj" />
+  </ItemGroup>
+  <Import Project="$repository_dir/src/Tl.Gen.CSharp/build/Tl.Gen.CSharp.targets" />
+</Project>
+XML
+
+dotnet msbuild "$source_dir/Timeline.Authoring.csproj" -restore -t:TlGenExport -p:Configuration=Release -p:NuGetAudit=false
