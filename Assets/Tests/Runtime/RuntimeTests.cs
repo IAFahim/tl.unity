@@ -131,15 +131,23 @@ namespace Tl.Unity.Tests
         }
 
         [Test]
-        public void WarmSchedulingAllocatesNoManagedMemoryAndReportsCost()
+        public void WarmTenThousandRowSchedulingAllocatesNoManagedMemoryAndReportsCost()
         {
-            const int warmup = 32;
-            const int iterations = 128;
+            const int rows = 10000;
+            const int warmup = 16;
+            const int iterations = 32;
             using (var world = new World("Tl generated jobs allocation gate"))
             {
                 var manager = world.EntityManager;
                 var clock = CreateClock(manager, 500u, 1);
-                var entity = CreateLoopEntity(manager);
+                var first = Entity.Null;
+                var last = Entity.Null;
+                for (var index = 0; index < rows; index++)
+                {
+                    last = CreateLoopEntity(manager);
+                    if (index == 0)
+                        first = last;
+                }
                 var system = world.CreateSystem<GeneratedJobs.GeneratedTimelineSystem>();
                 for (var index = 0; index < warmup; index++)
                 {
@@ -162,10 +170,13 @@ namespace Tl.Unity.Tests
                 var allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
 
                 Assert.AreEqual(0L, allocated);
-                AssertState(manager, entity, 0u, warmup + iterations);
-                TestContext.WriteLine("TL_UNITY_METRICS iterations={0} scheduled_jobs_per_step=20 managed_bytes={1} elapsed_ticks={2} elapsed_ns_per_step={3:F1}",
-                    iterations, allocated, stopwatch.ElapsedTicks,
-                    stopwatch.ElapsedTicks * (1000000000.0 / Stopwatch.Frequency) / iterations);
+                AssertState(manager, first, 0u, warmup + iterations);
+                AssertState(manager, last, 0u, warmup + iterations);
+                var elapsedNanoseconds = stopwatch.ElapsedTicks * (1000000000.0 / Stopwatch.Frequency);
+                TestContext.WriteLine("TL_UNITY_METRICS rows={0} iterations={1} scheduled_jobs_per_step=20 managed_bytes={2} elapsed_ticks={3} ns_per_scheduler_step={4:F1} ns_per_entity_step={5:F3}",
+                    rows, iterations, allocated, stopwatch.ElapsedTicks,
+                    elapsedNanoseconds / iterations,
+                    elapsedNanoseconds / (iterations * rows));
             }
         }
 
