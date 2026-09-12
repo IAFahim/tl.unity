@@ -315,6 +315,9 @@ public static class Timeline
 
 	public static unsafe void TickUnmanaged(UnmanagedTickState* state, TimelineComponent* rows, int rowCount, void** bases, ulong* keys, int keyCount, uint gameTick, int delta)
 		=> UnmanagedTick.TickCoreUnmanaged(state, UnmanagedTable.Block, bases, rows, rowCount, gameTick, delta, keys, keyCount);
+
+	public static unsafe void TickUnmanaged(UnmanagedTickState* state, byte* table, TimelineComponent* rows, int rowCount, void** bases, ulong* keys, int keyCount, uint gameTick, int delta)
+		=> UnmanagedTick.TickCoreUnmanaged(state, table, bases, rows, rowCount, gameTick, delta, keys, keyCount);
 }
 
 public unsafe ref struct TimelineQuery

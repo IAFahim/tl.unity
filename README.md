@@ -21,6 +21,9 @@ License: to be decided by the repository owner.
   explicit calling conventions because Unity's Mono compile target rejects the
   default unmanaged convention (CS8889). `tl/src/Tl.Core` at `bd3c3ca` still
   carries the convention-less form; keep both compilable when porting.
+- `Data.cs` also carries an explicit-table `Timeline.TickUnmanaged` overload so
+  the Bursted coordinator passes `UnmanagedTable.Block` as job data instead of
+  referencing the static block from compiled code.
 - `tools/TlBakeShim/TlBakeShim.csproj` and
   `tests/Tl.UnityAnalyzerReceipt/Tl.UnityAnalyzerReceipt.csproj` reference the
   snapshot copies under `external/tl/` (Tl.Core, Tl.Compiler, Tl.Gen.CSharp at
