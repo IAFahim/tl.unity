@@ -45,6 +45,8 @@ unsafe class BurstArms
     static delegate* unmanaged[Cdecl]<ulong*, int, byte*, void> Fn(FunctionPointer<BindDel> pointer)
         => (delegate* unmanaged[Cdecl]<ulong*, int, byte*, void>)(void*)pointer.Value;
 
+    internal static bool Installed;
+
     internal static NativeList<Record> Install()
     {
         Sink.Data.HealthKey = TimelineEcs.ComponentKey<Health>();
@@ -55,6 +57,8 @@ unsafe class BurstArms
             Sink.Data.List = slot;
         }
         Sink.Data.List->Clear();
+        if (Installed) return *Sink.Data.List;
+        Installed = true;
         _alphaExecute = BurstCompiler.CompileFunctionPointer<ExecuteDel>(AlphaExecute);
         _alphaBind = BurstCompiler.CompileFunctionPointer<BindDel>(AlphaBind);
         _betaExecute = BurstCompiler.CompileFunctionPointer<ExecuteDel>(BetaExecute);

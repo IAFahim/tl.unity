@@ -59,6 +59,7 @@ public unsafe partial struct TimelineUnmanagedCoordinatorSystem : ISystem
     private EntityQuery _rows;
     private EntityQuery _clock;
     private ComponentTypeHandle<TimelineComponent> _rowHandle;
+    private EntityTypeHandle _entityHandle;
     private NativeArray<UnmanagedTickState> _state;
     private NativeArray<ulong> _keys;
     private int _keyCount;
@@ -67,14 +68,11 @@ public unsafe partial struct TimelineUnmanagedCoordinatorSystem : ISystem
     public void OnCreate(ref SystemState state)
     {
         TimelineEcs.Seal();
-        var columns = TimelineEcs.Columns;
-        var types = new ComponentType[1 + columns.Count];
-        types[0] = ComponentType.ReadWrite<TimelineComponent>();
-        for (var i = 0; i < columns.Count; i++) types[i + 1] = columns[i].Component;
-        _rows = state.GetEntityQuery(types);
+        _rows = state.GetEntityQuery(ComponentType.ReadWrite<TimelineComponent>());
         _clock = state.GetEntityQuery(ComponentType.ReadOnly<TimelineClock>());
         _rowHandle = state.GetComponentTypeHandle<TimelineComponent>();
-        for (var i = 0; i < columns.Count; i++) columns[i].Create(ref state);
+        _entityHandle = state.GetEntityTypeHandle();
+        for (var i = 0; i < TimelineEcs.Columns.Count; i++) TimelineEcs.Columns[i].Create(ref state);
         _state = new NativeArray<UnmanagedTickState>(1, Allocator.Persistent, NativeArrayOptions.ClearMemory);
         _keys = new NativeArray<ulong>(TimelineEcs.ColumnLimit, Allocator.Persistent, NativeArrayOptions.ClearMemory);
     }
@@ -91,45 +89,40 @@ public unsafe partial struct TimelineUnmanagedCoordinatorSystem : ISystem
             _keyCount = TimelineEcs.FillKeys((ulong*)NativeArrayUnsafeUtility.GetUnsafePtr(_keys));
             _sealed = true;
         }
-        _rowHandle.Update(ref state);
-        var columns = TimelineEcs.Columns;
-        var columnCount = columns.Count;
-        var chunks = _rows.ToArchetypeChunkArray(Allocator.Temp);
+        var runs = new NativeList<TimelineChunkRows>(Allocator.Temp);
+        var bases = new NativeList<IntPtr>(Allocator.Temp);
         try
         {
-            var chunkRows = new NativeArray<TimelineChunkRows>(chunks.Length, Allocator.TempJob, NativeArrayOptions.ClearMemory);
-            var bases = new NativeArray<IntPtr>(chunks.Length * TimelineEcs.ColumnLimit, Allocator.TempJob, NativeArrayOptions.ClearMemory);
+            TimelineEligibility.Resolve(ref state, _rows, ref _rowHandle, ref _entityHandle, runs, bases);
+            var chunkRows = new NativeArray<TimelineChunkRows>(runs.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            var baseArray = new NativeArray<IntPtr>(bases.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             try
             {
-                for (var c = 0; c < chunks.Length; c++)
-                {
-                    var chunk = chunks[c];
-                    var rows = chunk.GetNativeArray(ref _rowHandle);
-                    for (var i = 0; i < columnCount; i++) bases[c * TimelineEcs.ColumnLimit + i] = (IntPtr)columns[i].Pointer(ref state, chunk);
-                    chunkRows[c] = new TimelineChunkRows { Rows = NativeArrayUnsafeUtility.GetUnsafeBufferPointerWithoutChecks(rows), Count = rows.Length };
-                }
+                for (var i = 0; i < runs.Length; i++) chunkRows[i] = runs[i];
+                for (var i = 0; i < bases.Length; i++) baseArray[i] = bases[i];
                 new TimelineUnmanagedTickJob
                 {
                     Chunks = chunkRows,
-                    Bases = bases,
+                    Bases = baseArray,
                     State = _state,
                     Keys = _keys,
                     Table = (IntPtr)UnmanagedTable.Block,
                     KeyCount = _keyCount,
-                    ChunkCount = chunks.Length,
+                    ChunkCount = runs.Length,
                     GameTick = clock.GameTick,
                     Delta = clock.Delta,
                 }.Run();
             }
             finally
             {
-                bases.Dispose();
+                baseArray.Dispose();
                 chunkRows.Dispose();
             }
         }
         finally
         {
-            chunks.Dispose();
+            bases.Dispose();
+            runs.Dispose();
         }
     }
 

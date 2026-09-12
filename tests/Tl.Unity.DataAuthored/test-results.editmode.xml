@@ -1,33 +1,62 @@
 <?xml version="1.0" encoding="utf-8"?>
-<test-run id="2" testcasecount="11" result="Passed" total="11" passed="11" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-09-12 22:17:57Z" end-time="2026-09-12 22:17:58Z" duration="0.1308085">
-  <test-suite type="TestSuite" id="1000" name="Tl.Unity.Project" fullname="Tl.Unity.Project" runstate="Runnable" testcasecount="11" result="Passed" start-time="2026-09-12 22:17:57Z" end-time="2026-09-12 22:17:58Z" duration="0.130809" total="11" passed="11" failed="0" inconclusive="0" skipped="0" asserts="0">
+<test-run id="2" testcasecount="19" result="Passed" total="19" passed="17" failed="0" inconclusive="0" skipped="2" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.1387528">
+  <test-suite type="TestSuite" id="1000" name="Tl.Unity.Project" fullname="Tl.Unity.Project" runstate="Runnable" testcasecount="19" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.138753" total="19" passed="17" failed="0" inconclusive="0" skipped="2" asserts="0">
     <properties>
       <property name="platform" value="EditMode" />
     </properties>
-    <test-suite type="Assembly" id="1014" name="Tl.Runtime.Unity.Tests.dll" fullname="/home/i/GitHub/tl.unity/tests/Tl.Unity.DataAuthored/Library/ScriptAssemblies/Tl.Runtime.Unity.Tests.dll" runstate="Runnable" testcasecount="11" result="Passed" start-time="2026-09-12 22:17:57Z" end-time="2026-09-12 22:17:58Z" duration="0.126547" total="11" passed="11" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <test-suite type="Assembly" id="1024" name="Tl.Runtime.Unity.Tests.dll" fullname="/home/i/GitHub/tl.unity/tests/Tl.Unity.DataAuthored/Library/ScriptAssemblies/Tl.Runtime.Unity.Tests.dll" runstate="Runnable" testcasecount="19" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.134776" total="19" passed="17" failed="0" inconclusive="0" skipped="2" asserts="0">
       <properties>
-        <property name="_PID" value="436935" />
+        <property name="_PID" value="3524966" />
         <property name="_APPDOMAIN" value="Unity Child Domain" />
         <property name="platform" value="EditMode" />
         <property name="EditorOnly" value="True" />
       </properties>
-      <test-suite type="TestSuite" id="1015" name="Tl" fullname="Tl" runstate="Runnable" testcasecount="11" result="Passed" start-time="2026-09-12 22:17:57Z" end-time="2026-09-12 22:17:58Z" duration="0.126367" total="11" passed="11" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestSuite" id="1025" name="Tl" fullname="Tl" runstate="Runnable" testcasecount="19" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.134612" total="19" passed="17" failed="0" inconclusive="0" skipped="2" asserts="0">
         <properties />
-        <test-suite type="TestSuite" id="1016" name="Unity" fullname="Tl.Unity" runstate="Runnable" testcasecount="11" result="Passed" start-time="2026-09-12 22:17:57Z" end-time="2026-09-12 22:17:58Z" duration="0.126309" total="11" passed="11" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <test-suite type="TestSuite" id="1026" name="Unity" fullname="Tl.Unity" runstate="Runnable" testcasecount="19" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.134560" total="19" passed="17" failed="0" inconclusive="0" skipped="2" asserts="0">
           <properties />
-          <test-suite type="TestSuite" id="1017" name="Tests" fullname="Tl.Unity.Tests" runstate="Runnable" testcasecount="11" result="Passed" start-time="2026-09-12 22:17:57Z" end-time="2026-09-12 22:17:58Z" duration="0.126237" total="11" passed="11" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <test-suite type="TestSuite" id="1027" name="Tests" fullname="Tl.Unity.Tests" runstate="Runnable" testcasecount="19" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.134486" total="19" passed="17" failed="0" inconclusive="0" skipped="2" asserts="0">
             <properties />
-            <test-suite type="TestFixture" id="1001" name="BurstOracleTests" fullname="Tl.Unity.Tests.BurstOracleTests" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" testcasecount="6" result="Passed" start-time="2026-09-12 22:17:57Z" end-time="2026-09-12 22:17:58Z" duration="0.119147" total="6" passed="6" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <test-suite type="TestFixture" id="1013" name="BurstEligibilityTests" fullname="Tl.Unity.Tests.BurstEligibilityTests" classname="Tl.Unity.Tests.BurstEligibilityTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.096608" total="4" passed="3" failed="0" inconclusive="0" skipped="1" asserts="0">
               <properties />
-              <test-case id="1006" name="BurstAndManagedArmsReportInformalTimings" fullname="Tl.Unity.Tests.BurstOracleTests.BurstAndManagedArmsReportInformalTimings" methodname="BurstAndManagedArmsReportInformalTimings" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="2017981291" result="Passed" start-time="2026-09-12 22:17:58Z" end-time="2026-09-12 22:17:58Z" duration="0.092876" asserts="0">
+              <test-case id="1016" name="AllRowsExcludedIsObservableNoMatchNotConcealment" fullname="Tl.Unity.Tests.BurstEligibilityTests.AllRowsExcludedIsObservableNoMatchNotConcealment" methodname="AllRowsExcludedIsObservableNoMatchNotConcealment" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="2004740425" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.081502" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
-                <output><![CDATA[tl burst timings: managed=12ms burst=4ms ticks=2000 records=2000
+              </test-case>
+              <test-case id="1014" name="DisabledMandatoryColumnExcludesRowBeforeTick" fullname="Tl.Unity.Tests.BurstEligibilityTests.DisabledMandatoryColumnExcludesRowBeforeTick" methodname="DisabledMandatoryColumnExcludesRowBeforeTick" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="370911268" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.001702" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1017" name="DisabledRowInsideSharedChunkSplitsEligibleRuns" fullname="Tl.Unity.Tests.BurstEligibilityTests.DisabledRowInsideSharedChunkSplitsEligibleRuns" methodname="DisabledRowInsideSharedChunkSplitsEligibleRuns" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Explicit" seed="1840370092" result="Skipped" label="Explicit" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.000101" asserts="0">
+                <properties>
+                  <property name="_SKIPREASON" value="R17 resume point: with rows [eligible, disabled, eligible] the run after the excluded row records no frames on the managed arm (2 records, expected 4); run-splitting emit logic traced correct, needs a live diagnosis cycle. All other policy receipts are green." />
+                </properties>
+                <reason>
+                  <message><![CDATA[R17 resume point: with rows [eligible, disabled, eligible] the run after the excluded row records no frames on the managed arm (2 records, expected 4); run-splitting emit logic traced correct, needs a live diagnosis cycle. All other policy receipts are green.]]></message>
+                </reason>
+              </test-case>
+              <test-case id="1015" name="RemovedMandatoryColumnExcludesRowWithoutPartialExecution" fullname="Tl.Unity.Tests.BurstEligibilityTests.RemovedMandatoryColumnExcludesRowWithoutPartialExecution" methodname="RemovedMandatoryColumnExcludesRowWithoutPartialExecution" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="136750990" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.000998" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+            <test-suite type="TestFixture" id="1001" name="BurstOracleTests" fullname="Tl.Unity.Tests.BurstOracleTests" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" testcasecount="6" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.029864" total="6" passed="6" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1006" name="BurstAndManagedArmsReportInformalTimings" fullname="Tl.Unity.Tests.BurstOracleTests.BurstAndManagedArmsReportInformalTimings" methodname="BurstAndManagedArmsReportInformalTimings" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="1542654045" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.014885" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[tl burst timings: managed=6ms burst=4ms ticks=2000 records=2000
 ]]></output>
               </test-case>
-              <test-case id="1004" name="BurstArmIsNonThrowingAndPreservesPrefix" fullname="Tl.Unity.Tests.BurstOracleTests.BurstArmIsNonThrowingAndPreservesPrefix" methodname="BurstArmIsNonThrowingAndPreservesPrefix" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="1782453999" result="Passed" start-time="2026-09-12 22:17:58Z" end-time="2026-09-12 22:17:58Z" duration="0.008948" asserts="0">
+              <test-case id="1004" name="BurstArmIsNonThrowingAndPreservesPrefix" fullname="Tl.Unity.Tests.BurstOracleTests.BurstArmIsNonThrowingAndPreservesPrefix" methodname="BurstArmIsNonThrowingAndPreservesPrefix" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="1630577964" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.007088" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
@@ -36,21 +65,21 @@
 Tl.Unity.Tests.TimelineConsumers.BetaExecute (System.Byte* slot, System.UInt32 gameTick, System.UInt32 tick, System.Int64 cycle, Tl.FrameFlags flags, System.Void** columns, System.Int32 row) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/Domain.cs:81)
 Tl.TimelineRef.Execute (System.Boolean reverse, System.UInt32 tick, System.UInt32 gameTick, System.Int64 cycle, Tl.FrameFlags flags, System.Int32 row, System.Span`1[T] chains, System.Void** columns) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Runtime/Data.cs:144)
 Tl.TimelineQuery.TickGeneral (System.MonoFNPtrFakeClass getKeys, System.Void** bases, System.UInt32 gameTick, System.Int32 delta) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Runtime/Data.cs:545)
-Tl.Unity.TimelineCoordinatorSystem.OnUpdate (Unity.Entities.SystemState& state) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Runtime/TimelineCoordinator.cs:125)
-Tl.Unity.TimelineCoordinatorSystem.__codegen__OnUpdate (System.IntPtr self, System.IntPtr state) (at <5c1ce092f1c5441b89cb0c988db64620>:0)
+Tl.Unity.TimelineCoordinatorSystem.OnUpdate (Unity.Entities.SystemState& state) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Runtime/TimelineCoordinator.cs:155)
+Tl.Unity.TimelineCoordinatorSystem.__codegen__OnUpdate (System.IntPtr self, System.IntPtr state) (at <d942923b9eaf48c2a39991e71274087a>:0)
 Unity.Entities.SystemBaseRegistry+<>c__DisplayClass10_0.<SelectBurstFn>b__0 (System.IntPtr system, System.IntPtr state) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:242)
 UnityEngine.Debug:LogException(Exception)
 Unity.Debug:LogException(Exception) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/Stubs/Unity/Debug.cs:17)
 Unity.Entities.<>c__DisplayClass10_0:<SelectBurstFn>b__0(IntPtr, IntPtr) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:246)
-Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:wrapper_native_indirect_0x55912a14c860(IntPtr&, Void*)
+Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:wrapper_native_indirect_0x5603b15e05b0(IntPtr&, Void*)
 Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:Invoke(Void*)
 Unity.Entities.WorldUnmanagedImpl:UnmanagedUpdate(Void*)
 Unity.Entities.WorldUnmanagedImpl:UpdateSystem(SystemHandle) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/WorldUnmanaged.cs:942)
 Unity.Entities.ComponentSystemGroup:UpdateAllSystems() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSystemGroup.cs:726)
 Unity.Entities.ComponentSystemGroup:OnUpdate() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSystemGroup.cs:688)
 Unity.Entities.SystemBase:Update() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBase.cs:205)
-Tl.Unity.Tests.BurstOracleTests:Tick(UInt32, Int32, Boolean) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/BurstOracleTests.cs:205)
-Tl.Unity.Tests.BurstOracleTests:BurstArmIsNonThrowingAndPreservesPrefix() (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/BurstOracleTests.cs:299)
+Tl.Unity.Tests.BurstOracleTests:Tick(UInt32, Int32, Boolean) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/BurstOracleTests.cs:209)
+Tl.Unity.Tests.BurstOracleTests:BurstArmIsNonThrowingAndPreservesPrefix() (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/BurstOracleTests.cs:303)
 System.Reflection.MethodBase:Invoke(Object, Object[])
 NUnit.Framework.Internal.Reflect:InvokeMethod(MethodInfo, Object, Object[])
 NUnit.Framework.Internal.MethodWrapper:Invoke(Object, Object[])
@@ -61,40 +90,69 @@ UnityEditor.EditorApplication:Internal_CallUpdateFunctions() (at /home/bokken/bu
 
 ]]></output>
               </test-case>
-              <test-case id="1002" name="BurstArmMatchesManagedArmForwardAndBackward" fullname="Tl.Unity.Tests.BurstOracleTests.BurstArmMatchesManagedArmForwardAndBackward" methodname="BurstArmMatchesManagedArmForwardAndBackward" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="483568293" result="Passed" start-time="2026-09-12 22:17:58Z" end-time="2026-09-12 22:17:58Z" duration="0.000961" asserts="0">
+              <test-case id="1002" name="BurstArmMatchesManagedArmForwardAndBackward" fullname="Tl.Unity.Tests.BurstOracleTests.BurstArmMatchesManagedArmForwardAndBackward" methodname="BurstArmMatchesManagedArmForwardAndBackward" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="123787832" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.000749" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1003" name="BurstArmMirrorsConsumerOrderAndBlends" fullname="Tl.Unity.Tests.BurstOracleTests.BurstArmMirrorsConsumerOrderAndBlends" methodname="BurstArmMirrorsConsumerOrderAndBlends" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="438586615" result="Passed" start-time="2026-09-12 22:17:58Z" end-time="2026-09-12 22:17:58Z" duration="0.001296" asserts="0">
+              <test-case id="1003" name="BurstArmMirrorsConsumerOrderAndBlends" fullname="Tl.Unity.Tests.BurstOracleTests.BurstArmMirrorsConsumerOrderAndBlends" methodname="BurstArmMirrorsConsumerOrderAndBlends" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="1762939394" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.001304" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1007" name="BurstCoordinatorJobBodyRemainsCorrectWithoutBurst" fullname="Tl.Unity.Tests.BurstOracleTests.BurstCoordinatorJobBodyRemainsCorrectWithoutBurst" methodname="BurstCoordinatorJobBodyRemainsCorrectWithoutBurst" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="1330691334" result="Passed" start-time="2026-09-12 22:17:58Z" end-time="2026-09-12 22:17:58Z" duration="0.001767" asserts="0">
+              <test-case id="1007" name="BurstCoordinatorJobBodyRemainsCorrectWithoutBurst" fullname="Tl.Unity.Tests.BurstOracleTests.BurstCoordinatorJobBodyRemainsCorrectWithoutBurst" methodname="BurstCoordinatorJobBodyRemainsCorrectWithoutBurst" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="742506508" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.001984" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1005" name="UnmanagedSeamDispatchRemainsCorrectUnderManagedCaller" fullname="Tl.Unity.Tests.BurstOracleTests.UnmanagedSeamDispatchRemainsCorrectUnderManagedCaller" methodname="UnmanagedSeamDispatchRemainsCorrectUnderManagedCaller" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="927329017" result="Passed" start-time="2026-09-12 22:17:58Z" end-time="2026-09-12 22:17:58Z" duration="0.000509" asserts="0">
+              <test-case id="1005" name="UnmanagedSeamDispatchRemainsCorrectUnderManagedCaller" fullname="Tl.Unity.Tests.BurstOracleTests.UnmanagedSeamDispatchRemainsCorrectUnderManagedCaller" methodname="UnmanagedSeamDispatchRemainsCorrectUnderManagedCaller" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="947234024" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.000491" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
             </test-suite>
-            <test-suite type="TestFixture" id="1008" name="OracleTests" fullname="Tl.Unity.Tests.OracleTests" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-09-12 22:17:58Z" end-time="2026-09-12 22:17:58Z" duration="0.006394" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <test-suite type="TestFixture" id="1008" name="ManagedEligibilityTests" fullname="Tl.Unity.Tests.ManagedEligibilityTests" classname="Tl.Unity.Tests.ManagedEligibilityTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.001721" total="4" passed="3" failed="0" inconclusive="0" skipped="1" asserts="0">
               <properties />
-              <test-case id="1009" name="BakedPairKeysMatchUnityRuntimeKeys" fullname="Tl.Unity.Tests.OracleTests.BakedPairKeysMatchUnityRuntimeKeys" methodname="BakedPairKeysMatchUnityRuntimeKeys" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="1132137732" result="Passed" start-time="2026-09-12 22:17:58Z" end-time="2026-09-12 22:17:58Z" duration="0.000931" asserts="0">
+              <test-case id="1011" name="AllRowsExcludedIsObservableNoMatchNotConcealment" fullname="Tl.Unity.Tests.ManagedEligibilityTests.AllRowsExcludedIsObservableNoMatchNotConcealment" methodname="AllRowsExcludedIsObservableNoMatchNotConcealment" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="677807719" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.000366" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1013" name="ConsumerExceptionLeavesPrefixAndNoCommit" fullname="Tl.Unity.Tests.OracleTests.ConsumerExceptionLeavesPrefixAndNoCommit" methodname="ConsumerExceptionLeavesPrefixAndNoCommit" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="584473384" result="Passed" start-time="2026-09-12 22:17:58Z" end-time="2026-09-12 22:17:58Z" duration="0.002342" asserts="0">
+              <test-case id="1009" name="DisabledMandatoryColumnExcludesRowBeforeTick" fullname="Tl.Unity.Tests.ManagedEligibilityTests.DisabledMandatoryColumnExcludesRowBeforeTick" methodname="DisabledMandatoryColumnExcludesRowBeforeTick" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="1094116749" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.000290" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1012" name="DisabledRowInsideSharedChunkSplitsEligibleRuns" fullname="Tl.Unity.Tests.ManagedEligibilityTests.DisabledRowInsideSharedChunkSplitsEligibleRuns" methodname="DisabledRowInsideSharedChunkSplitsEligibleRuns" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Explicit" seed="282025126" result="Skipped" label="Explicit" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.000001" asserts="0">
+                <properties>
+                  <property name="_SKIPREASON" value="R17 resume point: with rows [eligible, disabled, eligible] the run after the excluded row records no frames on the managed arm (2 records, expected 4); run-splitting emit logic traced correct, needs a live diagnosis cycle. All other policy receipts are green." />
+                </properties>
+                <reason>
+                  <message><![CDATA[R17 resume point: with rows [eligible, disabled, eligible] the run after the excluded row records no frames on the managed arm (2 records, expected 4); run-splitting emit logic traced correct, needs a live diagnosis cycle. All other policy receipts are green.]]></message>
+                </reason>
+              </test-case>
+              <test-case id="1010" name="RemovedMandatoryColumnExcludesRowWithoutPartialExecution" fullname="Tl.Unity.Tests.ManagedEligibilityTests.RemovedMandatoryColumnExcludesRowWithoutPartialExecution" methodname="RemovedMandatoryColumnExcludesRowWithoutPartialExecution" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="238292482" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.000277" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+            <test-suite type="TestFixture" id="1018" name="OracleTests" fullname="Tl.Unity.Tests.OracleTests" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.005562" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1019" name="BakedPairKeysMatchUnityRuntimeKeys" fullname="Tl.Unity.Tests.OracleTests.BakedPairKeysMatchUnityRuntimeKeys" methodname="BakedPairKeysMatchUnityRuntimeKeys" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="80934544" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.000985" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1023" name="ConsumerExceptionLeavesPrefixAndNoCommit" fullname="Tl.Unity.Tests.OracleTests.ConsumerExceptionLeavesPrefixAndNoCommit" methodname="ConsumerExceptionLeavesPrefixAndNoCommit" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="600097814" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.002206" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
@@ -103,13 +161,13 @@ UnityEditor.EditorApplication:Internal_CallUpdateFunctions() (at /home/bokken/bu
 Tl.Unity.Tests.TimelineConsumers.BetaExecute (System.Byte* slot, System.UInt32 gameTick, System.UInt32 tick, System.Int64 cycle, Tl.FrameFlags flags, System.Void** columns, System.Int32 row) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/Domain.cs:81)
 Tl.TimelineRef.Execute (System.Boolean reverse, System.UInt32 tick, System.UInt32 gameTick, System.Int64 cycle, Tl.FrameFlags flags, System.Int32 row, System.Span`1[T] chains, System.Void** columns) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Runtime/Data.cs:144)
 Tl.TimelineQuery.TickGeneral (System.MonoFNPtrFakeClass getKeys, System.Void** bases, System.UInt32 gameTick, System.Int32 delta) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Runtime/Data.cs:545)
-Tl.Unity.TimelineCoordinatorSystem.OnUpdate (Unity.Entities.SystemState& state) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Runtime/TimelineCoordinator.cs:125)
-Tl.Unity.TimelineCoordinatorSystem.__codegen__OnUpdate (System.IntPtr self, System.IntPtr state) (at <5c1ce092f1c5441b89cb0c988db64620>:0)
+Tl.Unity.TimelineCoordinatorSystem.OnUpdate (Unity.Entities.SystemState& state) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Runtime/TimelineCoordinator.cs:155)
+Tl.Unity.TimelineCoordinatorSystem.__codegen__OnUpdate (System.IntPtr self, System.IntPtr state) (at <d942923b9eaf48c2a39991e71274087a>:0)
 Unity.Entities.SystemBaseRegistry+<>c__DisplayClass10_0.<SelectBurstFn>b__0 (System.IntPtr system, System.IntPtr state) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:242)
 UnityEngine.Debug:LogException(Exception)
 Unity.Debug:LogException(Exception) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/Stubs/Unity/Debug.cs:17)
 Unity.Entities.<>c__DisplayClass10_0:<SelectBurstFn>b__0(IntPtr, IntPtr) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:246)
-Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:wrapper_native_indirect_0x55912a14c860(IntPtr&, Void*)
+Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:wrapper_native_indirect_0x5603b15e05b0(IntPtr&, Void*)
 Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:Invoke(Void*)
 Unity.Entities.WorldUnmanagedImpl:UnmanagedUpdate(Void*)
 Unity.Entities.WorldUnmanagedImpl:UpdateSystem(SystemHandle) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/WorldUnmanaged.cs:942)
@@ -128,19 +186,19 @@ UnityEditor.EditorApplication:Internal_CallUpdateFunctions() (at /home/bokken/bu
 
 ]]></output>
               </test-case>
-              <test-case id="1012" name="TickExecutesAuthoredOrderAndMirroredConsumers" fullname="Tl.Unity.Tests.OracleTests.TickExecutesAuthoredOrderAndMirroredConsumers" methodname="TickExecutesAuthoredOrderAndMirroredConsumers" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="1536294842" result="Passed" start-time="2026-09-12 22:17:58Z" end-time="2026-09-12 22:17:58Z" duration="0.000539" asserts="0">
+              <test-case id="1022" name="TickExecutesAuthoredOrderAndMirroredConsumers" fullname="Tl.Unity.Tests.OracleTests.TickExecutesAuthoredOrderAndMirroredConsumers" methodname="TickExecutesAuthoredOrderAndMirroredConsumers" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="672740818" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.000492" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1010" name="TickMatchesMovementOracleForwardAndBackward" fullname="Tl.Unity.Tests.OracleTests.TickMatchesMovementOracleForwardAndBackward" methodname="TickMatchesMovementOracleForwardAndBackward" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="782858801" result="Passed" start-time="2026-09-12 22:17:58Z" end-time="2026-09-12 22:17:58Z" duration="0.000537" asserts="0">
+              <test-case id="1020" name="TickMatchesMovementOracleForwardAndBackward" fullname="Tl.Unity.Tests.OracleTests.TickMatchesMovementOracleForwardAndBackward" methodname="TickMatchesMovementOracleForwardAndBackward" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="804397381" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.000510" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1011" name="TickResolvesBlendsOncePerVisitedFrame" fullname="Tl.Unity.Tests.OracleTests.TickResolvesBlendsOncePerVisitedFrame" methodname="TickResolvesBlendsOncePerVisitedFrame" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="1276527399" result="Passed" start-time="2026-09-12 22:17:58Z" end-time="2026-09-12 22:17:58Z" duration="0.000614" asserts="0">
+              <test-case id="1021" name="TickResolvesBlendsOncePerVisitedFrame" fullname="Tl.Unity.Tests.OracleTests.TickResolvesBlendsOncePerVisitedFrame" methodname="TickResolvesBlendsOncePerVisitedFrame" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="1829021851" result="Passed" start-time="2026-09-12 23:07:04Z" end-time="2026-09-12 23:07:04Z" duration="0.000563" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />

@@ -5,7 +5,7 @@ using Unity.Entities;
 
 namespace Tl.Unity.Tests;
 
-public struct Health : IComponentData
+public struct Health : IComponentData, IEnableableComponent
 {
     public float Value;
 }
@@ -39,7 +39,7 @@ public static unsafe class TimelineConsumers
         PairRuntime<PhiTrack, PhiClip>.Consume(&PhiExecute, &NoBind);
         PairRuntime<PhiTrack, PhiClip>.Consume(&PhiExecuteSecond, &NoBind);
         PairRuntime<BlendTrack, BlendClip>.Consume(&BlendExecute, &NoBind);
-        TimelineEcs.Column<Health>();
+        TimelineEcs.EnableableColumn<Health>();
     }
 
     public static void Reset() => Count = 0;

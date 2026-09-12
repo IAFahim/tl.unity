@@ -19,14 +19,19 @@ public static class TimelineEcs
         public readonly ulong Key;
         public readonly unsafe delegate*<ref SystemState, void> Create;
         public readonly unsafe delegate*<ref SystemState, ArchetypeChunk, void*> Pointer;
+        public readonly unsafe delegate*<ref SystemState, ArchetypeChunk, int, bool> Enabled;
 
-        public unsafe ColumnEntry(ComponentType component, ulong key, delegate*<ref SystemState, void> create, delegate*<ref SystemState, ArchetypeChunk, void*> pointer)
+        public unsafe ColumnEntry(ComponentType component, ulong key, delegate*<ref SystemState, void> create, delegate*<ref SystemState, ArchetypeChunk, void*> pointer, delegate*<ref SystemState, ArchetypeChunk, int, bool> enabled)
         {
             Component = component;
             Key = key;
             Create = create;
             Pointer = pointer;
+            Enabled = enabled;
         }
+
+        public unsafe bool Eligible(ref SystemState state, ArchetypeChunk chunk, int row)
+            => Enabled == null || Enabled(ref state, chunk, row);
     }
 
     internal static readonly List<ColumnEntry> Columns = [];
@@ -39,7 +44,17 @@ public static class TimelineEcs
         foreach (var entry in Columns)
             if (entry.Component.TypeIndex == ComponentType.ReadWrite<T>().TypeIndex)
                 return;
-        Columns.Add(new ColumnEntry(ComponentType.ReadWrite<T>(), TypeKey<T>.Value, &ColumnAccess<T>.Create, &ColumnAccess<T>.PointerOf));
+        Columns.Add(new ColumnEntry(ComponentType.ReadWrite<T>(), TypeKey<T>.Value, &ColumnAccess<T>.Create, &ColumnAccess<T>.PointerOf, null));
+    }
+
+    public static unsafe void EnableableColumn<T>() where T : unmanaged, IComponentData, IEnableableComponent
+    {
+        if (_sealed) throw new InvalidOperationException("Timeline columns are sealed after coordinator creation.");
+        if (Columns.Count == ColumnLimit) throw new InvalidOperationException("At most four timeline columns.");
+        foreach (var entry in Columns)
+            if (entry.Component.TypeIndex == ComponentType.ReadWrite<T>().TypeIndex)
+                return;
+        Columns.Add(new ColumnEntry(ComponentType.ReadWrite<T>(), TypeKey<T>.Value, &EnableableColumnAccess<T>.Create, &ColumnAccess<T>.PointerOf, &EnableableColumnAccess<T>.EnabledOf));
     }
 
     public static ulong ComponentKey<T>() => TypeKey<T>.Value;
@@ -76,6 +91,23 @@ internal static class ColumnAccess<T> where T : unmanaged, IComponentData
     }
 }
 
+internal static class EnableableColumnAccess<T> where T : unmanaged, IComponentData, IEnableableComponent
+{
+    private static ComponentTypeHandle<T> _handle;
+
+    public static void Create(ref SystemState state)
+    {
+        ColumnAccess<T>.Create(ref state);
+        _handle = state.GetComponentTypeHandle<T>();
+    }
+
+    public static unsafe bool EnabledOf(ref SystemState state, ArchetypeChunk chunk, int row)
+    {
+        _handle.Update(ref state);
+        return chunk.IsComponentEnabled(ref _handle, row);
+    }
+}
+
 [DisableAutoCreation]
 [UpdateInGroup(typeof(SimulationSystemGroup))]
 public partial class TimelineSystemGroup : ComponentSystemGroup
@@ -89,18 +121,16 @@ public unsafe partial struct TimelineCoordinatorSystem : ISystem
     private EntityQuery _rows;
     private EntityQuery _clock;
     private ComponentTypeHandle<TimelineComponent> _rowHandle;
+    private EntityTypeHandle _entityHandle;
 
     public void OnCreate(ref SystemState state)
     {
         TimelineEcs.Seal();
-        var columns = TimelineEcs.Columns;
-        var types = new ComponentType[1 + columns.Count];
-        types[0] = ComponentType.ReadWrite<TimelineComponent>();
-        for (var i = 0; i < columns.Count; i++) types[i + 1] = columns[i].Component;
-        _rows = state.GetEntityQuery(types);
+        _rows = state.GetEntityQuery(ComponentType.ReadWrite<TimelineComponent>());
         _clock = state.GetEntityQuery(ComponentType.ReadOnly<TimelineClock>());
         _rowHandle = state.GetComponentTypeHandle<TimelineComponent>();
-        for (var i = 0; i < columns.Count; i++) columns[i].Create(ref state);
+        _entityHandle = state.GetEntityTypeHandle();
+        for (var i = 0; i < TimelineEcs.Columns.Count; i++) TimelineEcs.Columns[i].Create(ref state);
     }
 
     public void OnUpdate(ref SystemState state)
@@ -110,25 +140,26 @@ public unsafe partial struct TimelineCoordinatorSystem : ISystem
             throw new InvalidOperationException("TimelineClock singleton is missing.");
         if (clock.Delta == 0) return;
 
-        _rowHandle.Update(ref state);
         var columns = TimelineEcs.Columns;
         var columnCount = columns.Count;
-        var chunks = _rows.ToArchetypeChunkArray(Allocator.Temp);
+        var runs = new NativeList<TimelineChunkRows>(Allocator.Temp);
+        var bases = new NativeList<IntPtr>(Allocator.Temp);
         try
         {
-            foreach (var chunk in chunks)
+            TimelineEligibility.Resolve(ref state, _rows, ref _rowHandle, ref _entityHandle, runs, bases);
+            for (var e = 0; e < runs.Length; e++)
             {
-                void** bases = stackalloc void*[TimelineEcs.ColumnLimit];
-                for (var i = 0; i < columnCount; i++) bases[i] = columns[i].Pointer(ref state, chunk);
-                var rows = chunk.GetNativeArray(ref _rowHandle);
-                var rowPointer = NativeArrayUnsafeUtility.GetUnsafeBufferPointerWithoutChecks(rows);
-                new TimelineQuery(new Span<CoreRow>(rowPointer, rows.Length))
-                    .TickCore(&TimelineEcs.FillKeys, bases, clock.GameTick, clock.Delta);
+                var run = runs[e];
+                void** runBases = stackalloc void*[TimelineEcs.ColumnLimit];
+                for (var i = 0; i < columnCount; i++) runBases[i] = (void*)bases[e * TimelineEcs.ColumnLimit + i];
+                new TimelineQuery(new Span<CoreRow>(run.Rows, run.Count))
+                    .TickCore(&TimelineEcs.FillKeys, runBases, clock.GameTick, clock.Delta);
             }
         }
         finally
         {
-            chunks.Dispose();
+            runs.Dispose();
+            bases.Dispose();
         }
     }
 }
