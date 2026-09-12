@@ -2,19 +2,25 @@
   "duration": 1,
   "tracks": [
     {
-      "trackType": "Tl.Unity.Tests.AlphaTrack, Tl.Runtime.Unity.Tests",
-      "track": { "Code": 3 },
-      "clips": [ { "start": 0, "end": 1, "payload": { "Value": 5 } } ]
+      "namespace": "Fixtures",
+      "type": "AlphaTrack",
+      "assembly": "Tl.Runtime.Unity.Tests",
+      "data": { "Code": 3 },
+      "clips": [ { "namespace": "Fixtures", "type": "AlphaClip", "assembly": "Tl.Runtime.Unity.Tests", "data": { "Value": 5 }, "start": 0, "end": 1 } ]
     },
     {
-      "trackType": "Tl.Unity.Tests.BetaTrack, Tl.Runtime.Unity.Tests",
-      "track": { "Code": 1 },
-      "clips": [ { "start": 0, "end": 1, "payload": { "Value": 9 } } ]
+      "namespace": "Fixtures",
+      "type": "BetaTrack",
+      "assembly": "Tl.Runtime.Unity.Tests",
+      "data": { "Code": 1 },
+      "clips": [ { "namespace": "Fixtures", "type": "BetaClip", "assembly": "Tl.Runtime.Unity.Tests", "data": { "Value": 9 }, "start": 0, "end": 1 } ]
     },
     {
-      "trackType": "Tl.Unity.Tests.AlphaTrack, Tl.Runtime.Unity.Tests",
-      "track": { "Code": 4 },
-      "clips": [ { "start": 0, "end": 1, "payload": { "Value": 6 } } ]
+      "namespace": "Fixtures",
+      "type": "AlphaTrack",
+      "assembly": "Tl.Runtime.Unity.Tests",
+      "data": { "Code": 4 },
+      "clips": [ { "namespace": "Fixtures", "type": "AlphaClip", "assembly": "Tl.Runtime.Unity.Tests", "data": { "Value": 6 }, "start": 0, "end": 1 } ]
     }
   ]
 }

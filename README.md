@@ -24,6 +24,11 @@ License: to be decided by the repository owner.
 - `Data.cs` also carries an explicit-table `Timeline.TickUnmanaged` overload so
   the Bursted coordinator passes `UnmanagedTable.Block` as job data instead of
   referencing the static block from compiled code.
+- The oracle fixture domain (`AlphaTrack` and siblings in
+  `com.iafahim.tl/Tests/Fixtures.cs`) lives in the bare namespace `Fixtures`
+  because tl schema v1 authoring rejects dotted namespaces; baked pair keys
+  hash the assembly-qualified names of that namespace on both the bake and
+  runtime sides.
 - `tools/TlBakeShim/TlBakeShim.csproj` and
   `tests/Tl.UnityAnalyzerReceipt/Tl.UnityAnalyzerReceipt.csproj` reference the
   snapshot copies under `external/tl/` (Tl.Core, Tl.Compiler, Tl.Gen.CSharp at

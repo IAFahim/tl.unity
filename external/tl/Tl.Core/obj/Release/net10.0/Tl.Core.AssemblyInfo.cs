@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyDescriptionAttribute(("Heterogeneous timelines compiled into direct C# kernels with borrowed typed conte" +
     "xts."))]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0-alpha.3+548b2ec7a13705dd7f00ff92df931752790d495d")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0-alpha.3+84a9098747bcdaa4e0a42a8cfa3a43f219522afe")]
 [assembly: System.Reflection.AssemblyProductAttribute("Tl.Core")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Tl.Core")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

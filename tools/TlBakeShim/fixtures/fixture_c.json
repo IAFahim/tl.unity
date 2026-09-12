@@ -2,19 +2,25 @@
   "duration": 1,
   "tracks": [
     {
-      "trackType": "Tl.Unity.Tests.PhiTrack, Tl.Runtime.Unity.Tests",
-      "track": { "Code": 1 },
-      "clips": [ { "start": 0, "end": 1, "payload": { "Value": 10 } } ]
+      "namespace": "Fixtures",
+      "type": "PhiTrack",
+      "assembly": "Tl.Runtime.Unity.Tests",
+      "data": { "Code": 1 },
+      "clips": [ { "namespace": "Fixtures", "type": "PhiClip", "assembly": "Tl.Runtime.Unity.Tests", "data": { "Value": 10 }, "start": 0, "end": 1 } ]
     },
     {
-      "trackType": "Tl.Unity.Tests.AlphaTrack, Tl.Runtime.Unity.Tests",
-      "track": { "Code": 4 },
-      "clips": [ { "start": 0, "end": 1, "payload": { "Value": 7 } } ]
+      "namespace": "Fixtures",
+      "type": "AlphaTrack",
+      "assembly": "Tl.Runtime.Unity.Tests",
+      "data": { "Code": 4 },
+      "clips": [ { "namespace": "Fixtures", "type": "AlphaClip", "assembly": "Tl.Runtime.Unity.Tests", "data": { "Value": 7 }, "start": 0, "end": 1 } ]
     },
     {
-      "trackType": "Tl.Unity.Tests.PhiTrack, Tl.Runtime.Unity.Tests",
-      "track": { "Code": 2 },
-      "clips": [ { "start": 0, "end": 1, "payload": { "Value": 20 } } ]
+      "namespace": "Fixtures",
+      "type": "PhiTrack",
+      "assembly": "Tl.Runtime.Unity.Tests",
+      "data": { "Code": 2 },
+      "clips": [ { "namespace": "Fixtures", "type": "PhiClip", "assembly": "Tl.Runtime.Unity.Tests", "data": { "Value": 20 }, "start": 0, "end": 1 } ]
     }
   ]
 }

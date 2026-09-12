@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Fixtures;
 using NUnit.Framework;
 using Tl;
 using Tl.Unity;
@@ -86,7 +87,7 @@ public sealed class OracleTests
     public void BakedPairKeysMatchUnityRuntimeKeys()
     {
         Assert.AreEqual(
-            "Tl.Unity.Tests.AlphaTrack, Tl.Runtime.Unity.Tests, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null",
+            "Fixtures.AlphaTrack, Tl.Runtime.Unity.Tests, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null",
             typeof(AlphaTrack).AssemblyQualifiedName);
         var bytes = Fixture("fixture_a").bytes;
         Assert.AreEqual(0x31424C54u, BitConverter.ToUInt32(bytes, 0));

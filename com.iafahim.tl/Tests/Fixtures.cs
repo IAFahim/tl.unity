@@ -1,6 +1,6 @@
 using Tl;
 
-namespace Tl.Unity.Tests;
+namespace Fixtures;
 
 public struct AlphaClip
 {

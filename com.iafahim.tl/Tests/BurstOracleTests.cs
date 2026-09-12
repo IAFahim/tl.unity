@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Fixtures;
 using NUnit.Framework;
 using Tl;
 using Tl.Unity;
