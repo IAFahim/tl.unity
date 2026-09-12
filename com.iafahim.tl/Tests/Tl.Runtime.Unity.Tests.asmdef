@@ -5,10 +5,15 @@
     "Tl.Runtime.Unity",
     "Unity.Burst",
     "Unity.Collections",
-    "Unity.Entities"
+    "Unity.Entities",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
   ],
-  "optionalUnityReferences": [
-    "TestAssemblies"
+  "includePlatforms": [
+    "Editor"
+  ],
+  "precompiledReferences": [
+    "nunit.framework.dll"
   ],
   "allowUnsafeCode": true
 }

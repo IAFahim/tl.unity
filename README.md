@@ -17,8 +17,11 @@ License: to be decided by the repository owner.
 - `com.iafahim.tl/Runtime/Data.cs`, `Hooks.cs`, and `Playback.cs` were symlinks
   into `tl/src/Tl.Core` at the extraction commit; they are snapshot copies whose
   source of truth is `tl/src/Tl.Core` at commit `3e67333`.
-- `tools/TlBakeShim/TlBakeShim.csproj` still references
-  `../../../src/Tl.Core/Tl.Core.csproj`, and
-  `tests/Tl.UnityAnalyzerReceipt/Tl.UnityAnalyzerReceipt.csproj` still references
-  `src/Tl.Core` and `src/Tl.Gen.CSharp` in the source repository. Those projects
-  do not build standalone here until the references are re-pointed.
+- The R13 unmanaged seam in `Data.cs` uses `delegate* unmanaged[Cdecl]`
+  explicit calling conventions because Unity's Mono compile target rejects the
+  default unmanaged convention (CS8889). `tl/src/Tl.Core` at `bd3c3ca` still
+  carries the convention-less form; keep both compilable when porting.
+- `tools/TlBakeShim/TlBakeShim.csproj` and
+  `tests/Tl.UnityAnalyzerReceipt/Tl.UnityAnalyzerReceipt.csproj` reference the
+  snapshot copies under `external/tl/` (Tl.Core, Tl.Compiler, Tl.Gen.CSharp at
+  tl commit `bd3c3ca`).

@@ -304,7 +304,7 @@ public static unsafe class PairRuntime<TTrack, TClip> where TTrack : unmanaged, 
 
 	public static void Consume(delegate*<byte*, uint, uint, long, FrameFlags, void**, int, void> execute, delegate*<ulong*, int, byte*, void> bind) => PairTable.Install(Key, execute, bind);
 
-	public static void ConsumeUnmanaged(delegate* unmanaged<byte*, uint, uint, long, FrameFlags, void**, int, void> execute, delegate* unmanaged<ulong*, int, byte*, void> bind) => UnmanagedTable.Install(Key, execute, bind);
+	public static void ConsumeUnmanaged(delegate* unmanaged[Cdecl]<byte*, uint, uint, long, FrameFlags, void**, int, void> execute, delegate* unmanaged[Cdecl]<ulong*, int, byte*, void> bind) => UnmanagedTable.Install(Key, execute, bind);
 }
 
 public static class Timeline
@@ -654,7 +654,7 @@ public unsafe struct UnmanagedTickState
 
 static unsafe class UnmanagedTable
 {
-	internal struct Consumer { public int Next, Pair, Offset; public delegate* unmanaged<byte*, uint, uint, long, FrameFlags, void**, int, void> Execute; public delegate* unmanaged<ulong*, int, byte*, void> Bind; }
+	internal struct Consumer { public int Next, Pair, Offset; public delegate* unmanaged[Cdecl]<byte*, uint, uint, long, FrameFlags, void**, int, void> Execute; public delegate* unmanaged[Cdecl]<ulong*, int, byte*, void> Bind; }
 	struct Slot { public ulong Key; public int Head; }
 
 	const int SlotCount = 1024, PairCapacity = 512, ConsumerCapacity = 1024, MaxPointers = 256, HeaderBytes = 16;
@@ -666,7 +666,7 @@ static unsafe class UnmanagedTable
 
 	internal static byte* Block => _block;
 
-	internal static void Install(ulong key, delegate* unmanaged<byte*, uint, uint, long, FrameFlags, void**, int, void> e, delegate* unmanaged<ulong*, int, byte*, void> b)
+	internal static void Install(ulong key, delegate* unmanaged[Cdecl]<byte*, uint, uint, long, FrameFlags, void**, int, void> e, delegate* unmanaged[Cdecl]<ulong*, int, byte*, void> b)
 	{
 		while (Interlocked.CompareExchange(ref _gate, 1, 0) != 0) Thread.Yield();
 		try
