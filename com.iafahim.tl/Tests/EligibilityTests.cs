@@ -138,7 +138,6 @@ public abstract class EligibilityPolicyTests
     }
 
     [Test]
-    [Explicit("R17 resume point: with rows [eligible, disabled, eligible] the run after the excluded row records no frames on the managed arm (2 records, expected 4); run-splitting emit logic traced correct, needs a live diagnosis cycle. All other policy receipts are green.")]
     public void DisabledRowInsideSharedChunkSplitsEligibleRuns()
     {
         var asset = Load("fixture_a");

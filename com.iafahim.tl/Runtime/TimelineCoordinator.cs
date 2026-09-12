@@ -17,14 +17,16 @@ public static class TimelineEcs
     {
         public readonly ComponentType Component;
         public readonly ulong Key;
+        public readonly int Size;
         public readonly unsafe delegate*<ref SystemState, void> Create;
         public readonly unsafe delegate*<ref SystemState, ArchetypeChunk, void*> Pointer;
         public readonly unsafe delegate*<ref SystemState, ArchetypeChunk, int, bool> Enabled;
 
-        public unsafe ColumnEntry(ComponentType component, ulong key, delegate*<ref SystemState, void> create, delegate*<ref SystemState, ArchetypeChunk, void*> pointer, delegate*<ref SystemState, ArchetypeChunk, int, bool> enabled)
+        public unsafe ColumnEntry(ComponentType component, ulong key, int size, delegate*<ref SystemState, void> create, delegate*<ref SystemState, ArchetypeChunk, void*> pointer, delegate*<ref SystemState, ArchetypeChunk, int, bool> enabled)
         {
             Component = component;
             Key = key;
+            Size = size;
             Create = create;
             Pointer = pointer;
             Enabled = enabled;
@@ -44,7 +46,7 @@ public static class TimelineEcs
         foreach (var entry in Columns)
             if (entry.Component.TypeIndex == ComponentType.ReadWrite<T>().TypeIndex)
                 return;
-        Columns.Add(new ColumnEntry(ComponentType.ReadWrite<T>(), TypeKey<T>.Value, &ColumnAccess<T>.Create, &ColumnAccess<T>.PointerOf, null));
+        Columns.Add(new ColumnEntry(ComponentType.ReadWrite<T>(), TypeKey<T>.Value, sizeof(T), &ColumnAccess<T>.Create, &ColumnAccess<T>.PointerOf, null));
     }
 
     public static unsafe void EnableableColumn<T>() where T : unmanaged, IComponentData, IEnableableComponent
@@ -54,7 +56,7 @@ public static class TimelineEcs
         foreach (var entry in Columns)
             if (entry.Component.TypeIndex == ComponentType.ReadWrite<T>().TypeIndex)
                 return;
-        Columns.Add(new ColumnEntry(ComponentType.ReadWrite<T>(), TypeKey<T>.Value, &EnableableColumnAccess<T>.Create, &ColumnAccess<T>.PointerOf, &EnableableColumnAccess<T>.EnabledOf));
+        Columns.Add(new ColumnEntry(ComponentType.ReadWrite<T>(), TypeKey<T>.Value, sizeof(T), &EnableableColumnAccess<T>.Create, &ColumnAccess<T>.PointerOf, &EnableableColumnAccess<T>.EnabledOf));
     }
 
     public static ulong ComponentKey<T>() => TypeKey<T>.Value;
@@ -151,7 +153,7 @@ public unsafe partial struct TimelineCoordinatorSystem : ISystem
             {
                 var run = runs[e];
                 void** runBases = stackalloc void*[TimelineEcs.ColumnLimit];
-                for (var i = 0; i < columnCount; i++) runBases[i] = (void*)bases[e * TimelineEcs.ColumnLimit + i];
+                for (var i = 0; i < columnCount; i++) runBases[i] = (void*)bases[e * columnCount + i];
                 new TimelineQuery(new Span<CoreRow>(run.Rows, run.Count))
                     .TickCore(&TimelineEcs.FillKeys, runBases, clock.GameTick, clock.Delta);
             }

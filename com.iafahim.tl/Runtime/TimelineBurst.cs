@@ -47,7 +47,7 @@ internal unsafe struct TimelineUnmanagedTickJob : IJob
         for (var chunk = 0; chunk < ChunkCount; chunk++)
         {
             var rows = Chunks[chunk];
-            Tl.Timeline.TickUnmanaged(state, table, (CoreRow*)rows.Rows, rows.Count, bases + chunk * TimelineEcs.ColumnLimit, keys, KeyCount, GameTick, Delta);
+            Tl.Timeline.TickUnmanaged(state, table, (CoreRow*)rows.Rows, rows.Count, bases + chunk * KeyCount, keys, KeyCount, GameTick, Delta);
         }
     }
 }

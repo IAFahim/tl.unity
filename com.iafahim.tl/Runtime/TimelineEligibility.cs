@@ -118,7 +118,7 @@ public static class TimelineEligibility
                     if (eligible && start < 0) start = r;
                     else if (!eligible && start >= 0)
                     {
-                        Emit(runs, bases, rowPointer + start, r - start, ref state, chunk, columns, columnCount);
+                        Emit(runs, bases, rowPointer + start, start, r - start, ref state, chunk, columns, columnCount);
                         start = -1;
                     }
                 }
@@ -134,6 +134,7 @@ public static class TimelineEligibility
         NativeList<TimelineChunkRows> runs,
         NativeList<IntPtr> bases,
         CoreRow* rows,
+        int startRow,
         int count,
         ref SystemState state,
         ArchetypeChunk chunk,
@@ -141,6 +142,7 @@ public static class TimelineEligibility
         int columnCount)
     {
         runs.Add(new TimelineChunkRows { Rows = rows, Count = count });
-        for (var i = 0; i < columnCount; i++) bases.Add((IntPtr)columns[i].Pointer(ref state, chunk));
+        for (var i = 0; i < columnCount; i++)
+            bases.Add((IntPtr)((byte*)columns[i].Pointer(ref state, chunk) + (nint)startRow * columns[i].Size));
     }
 }
