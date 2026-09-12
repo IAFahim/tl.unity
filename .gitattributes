@@ -1,0 +1,4 @@
+com.iafahim.tl/**/*.meta -whitespace
+tests/Tl.Unity.Project/**/*.asset -whitespace
+tests/Tl.Unity.Project/**/*.meta -whitespace
+tests/Tl.Unity.Project/**/*.unity -whitespace
