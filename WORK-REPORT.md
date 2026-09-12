@@ -1,222 +1,181 @@
-# WORK-REPORT — R16: self-containment + Bursted timeline coordinator
+# WORK-REPORT — R17: eligibility/diagnostic policy + remaining gate-5 receipts
 
-**Status: COMPLETE** (Phases 0, 1, and 2)
+**Status: PARTIAL** (Phases 0 and 1 complete and green; Phase 2 harness written but
+not green within the 90-minute box — committed as a clearly labeled WIP checkpoint
+with an exact resume point)
 
-Repository: `/home/i/GitHub/tl.unity` (standalone local repo; deliverable = local commits on `main`).
-Session: 2026-09-12, continued a prior agent's partially complete atom. No pushes, no GitHub writes, no LICENSE changes.
+Repository: `/home/i/GitHub/tl.unity` (standalone local repo; deliverable = local
+commits on `main`). Session: 2026-09-13, 04:15–05:50 +06:00. No pushes, no network
+calls, nothing outside this repo was written (the tl-56 worktree was only read via
+`git show`).
 
 ## Final commit chain
 
 | Commit | Subject | Result |
 |---|---|---|
-| `9c97fc2` | Snapshot tl compiler sources and repoint standalone projects | Phase 0 (prior agent) |
-| `a1573d3` | Compile unmanaged seam under Mono and register EditMode test assembly | Phase 0 (prior agent) |
-| `84a9098` | Add Bursted timeline coordinator with managed parity oracle | Phase 1 (this session) |
-| `77dbd55` | Re-bake fixtures with schema v1 tlbake | Phase 2 (this session) |
+| `946492b` | Refresh external tl snapshot to 323c85a | Phase 0, green (11/11, exit 0) |
+| `ead1b5b` | Adopt host-side eligibility and diagnostic policy | Phase 1, green (17 passed / 0 failed / 2 skipped Explicit, exit 0) |
+| *(final)* | Record R17 work report + Phase 2 WIP checkpoint | report + WIP harness |
 
-Working tree after `77dbd55`: clean except `.tl-loop/heartbeat` (loop protocol file, never committed stale).
+## Phase 0 — snapshot refresh (complete)
 
-## Phase 0 — self-containment (reconstructed; executed by the prior agent before it died)
+- Per-file diff of `external/tl` against tl@`323c85a`: only
+  `Tl.Core/Kernels.cs` differs. It gains the phase-2 seam: `Chain` takes an
+  `int* scratch` borrowed per execute instead of `stackalloc` per occurrence
+  and is now `[MethodImpl(AggressiveInlining)]`; the reverse path streams
+  through the scratch, the forward path walks the chain directly. All other
+  Tl.Core, Tl.Compiler, and Tl.Gen.CSharp sources are byte-identical between
+  `bd3c3ca` and `323c85a` (verified per file; the only other tl diffs are
+  generated kernels, docs, and tooling outside the snapshot).
+- `com.iafahim.tl/Runtime/Data.cs` vs `323c85a:src/Tl.Core/Data.cs` remains
+  exactly the four documented R16 divergence hunks (9 changed lines:
+  `307c307` Cdecl, `317a318-320` explicit-table `TickUnmanaged` overload,
+  `657c660` Cdecl, `669c672` Cdecl). No touched region shifted; nothing
+  re-applied.
+- Receipts: `dotnet build tools/TlBakeShim/TlBakeShim.csproj -c Release` →
+  exit 0, 0 warnings; Unity 6000.7.0a5 EditMode suite → **11/11 passed,
+  0 failed, UNITY_EXIT=0** (run at 2026-09-12 21:0xZ).
 
-Evidence reconstructed from the two committed checkpoints; the prior agent left no report.
+## Phase 1 — eligibility/diagnostic policy (complete)
 
-1. `9c97fc2` added `external/tl/` snapshot copies of tl@`bd3c3ca` sources
-   (`Tl.Core/{Compiled,Data,Hooks,Kernels,Playback}.cs` + csproj,
-   `Tl.Compiler/*.cs` + csproj, plus their committed `bin/`+`obj/` build
-   outputs and `external/tl/Directory.Build.props`) and re-pointed the two
-   standalone projects away from tl's worktree:
-   - `tools/TlBakeShim/TlBakeShim.csproj` →
-     `ProjectReference ../../external/tl/Tl.Core/Tl.Core.csproj`
-   - `tests/Tl.UnityAnalyzerReceipt/Tl.UnityAnalyzerReceipt.csproj` →
-     `ProjectReference ..\..\external\tl\Tl.Core\Tl.Core.csproj`
-2. `a1573d3` made the materialized `com.iafahim.tl/Runtime/Data.cs` compile
-   under Unity's Mono target (three `[Cdecl]` hunks, listed below), registered
-   the EditMode test assembly via
-   `com.iafahim.tl/Tests/Tl.Runtime.Unity.Tests.asmdef`, updated README
-   snapshot notes, and recorded a green 5/5 EditMode run
-   (test-results.editmode.xml, 2026-09-12 20:17:49Z).
+Policy text lives in `README.md` ("Eligibility and diagnostic policy (Unity
+adapter)"); the integrator lifts it into the tl contract doc. Summary:
 
-Unity version used (matches inherited receipts): **6000.7.0a5 (a15235a53881)**
-at `/home/i/Unity/Hub/Editor/6000.7.0a5/Editor/Unity`. No version mismatch; no BLOCKED condition.
+1. Candidate rows are all `TimelineComponent` entities. The coordinator row
+   query is now `TimelineComponent`-only, so an entity that loses a mandatory
+   column stays visible to the coordinator instead of silently vanishing from
+   an all-in-one query (this is the concealment fix).
+2. Presence is chunk-uniform: a chunk whose archetype lacks a registered
+   mandatory column excludes every row in it with reason
+   `MissingMandatoryColumn`, before any effect.
+3. Enabled masks: per-row enabled bits of enableable mandatory columns are
+   read on the main thread before scheduling (`Host-owned mask read`);
+   present-but-disabled rows are excluded with `DisabledMandatoryColumn`.
+4. Exclusion is a total no-op: no consumer executes, no movement commits
+   (column values, `Position`, `Cycle` untouched); other eligible rows still
+   execute.
+5. Eligibility resolves host-side before job scheduling: excluded rows never
+   enter the job's row list — the host emits one entry per maximal contiguous
+   eligible run and the Burst job `Execute` body is unchanged code over that
+   list (job diff vs R16 = two field declarations only). No eligibility logic
+   exists inside the job.
+6. No concealment: every exclusion is recorded into the preallocated
+   `TimelineEligibility` sink (entity, chunk index, row index, reason); a
+   no-match iteration is always explainable (consumer record sink = what
+   executed, exclusion sink = why the rest did not). Capacity exhaustion
+   throws rather than truncating.
+7. Allocation: resolution runs on the main thread with unmanaged temporaries
+   plus the preallocated sinks; the warm path adds no managed allocation.
+   Exclusions are cleared and re-evaluated every coordinator update.
 
-## Phase 1 — Bursted coordinator (this session)
+Production files: new `com.iafahim.tl/Runtime/TimelineEligibility.cs` (+meta:
+sink, `Resolve`, public `RecordExclusions(ref SystemState, EntityQuery)` for
+query-driven arms); `TimelineCoordinator.cs` (row-only queries,
+`TimelineEcs.EnableableColumn<T>` seam with per-column `Enabled` fn-ptr via
+`EnableableColumnAccess<T>`, both coordinators iterate host-resolved runs);
+`TimelineBurst.cs` (host resolves runs, copies them into exactly-sized
+`Allocator.TempJob` arrays; job `Execute` byte-identical); `Domain.cs`
+(`Health : IComponentData, IEnableableComponent`).
 
-### Inherited state (probed, not reverted)
+Phase 1 receipts (Unity 6000.7.0a5, EditMode, committed in
+`tests/Tl.Unity.DataAuthored/test-results.editmode.xml`): `result="Passed"
+total=19 passed=17 failed=0 skipped=2`, `CS_ERRORS=0`, exit 0. Green on BOTH
+the managed and Burst coordinator arms: disabled-mask exclusion (disabled
+row's column and position untouched, enabled row executes, exactly one
+recorded exclusion with entity+reason), removed-column exclusion without
+partial execution or commit, all-rows-excluded observable no-match plus
+per-tick re-evaluation after re-enable. All six BurstOracle parity tests and
+five OracleTests remain green.
 
-- Uncommitted: `Data.cs` +3 lines (explicit-table `TickUnmanaged` overload),
-  modified `test-results.editmode.xml` showing **10 tests: 9 passed, 1 failed**
-  (run at 20:37:46Z; failure = `BurstAndManagedArmsReportInformalTimings`).
-- Untracked: `com.iafahim.tl/Runtime/TimelineBurst.cs` (+meta),
-  `com.iafahim.tl/Tests/BurstOracleTests.cs` (+meta).
+Two test-infrastructure defects were found and fixed on the way (recorded in
+the commit body):
 
-### What was wrong and what I changed
+- `BurstArms.Install()` is now idempotent: `UnmanagedTable.Install` PREPENDS
+  a chain node, so a second test fixture calling Install appended a second
+  Alpha consumer and doubled every record (8 vs 4) and every health
+  contribution (330 vs 165). Durable note for future fixtures: install
+  consumer chains once per process.
+- Eligibility fixtures must touch `TimelineConsumers` before coordinator
+  creation: its static constructor registers the columns and must run before
+  `TimelineEcs.Seal()`; a fixture that never touched the type poisoned the
+  initializer domain-wide (all 19 tests failing with
+  "Timeline columns are sealed after coordinator creation").
 
-1. **Timings test failure.** The managed arm records into the fixed-capacity
-   `TimelineConsumers` sink (Capacity 256). Over the 2000-tick loop it
-   exhausted capacity: the R14 runtime caught the consumer exception, logged
-   it, and stopped each tick, so the parity check compared 256 (managed) vs
-   2000 (burst). Fix: both arms now accumulate per-tick record counts and
-   reset their sinks each tick; capacity can never be hit and totals compare
-   2000 vs 2000. File: `com.iafahim.tl/Tests/BurstOracleTests.cs`.
-2. **No-Burst fallback receipt.** Added
-   `BurstCoordinatorJobBodyRemainsCorrectWithoutBurst` to
-   `BurstOracleTests.cs`: materializes chunk rows/health column pointers
-   through public `EntityManager` handles, materializes keys once via
-   `TimelineEcs.ComponentKey<Health>()`, and drives the exact per-chunk
-   dispatch the Burst job body performs (`Tl.Timeline.TickUnmanaged` over
-   caller-owned `UnmanagedTickState`, raw `void**` bases, `ulong*` keys)
-   fully managed — forward 100→102 then mirrored −3 back to 0 — asserting
-   full record parity with the managed coordinator arm, position 0, and the
-   330f health column total.
-   - First attempt used `InternalsVisibleTo("Tl.Runtime.Unity.Tests")` +
-     direct `TimelineUnmanagedTickJob.Execute()`. **Rejected:** IVT exposes
-     `Profile.cs`'s internal `System.Runtime.CompilerServices.MethodImplAttribute`/`MethodImplOptions`
-     polyfills to the test assembly, where Unity's generated
-     `AssemblyMonoScriptTypes.generated.cs` then resolves them against both
-     `Tl.Runtime.Unity` and `mscorlib` → CS0433 compile failure. IVT was
-     removed entirely (`AssemblyInfo.cs` deleted) and `TimelineBurst.cs` was
-     restored to the inherited job-inline form. This IVT incompatibility is a
-     durable property of this package (mscorlib-shadowing polyfills in
-     `Profile.cs`); future agents should not re-add IVT from `Tl.Runtime.Unity`.
-   - Second attempt fixed two API mismatches:
-     `EntityManager.GetComponentTypeHandle<T>(bool isReadOnly)` requires the
-     explicit argument, and the extension `GetUnsafeBufferPointerWithoutChecks`
-     does not resolve in this Burst/Collections version — used
-     `NativeArrayUnsafeUtility.GetUnsafePtr` / `.GetUnsafeBufferPointerWithoutChecks`
-     instead.
+Skipped (Explicit, the one open Phase 1 item and first resume point):
+`DisabledRowInsideSharedChunkSplitsEligibleRuns` — with rows [eligible,
+disabled, eligible] the run after the excluded row records no frames
+(managed arm: 2 records, expected 4; burst arm showed 3 during the
+double-install noise, needs one clean live cycle). The emit logic traces
+correct by hand; the failure is real and needs one diagnosis run.
 
-### Production files (Phase 1)
+## Phase 2 — IJobEntity parity + delayed jobs (NOT green: harness shelved)
 
-- `com.iafahim.tl/Runtime/TimelineBurst.cs` (+`.meta`, inherited content,
-  committed as-is): `TimelineBurst.CreateGroup(World)` registering
-  `[DisableAutoCreation] [UpdateInGroup(typeof(TimelineSystemGroup))]`
-  `TimelineUnmanagedCoordinatorSystem` (ISystem); keys filled once per domain
-  (`TimelineEcs.FillKeys`, sealed on first update), per-chunk column base
-  pointers materialized on the main thread into `NativeArray<IntPtr>` with
-  `ColumnLimit` stride, per-chunk row pointers into `TimelineChunkRows`, and a
-  single `[BurstCompile] IJob` (`TimelineUnmanagedTickJob`) running all chunks
-  through the R13 unmanaged seam (`Tl.Timeline.TickUnmanaged`).
-- `com.iafahim.tl/Runtime/Data.cs` — the only runtime divergence from the tl
-  snapshot. tl 3e67333 and bd3c3ca `src/Tl.Core/Data.cs` are **byte-identical**
-  (verified via `git archive` + `diff -q`), so all hunks below are against
-  tl@bd3c3ca; committed in `a1573d3` (+) and `84a9098` (+):
-  1. `@@ -304,7` `PairRuntime.ConsumeUnmanaged`: both `delegate* unmanaged`
-     parameters → `delegate* unmanaged[Cdecl]<...>` (Mono CS8889).
-  2. `@@ -315,6` **added** public overload:
-     `public static unsafe void TickUnmanaged(UnmanagedTickState* state, byte* table, TimelineComponent* rows, int rowCount, void** bases, ulong* keys, int keyCount, uint gameTick, int delta)`
-     → `UnmanagedTick.TickCoreUnmanaged(state, table, ...)` — lets the Burst
-     job receive `UnmanagedTable.Block` as job data instead of referencing the
-     static block from compiled code.
-  3. `@@ -654,7` `UnmanagedTable.Consumer`: `Execute`/`Bind` fields →
-     `unmanaged[Cdecl]`.
-  4. `@@ -666,7` `UnmanagedTable.Install`: both parameters → `unmanaged[Cdecl]`.
-- `README.md`: snapshot notes document hunks 2 and (Phase 2) the fixture
-  namespace move.
+The full harness is written and committed as a WIP checkpoint at
+`tests/Tl.Unity.DataAuthored/WIP/` (sibling of `Assets/`, not compiled by
+Unity): `IJobEntityParityTests.cs` + `README.txt` resume instructions.
 
-### Phase 1 receipts
+Harness design (receipts it will produce once compiling):
 
-`tests/Tl.Unity.DataAuthored/test-results.editmode.xml` (run started
-2026-09-12 21:00:56Z): **11/11 passed, `UNITY_EXIT=0`**.
-`BurstOracleTests` 6/6: forward/backward parity vs the managed arm,
-authored-order + mirrored consumers on fixture_b/c, non-throwing prefix
-contract on fixture_d (burst arm records all three steps, managed arm stops at
-the throwing consumer), unmanaged seam under a managed caller, timings parity,
-no-Burst fallback. `OracleTests` 5/5 unchanged.
+1. `TimelineIJobEntityTickJob : IJobEntity` — Unity derives the query from
+   `Execute(ref TimelineComponent row, ref Health health)`; the body drives
+   the same unmanaged seam (`Tl.Timeline.TickUnmanaged` per row, Burst
+   consumers), so records must match the direct/Burst arms over the
+   forward+mirrored-backward window 100,101,102,103(-3) on fixture_a.
+2. `TimelineIJobEntityCoordinatorSystem : ISystem` — completes the previous
+   dependency, records host-side exclusions via the public
+   `TimelineEligibility.RecordExclusions` walk, consumes an optional
+   `Gate` JobHandle, schedules the consumer with the combined selection
+   dependency, and publishes the result through `state.Dependency` (the
+   contract's supply/collect/combine idiom).
+3. `TimelineIJobEntityDerivedQueryAppliesEligibilityPolicy` — proves the
+   derived query's default enableable filtering enforces the same policy
+   (disabled row untouched, exclusion recorded host-side), plus the
+   removed-column case.
+4. `DelayedSelectionDependencyBlocksCommitUntilCompletion` — a gate job holds
+   an in-flight `ReadOnly` read of Health and spins on a volatile flag;
+   while the selection dependency is incomplete the record sink must be
+   empty (no early overwrite or commit); after release the commit lands
+   exactly once (2 records, 165f, position 3); the gate's captured value
+   stays the pre-tick 0f; the observe stage chained on the published
+   dependency reads the committed 165f.
 
-Informal timing (correctness-first, not a benchmark):
-`tl burst timings: managed=12ms burst=4ms ticks=2000 records=2000` (Burst
-2.0.0 IL post-processor active in the run).
+Known compile issues already fixed in the WIP copy (evidence: two Unity runs):
 
-Committed as `84a9098`.
+- `ComponentSystem` does not exist in Entities `6.7.0` (f1c61260f7c9) —
+  `TimelineObserveSystem` derives from `SystemBase`.
+- CS0426 `InternalCompilerQueryAndHandleData` missing: the IJobEntity source
+  generator skipped a job declared `unsafe partial struct`; fix applied =
+  `unsafe` moved to the `Execute` method. If generation still skips it, next
+  suspects (in order): `[BurstCompile]` on an IJobEntity inside this test
+  asmdef, or the `UnityRow` using-alias in the Execute signature (spell
+  `Tl.Unity.TimelineComponent` directly).
 
-## Phase 2 — schema v1 re-bake (this session)
+Gate item "compiler assemblies stay out of players" (brief item 3): the
+existing check already covers it — `tests/Tl.Unity.Project/Assets/Tests/
+Editor/EditorTests.PlayerGraphContainsRuntimeWithoutCompilerOrRoslyn` forbids
+`Tl.Compiler`, `Tl.Gen`, `Tl.Gen.CSharp`, `Tl.Gen.Unity`, and
+`Microsoft.CodeAnalysis*` in the player assembly graph; `com.iafahim.tl`
+contains no compiler references (grep-verified) and `external/tl` lives
+outside every Unity project. Nothing to extend; state noted here.
 
-- Built the baker **outside tl worktrees**:
-  `git -C /home/i/GitHub/tl archive bd3c3ca | tar -x -C /tmp/tl-archive-unity`,
-  then `dotnet build /tmp/tl-archive-unity/tools/Tl.Bake/Tl.Bake.csproj -c
-  Release -o /tmp/tlbake-bin` (exit 0). Rebuilt the shim:
-  `dotnet build tools/TlBakeShim/TlBakeShim.csproj -c Release` (exit 0), which
-  refreshes `external/tl/Tl.Core` bin/obj (committed in `77dbd55`; the only
-  content change there is `restoreAuditProperties.enableAudit false→true`
-  plus rebuilt equal-size dll/pdb artifacts).
-- Schema v1 (from `TimelineBaker.cs` + `docs/data-authored-api.md` at
-  bd3c3ca): root `name?/duration/loop/tracks[]`; track and clip each carry
-  `name?/namespace/type/assembly?/data?` (type identity never inherited);
-  clips add `start`/`end`; grouping derived at bake; `trackType`, `track`,
-  `payload`, `clipType` are rejected diagnostics; **`namespace` must be a bare
-  single-segment name (dotted = diagnostic)**.
-- Conversion attempt 1 failed: `"namespace": "Tl.Unity.Tests"` rejected
-  (`dotted name rejected`). Because baked pair keys are
-  `Keying.Of(typeof(T).AssemblyQualifiedName)` (`TypeKey<T>`), the fixture
-  domain must be v1-authorable **and** identical on bake and runtime sides, so
-  the domain moved wholesale to the bare namespace `Fixtures`:
-  - `com.iafahim.tl/Tests/Fixtures.cs`: `namespace Tl.Unity.Tests;` →
-    `namespace Fixtures;`
-  - `com.iafahim.tl/Tests/{Domain,OracleTests,BurstOracleTests}.cs`: added
-    `using Fixtures;`
-  - `OracleTests.BakedPairKeysMatchUnityRuntimeKeys`: the hard-coded
-    provenance string updated to
-    `Fixtures.AlphaTrack, Tl.Runtime.Unity.Tests, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null`
-  - five `tools/TlBakeShim/fixtures/*.json`: rewritten to v1 with
-    `"namespace": "Fixtures"`, `"assembly": "Tl.Runtime.Unity.Tests"` on every
-    element, `payload`→`data`, `trackType` split into `namespace`+`type`.
-- Bake (all exit 0), then metadata-strip so committed bytes stay pure core
-  TLB1 like the previous bake:
-  `/tmp/tlbake-bin/Tl.Bake tools/TlBakeShim/fixtures/<f>.json /tmp/tlbake-out/<f>.tlb --assembly tools/TlBakeShim/bin/Release/net10.0/Tl.Runtime.Unity.Tests.dll`
-  then `/tmp/tlbake-bin/Tl.Bake --strip /tmp/tlbake-out/<f>.tlb /tmp/tlbake-out/<f>.bytes`,
-  copied into `tests/Tl.Unity.DataAuthored/Assets/Resources/TlFixtures/`.
-- Byte receipts: sizes unchanged (a=192, b=240, b2=240, c=224, d=224). Every
-  byte is identical to the previous bake **except the 8-byte `NativePair.Key`**
-  per pair (e.g. fixture_a offsets 48–55), which re-hashes
-  `Fixtures.*` assembly-qualified names consistently on both sides.
-- Suite after re-bake: first run **10/11** (exit 2) — only the provenance
-  string assert above failed (it still named `Tl.Unity.Tests.AlphaTrack`);
-  after the one-string fix: **11/11 passed, `UNITY_EXIT=0`**. Committed as
-  `77dbd55`.
-
-## Command log (this session, exact results)
+## Command log (this session, exact outcomes)
 
 | Command | Result |
 |---|---|
-| `git status` / `git diff` / `git log` (probe) | inherited state as described above |
-| Unity EditMode run (inherited XML) | 10 total, 9 passed, 1 failed (timings capacity) |
-| Unity run 2 (`-logFile /tmp/tl-unity-editmode-run2.log`) | exit 1 — CS0433 MethodImplAttribute/MethodImplOptions in `Tl.Runtime.Unity` vs mscorlib (IVT attempt) |
-| Unity run 3 (`/tmp/tl-unity-editmode-run3.log`) | exit 1 — CS7036 `GetComponentTypeHandle`, CS1061 `GetUnsafeBufferPointerWithoutChecks` |
-| Unity run 4 (`/tmp/tl-unity-editmode-run4.log`) | **exit 0 — 11/11 passed** (Phase 1 receipts) |
-| `dotnet build tools/TlBakeShim/TlBakeShim.csproj -c Release` | 0 errors |
-| `dotnet build /tmp/tl-archive-unity/tools/Tl.Bake/Tl.Bake.csproj -c Release -o /tmp/tlbake-bin` | 0 errors |
-| 5× `Tl.Bake <json> <tlb> --assembly <shim dll>` (attempt 1) | exit 1 — `dotted name rejected: 'namespace' ... 'Tl.Unity.Tests'` |
-| 5× bake + strip (attempt 2, `Fixtures` namespace) | all exit 0; sizes 192/240/240/224/224; only pair-key bytes differ |
-| Unity run 5 (`/tmp/tl-unity-editmode-run5.log`) | exit 2 — 10/11, `BakedPairKeysMatchUnityRuntimeKeys` provenance string |
-| Unity run 6 (`/tmp/tl-unity-editmode-run6.log`) | **exit 0 — 11/11 passed** (Phase 2 receipts) |
-| `git commit` ×2 | `84a9098`, `77dbd55` |
+| Unity EditMode runs (log files `/tmp/tl-unity-editmode-r17-p0..p1i.log`) | p0: 11/11 exit 0; p1a/p1b/p1c: CS0315/CS1615/CS0234 compile errors (TestRunner executed stale assemblies while exiting 0 — logs grepped for `error CS` from then on); p1e: 2 CS errors in the Phase 2 harness only; p1f/p1g: 0 CS, runtime failure (seal order, then Temp-view job registration); p1h: 11/19 (double consumer chain + split-run failure); **p1i: Passed 17 / failed 0 / skipped 2, exit 0** |
+| `dotnet build tools/TlBakeShim/TlBakeShim.csproj -c Release` | exit 0, 0 warnings |
+| `git commit` | `946492b`, `ead1b5b`, final report commit |
 
-All Unity runs used:
-`/home/i/Unity/Hub/Editor/6000.7.0a5/Editor/Unity -batchmode -runTests
--projectPath /home/i/GitHub/tl.unity/tests/Tl.Unity.DataAuthored
--testResults /home/i/GitHub/tl.unity/tests/Tl.Unity.DataAuthored/test-results.editmode.xml
--testPlatform EditMode -logFile <log>`.
+## Exact resume point for the next atom
 
-## Deviations and notes for the integrator
-
-1. **Fixture domain namespace is now `Fixtures`** (was `Tl.Unity.Tests`). This
-   is forced by schema v1's bare-namespace law and keeps
-   `TypeKey`/`PairRuntime` keys identical on bake and runtime sides. All four
-   touched test files and the five JSONs are in `77dbd55`; no other file in
-   the repo references the old names (grep-verified).
-2. **Do not add `InternalsVisibleTo` from `Tl.Runtime.Unity`** to any
-   assembly compiled by Unity: `Profile.cs`'s internal
-   `MethodImplAttribute`/`MethodImplOptions`/`Interlocked`/`NativeMemory`
-   polyfills will produce CS0433 against mscorlib in consumer assemblies'
-   Unity-generated MonoScript files.
-3. Phase 0 receipts were reconstructed from commits (prior agent left no
-   report); everything else in this report was executed and observed in this
-   session. Unity 6000.7.0a5 satisfied the version requirement; Phase 0 never
-   blocked.
-4. The Burst timings line is an informal in-process measurement inside the
-   EditMode run (12ms vs 4ms over 2000 ping-pong ticks) and is not a
-   BenchmarkDotNet receipt; per repo rules it must not be quoted as a
-   performance result.
-5. Nothing was pushed; the four commits above are the complete deliverable.
-   `/tmp/tl-archive-unity` and `/tmp/tlbake-bin` are disposable scratch; the
-   bake is reproducible from the recorded commands.
+1. Re-unblock `DisabledRowInsideSharedChunkSplitsEligibleRuns` (remove its
+   `[Explicit]` in `com.iafahim.tl/Tests/EligibilityTests.cs`): diagnose why
+   the second eligible run records no frames on the managed arm with rows
+   [eligible, disabled, eligible] in one chunk; single-run and
+   disabled-last configurations are already green.
+2. Phase 2: follow `tests/Tl.Unity.DataAuthored/WIP/README.txt` — copy the
+   harness into `com.iafahim.tl/Tests/`, red/green the IJobEntity generator
+   issue, then commit the Phase 2 atom with the three receipt tests.
+3. Durable constraints honored this session: no `InternalsVisibleTo` from
+   `Tl.Runtime.Unity`; the four `Data.cs` divergence hunks remain the only
+   divergence from the tl snapshot; nothing was pushed.
