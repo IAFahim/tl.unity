@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="5" result="Passed" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-09-12 12:54:18Z" end-time="2026-09-12 12:54:18Z" duration="0.0549539">
+  <test-suite type="TestSuite" id="1013" name="Tl.Unity.Project" fullname="Tl.Unity.Project" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-09-12 12:54:18Z" end-time="2026-09-12 12:54:18Z" duration="0.054954" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <properties>
+      <property name="platform" value="PlayMode" />
+    </properties>
+    <test-suite type="Assembly" id="1007" name="Tl.Runtime.Unity.Tests.dll" fullname="/home/i/GitHub/tl-56-feat-data-authored-api/tests/Tl.Unity.DataAuthored/Library/ScriptAssemblies/Tl.Runtime.Unity.Tests.dll" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-09-12 12:54:18Z" end-time="2026-09-12 12:54:18Z" duration="0.050278" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="3852695" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="PlayMode" />
+        <property name="EditorOnly" value="False" />
+      </properties>
+      <test-suite type="TestSuite" id="1008" name="Tl" fullname="Tl" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-09-12 12:54:18Z" end-time="2026-09-12 12:54:18Z" duration="0.049991" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1009" name="Unity" fullname="Tl.Unity" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-09-12 12:54:18Z" end-time="2026-09-12 12:54:18Z" duration="0.049859" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1010" name="Tests" fullname="Tl.Unity.Tests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-09-12 12:54:18Z" end-time="2026-09-12 12:54:18Z" duration="0.049740" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1001" name="OracleTests" fullname="Tl.Unity.Tests.OracleTests" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-09-12 12:54:18Z" end-time="2026-09-12 12:54:18Z" duration="0.049086" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1002" name="BakedPairKeysMatchUnityRuntimeKeys" fullname="Tl.Unity.Tests.OracleTests.BakedPairKeysMatchUnityRuntimeKeys" methodname="BakedPairKeysMatchUnityRuntimeKeys" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="1359502997" result="Passed" start-time="2026-09-12 12:54:18Z" end-time="2026-09-12 12:54:18Z" duration="0.022703" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1006" name="ConsumerExceptionLeavesPrefixAndNoCommit" fullname="Tl.Unity.Tests.OracleTests.ConsumerExceptionLeavesPrefixAndNoCommit" methodname="ConsumerExceptionLeavesPrefixAndNoCommit" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="1234710935" result="Passed" start-time="2026-09-12 12:54:18Z" end-time="2026-09-12 12:54:18Z" duration="0.014598" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[InvalidOperationException: Beta consumer failed.
+Tl.Unity.Tests.TimelineConsumers.BetaExecute (System.Byte* slot, System.UInt32 gameTick, System.UInt32 tick, System.Int64 cycle, Tl.FrameFlags flags, System.Void** columns, System.Int32 row) (at /home/i/GitHub/tl-56-feat-data-authored-api/unity/com.iafahim.tl/Tests/Domain.cs:80)
+Tl.TimelineRef.Execute (System.Boolean reverse, System.UInt32 tick, System.UInt32 gameTick, System.Int64 cycle, Tl.FrameFlags flags, System.Int32 row, System.Span`1[T] chains, System.Void** columns) (at /home/i/GitHub/tl-56-feat-data-authored-api/unity/com.iafahim.tl/Runtime/Data.cs:144)
+Tl.TimelineQuery.TickGeneral (System.MonoFNPtrFakeClass getKeys, System.Void** bases, System.UInt32 gameTick, System.Int32 delta) (at /home/i/GitHub/tl-56-feat-data-authored-api/unity/com.iafahim.tl/Runtime/Data.cs:517)
+Tl.Unity.TimelineCoordinatorSystem.OnUpdate (Unity.Entities.SystemState& state) (at /home/i/GitHub/tl-56-feat-data-authored-api/unity/com.iafahim.tl/Runtime/TimelineCoordinator.cs:125)
+Tl.Unity.TimelineCoordinatorSystem.__codegen__OnUpdate (System.IntPtr self, System.IntPtr state) (at <cda08ea8f75c48ec9bd4d6e9c962cf12>:0)
+Unity.Entities.SystemBaseRegistry+<>c__DisplayClass10_0.<SelectBurstFn>b__0 (System.IntPtr system, System.IntPtr state) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:242)
+UnityEngine.Debug:LogException(Exception)
+Unity.Debug:LogException(Exception) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/Stubs/Unity/Debug.cs:17)
+Unity.Entities.<>c__DisplayClass10_0:<SelectBurstFn>b__0(IntPtr, IntPtr) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:246)
+Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:wrapper_native_indirect_0x560482f47710(IntPtr&, Void*)
+Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:Invoke(Void*)
+Unity.Entities.WorldUnmanagedImpl:UnmanagedUpdate(Void*)
+Unity.Entities.WorldUnmanagedImpl:UpdateSystem(SystemHandle) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/WorldUnmanaged.cs:942)
+Unity.Entities.ComponentSystemGroup:UpdateAllSystems() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSystemGroup.cs:726)
+Unity.Entities.ComponentSystemGroup:OnUpdate() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSystemGroup.cs:688)
+Unity.Entities.SystemBase:Update() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBase.cs:205)
+Tl.Unity.Tests.OracleTests:Tick(UInt32, Int32) (at /home/i/GitHub/tl-56-feat-data-authored-api/unity/com.iafahim.tl/Tests/OracleTests.cs:71)
+Tl.Unity.Tests.OracleTests:ConsumerExceptionLeavesPrefixAndNoCommit() (at /home/i/GitHub/tl-56-feat-data-authored-api/unity/com.iafahim.tl/Tests/OracleTests.cs:194)
+System.Reflection.MethodBase:Invoke(Object, Object[])
+NUnit.Framework.Internal.Reflect:InvokeMethod(MethodInfo, Object, Object[])
+NUnit.Framework.Internal.MethodWrapper:Invoke(Object, Object[])
+NUnit.Framework.Internal.Commands.TestMethodCommand:RunNonAsyncTestMethod(ITestExecutionContext)
+NUnit.Framework.Internal.Commands.TestMethodCommand:RunTestMethod(ITestExecutionContext)
+NUnit.Framework.Internal.Commands.TestMethodCommand:Execute(ITestExecutionContext)
+UnityEngine.SetupCoroutine:InvokeMoveNext(IEnumerator, IntPtr) (at /home/bokken/build/output/unity/unity/Runtime/Export/Scripting/Coroutines.cs:17)
+
+]]></output>
+              </test-case>
+              <test-case id="1005" name="TickExecutesAuthoredOrderAndMirroredConsumers" fullname="Tl.Unity.Tests.OracleTests.TickExecutesAuthoredOrderAndMirroredConsumers" methodname="TickExecutesAuthoredOrderAndMirroredConsumers" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="420776140" result="Passed" start-time="2026-09-12 12:54:18Z" end-time="2026-09-12 12:54:18Z" duration="0.001080" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1003" name="TickMatchesMovementOracleForwardAndBackward" fullname="Tl.Unity.Tests.OracleTests.TickMatchesMovementOracleForwardAndBackward" methodname="TickMatchesMovementOracleForwardAndBackward" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="949023267" result="Passed" start-time="2026-09-12 12:54:18Z" end-time="2026-09-12 12:54:18Z" duration="0.000819" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1004" name="TickResolvesBlendsOncePerVisitedFrame" fullname="Tl.Unity.Tests.OracleTests.TickResolvesBlendsOncePerVisitedFrame" methodname="TickResolvesBlendsOncePerVisitedFrame" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="792314396" result="Passed" start-time="2026-09-12 12:54:18Z" end-time="2026-09-12 12:54:18Z" duration="0.001013" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[Saving results to: /home/i/.config/unity3d/DefaultCompany/Tl.Unity.Project/TestResults.xml
+]]></output>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>

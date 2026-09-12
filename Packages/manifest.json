@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "com.iafahim.tl": "file:../../../unity/com.iafahim.tl",
+    "com.unity.entities": "6.7.0",
+    "com.unity.test-framework": "1.8.0"
+  },
+  "testables": [
+    "com.iafahim.tl"
+  ]
+}
