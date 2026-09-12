@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Tl.Runtime.Unity.Tests</AssemblyName>
+    <AssemblyVersion>0.0.0.0</AssemblyVersion>
+    <RootNamespace>Tl.Unity.Tests</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../src/Tl.Core/Tl.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../../com.iafahim.tl/Tests/Fixtures.cs" Link="Fixtures.cs" />
+  </ItemGroup>
+
+</Project>

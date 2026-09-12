@@ -1,0 +1,13 @@
+{
+  "duration": 4,
+  "tracks": [
+    {
+      "trackType": "Tl.Unity.Tests.BlendTrack, Tl.Runtime.Unity.Tests",
+      "track": { "Scale": 1.0 },
+      "clips": [
+        { "start": 0, "end": 3, "payload": { "Amount": 0.0 } },
+        { "start": 2, "end": 4, "payload": { "Amount": 8.0 } }
+      ]
+    }
+  ]
+}

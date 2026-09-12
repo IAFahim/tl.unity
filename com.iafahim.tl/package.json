@@ -1,0 +1,14 @@
+{
+  "name": "com.iafahim.tl",
+  "version": "1.0.0-preview.1",
+  "displayName": "Tl Runtime",
+  "description": "Data-authored timeline runtime for Unity ECS and Burst.",
+  "unity": "6000.0",
+  "author": {
+    "name": "IAFahim",
+    "url": "https://github.com/IAFahim"
+  },
+  "dependencies": {
+    "com.unity.entities": "6.7.0"
+  }
+}
