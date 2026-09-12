@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 
 namespace Tl;
@@ -35,15 +36,17 @@ public static unsafe class TimelineKernels
 		return default;
 	}
 
-	public static unsafe void Chain(int head, bool reverse, byte* slot, uint gameTick, uint tick, long cycle, FrameFlags flags, void** columns, int row)
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static unsafe void Chain(int head, bool reverse, int* scratch, byte* slot, uint gameTick, uint tick, long cycle, FrameFlags flags, void** columns, int row)
 	{
-		int* chain = stackalloc int[64];
-		var n = 0;
-		for (var e = head; e >= 0; e = PairTable.ConsumerAt[e].Next) chain[n++] = e;
-		for (var i = 0; i < n; i++)
+		var consumers = PairTable.ConsumerAt;
+		if (reverse && head >= 0 && consumers[head].Next >= 0)
 		{
-			var entry = chain[reverse ? n - 1 - i : i];
-			PairTable.ConsumerAt[entry].Execute(slot, gameTick, tick, cycle, flags, columns + PairTable.ConsumerAt[entry].Offset, row);
+			var n = 0;
+			for (var e = head; e >= 0; e = consumers[e].Next) scratch[n++] = e;
+			while (n-- > 0) { var e = scratch[n]; consumers[e].Execute(slot, gameTick, tick, cycle, flags, columns + consumers[e].Offset, row); }
 		}
+		else for (var entry = head; entry >= 0; entry = consumers[entry].Next)
+			consumers[entry].Execute(slot, gameTick, tick, cycle, flags, columns + consumers[entry].Offset, row);
 	}
 }
