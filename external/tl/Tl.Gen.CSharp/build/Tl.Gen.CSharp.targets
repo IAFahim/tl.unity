@@ -1,0 +1,86 @@
+<Project>
+  <PropertyGroup>
+    <_TlGenProject>$(MSBuildThisFileDirectory)..\Tl.Gen.CSharp.csproj</_TlGenProject>
+    <_TlGenPkgTool>$(MSBuildThisFileDirectory)../tools/net10.0/any/Tl.Gen.CSharp.dll</_TlGenPkgTool>
+    <_TlGenDotNet Condition="'$(DotNetHostPath)' != ''">$(DotNetHostPath)</_TlGenDotNet>
+    <_TlGenDotNet Condition="'$(_TlGenDotNet)' == ''">dotnet</_TlGenDotNet>
+    <TlGenAssembly Condition="'$(TlGenAssembly)' == '' and Exists('$(_TlGenPkgTool)')">$(_TlGenPkgTool)</TlGenAssembly>
+    <TlGenBackend Condition="'$(TlGenBackend)' == ''">csharp</TlGenBackend>
+  </PropertyGroup>
+
+  <Target Name="_TlGenResolveProjectAnalyzerDependency"
+          BeforeTargets="CoreCompile"
+          DependsOnTargets="ResolveProjectReferences"
+          Condition="Exists('$(_TlGenProject)')">
+    <ItemGroup>
+      <_TlGenProjectAnalyzer Include="@(Analyzer)"
+                             Condition="'%(Analyzer.Filename)' == 'Tl.Gen.CSharp'" />
+      <Analyzer Include="@(_TlGenProjectAnalyzer->'%(RootDir)%(Directory)Tl.Compiler.dll')" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_TlGenBuildExportTool"
+          BeforeTargets="TlGenExport"
+          Condition="Exists('$(_TlGenProject)') And '$(TlGenAssembly)' == ''">
+    <MSBuild Projects="$(_TlGenProject)"
+             Targets="Build"
+             BuildInParallel="false"
+             Properties="Configuration=$(Configuration);TargetFramework=net10.0" />
+    <MSBuild Projects="$(_TlGenProject)"
+             Targets="GetTargetPath"
+             BuildInParallel="false"
+             Properties="Configuration=$(Configuration);TargetFramework=net10.0">
+      <Output TaskParameter="TargetOutputs" ItemName="_TlGenBuiltTool" />
+    </MSBuild>
+    <PropertyGroup>
+      <TlGenAssembly>@(_TlGenBuiltTool)</TlGenAssembly>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="TlGenExport"
+          DependsOnTargets="ResolveProjectReferences;ResolveAssemblyReferences;ResolveReferences;GenerateGlobalUsings"
+          Condition="'@(Compile)' != '' Or ('$(TlGenOutput)' != '' And Exists('$(TlGenOutput)\TlGenCompile.manifest.json')) Or ('$(TlGenOutput)' == '' And Exists('$(IntermediateOutputPath)TlGenCompile\TlGenCompile.manifest.json'))">
+    <PropertyGroup>
+      <TlGenOutput Condition="'$(TlGenOutput)' == ''">$(IntermediateOutputPath)TlGenCompile\</TlGenOutput>
+      <_TlGenCompileOut>$([MSBuild]::EnsureTrailingSlash('$(TlGenOutput)'))</_TlGenCompileOut>
+      <_TlGenCompileSourceList>$(_TlGenCompileOut)TlGenCompile.sources</_TlGenCompileSourceList>
+      <_TlGenCompileInputList>$(_TlGenCompileOut)TlGenCompile.inputs</_TlGenCompileInputList>
+      <_TlGenCompileReferenceList>$(_TlGenCompileOut)TlGenCompile.references</_TlGenCompileReferenceList>
+      <_TlGenCompileOptionList>$(_TlGenCompileOut)TlGenCompile.options</_TlGenCompileOptionList>
+    </PropertyGroup>
+    <ItemGroup>
+      <_TlGenCompileInputs Include="@(Compile)"
+                           Exclude="$(_TlGenCompileOut)**\*" />
+      <_TlGenCompileReferences Include="@(ReferencePathWithRefAssemblies)" />
+      <_TlGenCompileReferences Include="@(ReferencePath)"
+                               Condition="'@(_TlGenCompileReferences)' == ''" />
+      <_TlGenCompileOptions Include="language-version=$(LangVersion)" />
+      <_TlGenCompileOptions Include="nullable=$(Nullable)" />
+      <_TlGenCompileOptions Include="allow-unsafe=$(AllowUnsafeBlocks)" />
+      <_TlGenCompileOptions Include="check-overflow=$(CheckForOverflowUnderflow)" />
+    </ItemGroup>
+    <MakeDir Directories="$(_TlGenCompileOut)" />
+    <WriteLinesToFile File="$(_TlGenCompileInputList)"
+                      Lines="@(_TlGenCompileInputs->'%(FullPath)')"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <WriteLinesToFile File="$(_TlGenCompileReferenceList)"
+                      Lines="@(_TlGenCompileReferences->'%(FullPath)&#x9;%(Aliases)&#x9;%(EmbedInteropTypes)')"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <WriteLinesToFile File="$(_TlGenCompileOptionList)"
+                      Lines="@(_TlGenCompileOptions)"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <Exec Command="&quot;$(_TlGenDotNet)&quot; &quot;$(TlGenAssembly)&quot; --compile --backend &quot;$(TlGenBackend)&quot; --output &quot;$(_TlGenCompileOut)&quot; --define &quot;$(DefineConstants)&quot; --source-list &quot;$(_TlGenCompileInputList)&quot; --reference-list &quot;$(_TlGenCompileReferenceList)&quot; --option-list &quot;$(_TlGenCompileOptionList)&quot;" />
+    <ItemGroup>
+      <FileWrites Include="$(_TlGenCompileOut)**\*.g.cs" />
+      <FileWrites Include="$(_TlGenCompileSourceList)" />
+      <FileWrites Include="$(_TlGenCompileInputList)" />
+      <FileWrites Include="$(_TlGenCompileReferenceList)" />
+      <FileWrites Include="$(_TlGenCompileOptionList)" />
+      <FileWrites Include="$(_TlGenCompileOut)TlGenCompile.manifest.json" />
+      <FileWrites Include="$(_TlGenCompileOut)TlGenCompile.report.txt" />
+    </ItemGroup>
+  </Target>
+</Project>

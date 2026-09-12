@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="PublishAot;PublishTrimmed;SelfContained;RuntimeIdentifier">
+
+  <PropertyGroup>
+    <OutputType Condition="'$(TargetFramework)' == 'net10.0'">Exe</OutputType>
+    <OutputType Condition="'$(TargetFramework)' == 'netstandard2.0'">Library</OutputType>
+    <ShouldBeValidatedAsExecutableReference>false</ShouldBeValidatedAsExecutableReference>
+    <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
+    <PublishAot>false</PublishAot>
+    <PublishTrimmed>false</PublishTrimmed>
+    <SelfContained>false</SelfContained>
+    <RuntimeIdentifier></RuntimeIdentifier>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <Version>$(TlVersion)</Version>
+    <PackageId>Tl.Gen.CSharp</PackageId>
+    <Authors>IAFahim</Authors>
+    <Description>Build-time compiler for heterogeneous C# timeline declarations.</Description>
+    <PackageProjectUrl>https://github.com/IAFahim/tl</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/IAFahim/tl</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>v1.0.0-alpha.3: heterogeneous timeline jobs, generated catalog queries, ordered staged execution, delayed state commit, and bundled compiler dependencies.</PackageReleaseNotes>
+    <EnforceExtendedAnalyzerRules Condition="'$(TargetFramework)' == 'netstandard2.0'">true</EnforceExtendedAnalyzerRules>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.1" PrivateAssets="all" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <ProjectReference Include="..\Tl.Compiler\Tl.Compiler.csproj"
+                      GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot;PublishTrimmed" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <Compile Remove="CompileGenerationCache.cs;GeneratorCli.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="build\Tl.Gen.CSharp.targets" Pack="true" PackagePath="build\Tl.Gen.CSharp.targets;buildTransitive\Tl.Gen.CSharp.targets" />
+    <None Include="$(TlGenAnalyzerPackOutput)Tl.Gen.CSharp.dll" Pack="true" PackagePath="analyzers\dotnet\cs" Visible="false" />
+    <None Include="$(TlGenAnalyzerPackOutput)Tl.Compiler.dll" Pack="true" PackagePath="analyzers\dotnet\cs" Visible="false" />
+    <None Include="$(TlGenPackOutput)Tl.Gen.CSharp.dll" Pack="true" PackagePath="tools\net10.0\any" Visible="false" />
+    <None Include="$(TlGenPackOutput)Tl.Compiler.dll" Pack="true" PackagePath="tools\net10.0\any" Visible="false" />
+    <None Include="$(TlGenPackOutput)Tl.Gen.CSharp.pdb" Pack="true" PackagePath="tools\net10.0\any" Visible="false" />
+    <None Include="$(TlGenPackOutput)Tl.Gen.CSharp.deps.json" Pack="true" PackagePath="tools\net10.0\any" Visible="false" />
+    <None Include="$(TlGenPackOutput)Tl.Gen.CSharp.runtimeconfig.json" Pack="true" PackagePath="tools\net10.0\any" Visible="false" />
+    <None Include="$(TlGenPackOutput)Microsoft.CodeAnalysis.dll" Pack="true" PackagePath="tools\net10.0\any" Visible="false" />
+    <None Include="$(TlGenPackOutput)Microsoft.CodeAnalysis.CSharp.dll" Pack="true" PackagePath="tools\net10.0\any" Visible="false" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TlGenAnalyzerPackOutput Condition="'$(TlGenAnalyzerPackOutput)' == ''">$(MSBuildProjectDirectory)\bin\$(Configuration)\netstandard2.0\</TlGenAnalyzerPackOutput>
+    <TlGenPackOutput Condition="'$(TlGenPackOutput)' == ''">$(MSBuildProjectDirectory)\bin\$(Configuration)\net10.0\</TlGenPackOutput>
+  </PropertyGroup>
+
+</Project>

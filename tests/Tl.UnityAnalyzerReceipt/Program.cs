@@ -54,10 +54,11 @@ GeneratorDriver driver = CSharpGeneratorDriver.Create([generator], parseOptions:
 driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out _, out var diagnostics);
 var generated = driver.GetRunResult().Results.Single().GeneratedSources;
 if (diagnostics.Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
-    || generated.Length != 2)
+    || generated.Length != 3
+    || generated.Any(static source => source.HintName is not ("TlJob0.g.cs" or "TlCatalog0.g.cs" or "TlConsumerBinding.g.cs")))
 {
     Console.Error.WriteLine(string.Join(Environment.NewLine, diagnostics));
-    Console.Error.WriteLine($"generated sources: {generated.Length}");
+    Console.Error.WriteLine($"generated sources: {generated.Length}: {string.Join(", ", generated.Select(static source => source.HintName))}");
     return 2;
 }
 Console.WriteLine($"Unity 6000 Roslyn {typeof(CSharpCompilation).Assembly.GetName().Version}: analyzer loaded; job and catalog sources generated");

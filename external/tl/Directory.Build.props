@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <TlVersion>1.0.0-alpha.3</TlVersion>
+    <LangVersion>14</LangVersion>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <DebugType>portable</DebugType>
+    <EmbedAllSources Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</EmbedAllSources>
+    <PathMap Condition="'$(ContinuousIntegrationBuild)' == 'true'">$(MSBuildThisFileDirectory)=/_/</PathMap>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+  </PropertyGroup>
+</Project>

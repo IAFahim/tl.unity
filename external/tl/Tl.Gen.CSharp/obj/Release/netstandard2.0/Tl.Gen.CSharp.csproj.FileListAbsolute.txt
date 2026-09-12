@@ -1,0 +1,13 @@
+/home/i/GitHub/tl.unity/external/tl/Tl.Gen.CSharp/bin/Release/netstandard2.0/Tl.Gen.CSharp.deps.json
+/home/i/GitHub/tl.unity/external/tl/Tl.Gen.CSharp/bin/Release/netstandard2.0/Tl.Gen.CSharp.dll
+/home/i/GitHub/tl.unity/external/tl/Tl.Gen.CSharp/bin/Release/netstandard2.0/Tl.Gen.CSharp.pdb
+/home/i/GitHub/tl.unity/external/tl/Tl.Gen.CSharp/bin/Release/netstandard2.0/Tl.Compiler.dll
+/home/i/GitHub/tl.unity/external/tl/Tl.Gen.CSharp/bin/Release/netstandard2.0/Tl.Compiler.pdb
+/home/i/GitHub/tl.unity/external/tl/Tl.Gen.CSharp/obj/Release/netstandard2.0/Tl.Gen.CSharp.csproj.AssemblyReference.cache
+/home/i/GitHub/tl.unity/external/tl/Tl.Gen.CSharp/obj/Release/netstandard2.0/Tl.Gen.CSharp.GeneratedMSBuildEditorConfig.editorconfig
+/home/i/GitHub/tl.unity/external/tl/Tl.Gen.CSharp/obj/Release/netstandard2.0/Tl.Gen.CSharp.AssemblyInfoInputs.cache
+/home/i/GitHub/tl.unity/external/tl/Tl.Gen.CSharp/obj/Release/netstandard2.0/Tl.Gen.CSharp.AssemblyInfo.cs
+/home/i/GitHub/tl.unity/external/tl/Tl.Gen.CSharp/obj/Release/netstandard2.0/Tl.Gen.CSharp.csproj.CoreCompileInputs.cache
+/home/i/GitHub/tl.unity/external/tl/Tl.Gen.CSharp/obj/Release/netstandard2.0/Tl.Gen.C.ED14C583.Up2Date
+/home/i/GitHub/tl.unity/external/tl/Tl.Gen.CSharp/obj/Release/netstandard2.0/Tl.Gen.CSharp.dll
+/home/i/GitHub/tl.unity/external/tl/Tl.Gen.CSharp/obj/Release/netstandard2.0/Tl.Gen.CSharp.pdb

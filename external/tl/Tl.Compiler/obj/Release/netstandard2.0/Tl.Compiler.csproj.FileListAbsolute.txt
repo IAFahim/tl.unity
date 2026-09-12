@@ -1,0 +1,10 @@
+/home/i/GitHub/tl.unity/external/tl/Tl.Compiler/bin/Release/netstandard2.0/Tl.Compiler.deps.json
+/home/i/GitHub/tl.unity/external/tl/Tl.Compiler/bin/Release/netstandard2.0/Tl.Compiler.dll
+/home/i/GitHub/tl.unity/external/tl/Tl.Compiler/bin/Release/netstandard2.0/Tl.Compiler.pdb
+/home/i/GitHub/tl.unity/external/tl/Tl.Compiler/obj/Release/netstandard2.0/Tl.Compiler.csproj.AssemblyReference.cache
+/home/i/GitHub/tl.unity/external/tl/Tl.Compiler/obj/Release/netstandard2.0/Tl.Compiler.GeneratedMSBuildEditorConfig.editorconfig
+/home/i/GitHub/tl.unity/external/tl/Tl.Compiler/obj/Release/netstandard2.0/Tl.Compiler.AssemblyInfoInputs.cache
+/home/i/GitHub/tl.unity/external/tl/Tl.Compiler/obj/Release/netstandard2.0/Tl.Compiler.AssemblyInfo.cs
+/home/i/GitHub/tl.unity/external/tl/Tl.Compiler/obj/Release/netstandard2.0/Tl.Compiler.csproj.CoreCompileInputs.cache
+/home/i/GitHub/tl.unity/external/tl/Tl.Compiler/obj/Release/netstandard2.0/Tl.Compiler.dll
+/home/i/GitHub/tl.unity/external/tl/Tl.Compiler/obj/Release/netstandard2.0/Tl.Compiler.pdb

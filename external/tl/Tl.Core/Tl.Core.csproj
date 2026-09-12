@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Tl</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Version>$(TlVersion)</Version>
+    <PackageId>Tl.Runtime</PackageId>
+    <Authors>IAFahim</Authors>
+    <Description>Heterogeneous timelines compiled into direct C# kernels with borrowed typed contexts.</Description>
+    <PackageProjectUrl>https://github.com/IAFahim/tl</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/IAFahim/tl</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageReleaseNotes>v1.0.0-alpha.3: total timeline movement, borrowed typed frames, heterogeneous job declarations, and catalog-local state.</PackageReleaseNotes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

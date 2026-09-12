@@ -1,7 +1,7 @@
 {
   "dependencies": {
     "com.iafahim.tl": {
-      "version": "file:../../../unity/com.iafahim.tl",
+      "version": "file:../../../com.iafahim.tl",
       "depth": 0,
       "source": "local",
       "dependencies": {

@@ -1,0 +1,23 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "Tl.Core/1.0.0-alpha.3": {
+        "runtime": {
+          "Tl.Core.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Tl.Core/1.0.0-alpha.3": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

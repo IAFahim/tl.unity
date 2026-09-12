@@ -10,12 +10,12 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.1" />
-    <ProjectReference Include="..\..\src\Tl.Core\Tl.Core.csproj" />
+    <ProjectReference Include="..\..\external\tl\Tl.Core\Tl.Core.csproj" />
   </ItemGroup>
 
   <Target Name="BuildUnityAnalyzer" BeforeTargets="PrepareForBuild">
-    <MSBuild Projects="..\..\src\Tl.Gen.CSharp\Tl.Gen.CSharp.csproj" Targets="Build" BuildInParallel="false" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0" />
-    <MSBuild Projects="..\..\src\Tl.Gen.CSharp\Tl.Gen.CSharp.csproj" Targets="GetTargetPath" BuildInParallel="false" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0">
+    <MSBuild Projects="..\..\external\tl\Tl.Gen.CSharp\Tl.Gen.CSharp.csproj" Targets="Build" BuildInParallel="false" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0" />
+    <MSBuild Projects="..\..\external\tl\Tl.Gen.CSharp\Tl.Gen.CSharp.csproj" Targets="GetTargetPath" BuildInParallel="false" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0">
       <Output TaskParameter="TargetOutputs" ItemName="_UnityAnalyzerAssembly" />
     </MSBuild>
     <ItemGroup>

@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../../src/Tl.Core/Tl.Core.csproj" />
+    <ProjectReference Include="../../external/tl/Tl.Core/Tl.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

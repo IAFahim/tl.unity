@@ -1,0 +1,8 @@
+is_global = true
+build_property.RootNamespace = Tl.Gen.CSharp
+build_property.ProjectDir = /home/i/GitHub/tl.unity/external/tl/Tl.Gen.CSharp/
+build_property.EnableComHosting = 
+build_property.EnableGeneratedComInterfaceComImportInterop = 
+build_property.CsWinRTUseWindowsUIXamlProjections = false
+build_property.EffectiveAnalysisLevelStyle = 
+build_property.EnableCodeStyleSeverity = 

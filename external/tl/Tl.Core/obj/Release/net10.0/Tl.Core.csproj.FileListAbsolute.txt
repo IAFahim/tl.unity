@@ -1,0 +1,11 @@
+/home/i/GitHub/tl.unity/external/tl/Tl.Core/bin/Release/net10.0/Tl.Core.deps.json
+/home/i/GitHub/tl.unity/external/tl/Tl.Core/bin/Release/net10.0/Tl.Core.dll
+/home/i/GitHub/tl.unity/external/tl/Tl.Core/bin/Release/net10.0/Tl.Core.pdb
+/home/i/GitHub/tl.unity/external/tl/Tl.Core/obj/Release/net10.0/Tl.Core.GeneratedMSBuildEditorConfig.editorconfig
+/home/i/GitHub/tl.unity/external/tl/Tl.Core/obj/Release/net10.0/Tl.Core.AssemblyInfoInputs.cache
+/home/i/GitHub/tl.unity/external/tl/Tl.Core/obj/Release/net10.0/Tl.Core.AssemblyInfo.cs
+/home/i/GitHub/tl.unity/external/tl/Tl.Core/obj/Release/net10.0/Tl.Core.csproj.CoreCompileInputs.cache
+/home/i/GitHub/tl.unity/external/tl/Tl.Core/obj/Release/net10.0/Tl.Core.dll
+/home/i/GitHub/tl.unity/external/tl/Tl.Core/obj/Release/net10.0/refint/Tl.Core.dll
+/home/i/GitHub/tl.unity/external/tl/Tl.Core/obj/Release/net10.0/Tl.Core.pdb
+/home/i/GitHub/tl.unity/external/tl/Tl.Core/obj/Release/net10.0/ref/Tl.Core.dll
