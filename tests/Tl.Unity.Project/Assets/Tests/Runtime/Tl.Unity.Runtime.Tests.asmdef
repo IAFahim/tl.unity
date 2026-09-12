@@ -1,0 +1,15 @@
+{
+  "name": "Tl.Unity.Runtime.Tests",
+  "rootNamespace": "Tl.Unity.Tests",
+  "references": [
+    "Tl.Unity",
+    "Tl.Unity.GeneratedJobs",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "allowUnsafeCode": true
+}

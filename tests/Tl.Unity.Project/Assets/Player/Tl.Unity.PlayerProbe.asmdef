@@ -1,0 +1,12 @@
+{
+  "name": "Tl.Unity.PlayerProbe",
+  "rootNamespace": "TlUnity.PlayerProbe",
+  "references": [
+    "Tl.Unity",
+    "Tl.Unity.GeneratedJobs",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities"
+  ],
+  "allowUnsafeCode": true
+}

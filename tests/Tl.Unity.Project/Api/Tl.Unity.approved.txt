@@ -1,0 +1,64 @@
+public readonly ref struct Tl.Builder
+  layout Sequential pack 8 size 1
+  method Tl.TrackRef<TTrack> Track<TTrack>(in TTrack) where TTrack : unmanaged
+  method System.Void Clip<TTrack, TJob, TClip>(in Tl.TrackRef<TTrack, TJob>, in TClip, System.UInt32, System.UInt32) where TTrack : unmanaged, Tl.IBlend<TClip> where TJob : unmanaged, Tl.ITimelineJob<TTrack, TClip> where TClip : unmanaged
+  method System.Void Looping()
+  method System.Void Before<THook>() where THook : unmanaged, Tl.IHook
+  method System.Void After<THook>() where THook : unmanaged, Tl.IHook
+  method System.Void Include<TTimeline>() where TTimeline : unmanaged, Tl.ITimeline
+public readonly ref struct Tl.CatalogBuilder
+  layout Sequential pack 8 size 1
+  method Tl.SchemaBuilder<TSchema> Schema<TSchema>() where TSchema : unmanaged
+public enum Tl.FrameFlags
+  field const Tl.FrameFlags None = 0
+  field const Tl.FrameFlags ClipStart = 1
+  field const Tl.FrameFlags ClipEnd = 2
+  field const Tl.FrameFlags TimelineStart = 4
+  field const Tl.FrameFlags TimelineEnd = 8
+  field const Tl.FrameFlags CompletedBefore = 16
+  field const Tl.FrameFlags CompletedAfter = 32
+  field const Tl.FrameFlags Looping = 64
+  field const Tl.FrameFlags Reverse = 128
+public readonly ref struct Tl.Frame<TTrack, TClip> where TTrack : unmanaged where TClip : unmanaged
+  layout Sequential pack 8 size 0
+  constructor Tl.Frame<TTrack, TClip>(in TTrack, in TClip, System.UInt32, System.UInt32, System.Int64, System.UInt16, Tl.FrameFlags)
+  property ref readonly TTrack Track
+  property ref readonly TClip Clip
+  property System.UInt32 GameTick
+  property System.UInt32 TimelineTick
+  property System.Int64 Cycle
+  property System.UInt16 TrackIndex
+  property Tl.FrameFlags Flags
+  property System.Int32 Direction
+  method System.Boolean Has(Tl.FrameFlags)
+public interface Tl.IBlend<TClip> where TClip : unmanaged
+  method System.Void Blend(in TClip, in TClip, System.Single, out TClip)
+public interface Tl.IHook
+public interface Tl.ITimeline
+public interface Tl.ITimelineCatalog
+public interface Tl.ITimelineJob<TTrack, TClip> where TTrack : unmanaged, Tl.IBlend<TClip> where TClip : unmanaged
+public readonly ref struct Tl.SchemaBuilder<TSchema> where TSchema : unmanaged
+  layout Sequential pack 8 size 1
+  method Tl.SchemaBuilder<TSchema> Asset<TTimeline>() where TTimeline : unmanaged, Tl.ITimeline
+public readonly struct Tl.TimelineFrame
+  layout Sequential pack 8 size 0 runtime-size 24
+  constructor Tl.TimelineFrame(System.UInt32, System.UInt32, System.Int64, Tl.FrameFlags)
+  property System.UInt32 GameTick
+  property System.UInt32 TimelineTick
+  property System.Int64 Cycle
+  property Tl.FrameFlags Flags
+  property System.Int32 Direction
+  method System.Boolean Has(Tl.FrameFlags)
+public static class Tl.TimelineMovement
+  method static System.Boolean Select(in Tl.TimelineState, System.UInt32, System.Boolean, System.Boolean, out Tl.TimelineState, out System.UInt32, out System.Int64, out Tl.FrameFlags)
+public readonly struct Tl.TimelineState
+  layout Sequential pack 8 size 0 runtime-size 16
+  field readonly System.UInt32 Asset offset 0
+  field readonly System.UInt32 Position offset 4
+  field readonly System.Int64 Cycle offset 8
+  constructor Tl.TimelineState(System.UInt32, System.UInt32, System.Int64)
+public readonly ref struct Tl.TrackRef<TTrack> where TTrack : unmanaged
+  layout Sequential pack 8 size 1
+  method Tl.TrackRef<TTrack, TJob> Use<TJob>() where TJob : unmanaged
+public readonly ref struct Tl.TrackRef<TTrack, TJob> where TTrack : unmanaged where TJob : unmanaged
+  layout Sequential pack 8 size 1

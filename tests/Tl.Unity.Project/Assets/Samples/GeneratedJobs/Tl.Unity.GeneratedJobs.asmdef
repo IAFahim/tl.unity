@@ -1,0 +1,12 @@
+{
+  "name": "Tl.Unity.GeneratedJobs",
+  "rootNamespace": "Tl.Samples.GeneratedJobs",
+  "references": [
+    "Tl.Unity",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Mathematics"
+  ],
+  "allowUnsafeCode": true
+}

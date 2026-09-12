@@ -1,0 +1,10 @@
+/Library/
+/Logs/
+/Temp/
+/UserSettings/
+/Build/
+/Assets/Resources.meta
+/Assets/Samples/GeneratedJobs/Generated/
+/Assets/Samples/GeneratedJobs/Generated.meta
+*.csproj
+*.sln

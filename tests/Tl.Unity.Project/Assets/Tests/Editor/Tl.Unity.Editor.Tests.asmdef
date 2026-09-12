@@ -1,0 +1,13 @@
+{
+  "name": "Tl.Unity.Editor.Tests",
+  "rootNamespace": "Tl.Unity.Tests",
+  "references": [
+    "Tl.Unity"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

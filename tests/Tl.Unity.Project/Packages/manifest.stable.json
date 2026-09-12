@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "com.iafahim.tl": "file:../../../src/Tl.Unity",
+    "com.unity.burst": "1.8.30",
+    "com.unity.entities": "1.4.3",
+    "com.unity.scriptablebuildpipeline": "1.21.25",
+    "com.unity.test-framework": "1.4.6"
+  }
+}
