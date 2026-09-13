@@ -123,3 +123,13 @@ green).
   no test executed. Log: `/tmp/tl-unity-editmode-r17d-run4.log`.
 - Production runtime: zero diff (frozen). Unity invocation per notes section 4 (no
   `-quit` with `-runTests`).
+
+## Integrator finish (same session, after the 75-minute box)
+
+R17d's residue was one mechanical edit plus one real receipt fix; the integrator finished it directly:
+
+1. Namespace consolidation: the test classes moved from `Tl.Unity.Tests` to `TlUnityJobs` (the generator injects into the file's LAST namespace block; there, `Unity.*` resolves without the `Tl.Unity` shadow). Two `CS0104` ambiguities resolved with the file's existing `UnityRow` alias.
+2. Delayed-receipt chaining made EXPLICIT per the contract idiom ("updating systems in order alone does not establish this chain"): the coordinator now publishes `LastSelection` after scheduling, `TimelineObserveSystem` gained `[UpdateAfter(typeof(TimelineIJobEntityCoordinatorSystem))]` and schedules behind `JobHandle.CombineDependencies(Dependency, LastSelection)`. Root cause of the 0f observe read: R17b passed it by ACCIDENT — the old IJobChunk gate's system-tracked `HealthHandle` read incidentally chained the observe job; the bare-IJob gate removed that implicit chain, exposing the missing explicit one. The receipt now proves the contract's required idiom.
+3. Tooling laws learned: `-testResults` resolves relative to the PROJECT directory, not the shell CWD — a repo-relative path silently writes a NESTED copy while the canonical XML stays stale (this repo's stale-assembly misdirection was that stale XML). Always pass absolute paths. Also: a piped `Unity ... | tail` eats the exit code — capture it directly.
+
+Final receipt (`fc2d02a`): EditMode run `2026-09-13T08:1xZ`, **22 passed / 0 failed / 0 skipped, `UNITY_EXIT=0`, `error CS`=0** (canonical XML path, absolute). Gate-5 Part 2 closed: IJobEntity parity forward+mirrored-backward, derived-query eligibility (disabled + removed-column), delayed selection dependency (no early commit, exactly-once commit, chained observe read).
