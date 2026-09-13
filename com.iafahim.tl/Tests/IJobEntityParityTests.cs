@@ -43,17 +43,25 @@ namespace Tl.Unity.Tests
 
 internal unsafe struct TimelineIJobEntityTickJobRunner : IJobChunk
 {
+    internal static NativeArray<int> Diag;
+
     public TimelineIJobEntityTickJob Job;
     public ComponentTypeHandle<UnityRow> RowHandle;
     public ComponentTypeHandle<Health> HealthHandle;
 
     public unsafe void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
     {
+        if (Diag.IsCreated) Diag[0]++;
         var rows = chunk.GetNativeArray(ref RowHandle);
         var healths = chunk.GetNativeArray(ref HealthHandle);
         for (var i = 0; i < chunk.Count; i++)
         {
-            if (useEnabledMask && !chunk.IsComponentEnabled(ref HealthHandle, i)) continue;
+            if (useEnabledMask && !chunk.IsComponentEnabled(ref HealthHandle, i))
+            {
+                if (Diag.IsCreated) Diag[2]++;
+                continue;
+            }
+            if (Diag.IsCreated) Diag[1]++;
             var row = rows[i];
             var health = healths[i];
             Job.Execute(ref row, ref health);
@@ -154,6 +162,7 @@ public unsafe partial struct TimelineIJobEntityCoordinatorSystem : ISystem
             RowHandle = state.GetComponentTypeHandle<TimelineComponent>(),
             HealthHandle = state.GetComponentTypeHandle<Health>(),
         }.Schedule(_derived, selection);
+        UnityEngine.Debug.Log($"[TLDIAG] sched chunks={_derived.CalculateChunkCount()} ents={_derived.CalculateEntityCount()} gated={!gate.Equals(default)}");
     }
 }
 
@@ -404,6 +413,92 @@ public sealed class DelayedDependencyTests
         Assert.AreEqual(3u, _world.EntityManager.GetComponentData<UnityRow>(row).Position);
         Assert.AreEqual(0f, _observed[0], "the in-flight gated read observed the pre-tick value: the coordinator did not overwrite early");
         Assert.AreEqual(165f, _captured[0], "the coordinator passed the combined dependency to the next stage, which read the committed value");
+    }
+}
+
+internal struct TlDiagNopJob : IJob
+{
+    public void Execute() { }
+}
+
+[TestFixture]
+public sealed class TlDiagClonedWorldShapes
+{
+    private static readonly List<TimelineAsset> Loaded = [];
+
+    private NativeList<Record> _sink;
+    private NativeArray<int> _diag;
+
+    [OneTimeSetUp]
+    public void OneTimeSetUp() => _sink = BurstArms.Install();
+
+    [OneTimeTearDown]
+    public void OneTimeTearDown()
+    {
+        foreach (var asset in Loaded) asset.Dispose();
+        Loaded.Clear();
+    }
+
+    [SetUp]
+    public void SetUp()
+    {
+        TimelineConsumers.Reset();
+        _sink.Clear();
+        TimelineEligibility.Reset();
+        TimelineGateJob.Release = 0;
+        TimelineIJobEntityCoordinatorSystem.Gate = default;
+        _diag = new NativeArray<int>(3, Allocator.Persistent);
+        TimelineIJobEntityTickJobRunner.Diag = _diag;
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        TimelineIJobEntityTickJobRunner.Diag = default;
+        _diag.Dispose();
+    }
+
+    [Test]
+    public void TlDiagClonedWorldShapesMatrix()
+    {
+        var asset = Resources.Load<TextAsset>("TlFixtures/fixture_a");
+        Assert.NotNull(asset, "missing fixture: fixture_a");
+        var timeline = TimelineAsset.Load(asset.bytes);
+        Loaded.Add(timeline);
+
+        for (var variant = 0; variant < 4; variant++)
+        {
+            var managedGroup = (variant & 1) != 0;
+            var gated = (variant & 2) != 0;
+            _diag[0] = 0;
+            _diag[1] = 0;
+            _diag[2] = 0;
+            TimelineIJobEntityCoordinatorSystem.Gate = default;
+            var world = new World("TlDiag" + variant);
+            try
+            {
+                if (managedGroup) TimelineEcs.CreateGroup(world);
+                var jobGroup = world.CreateSystemManaged<TimelineSystemGroup>();
+                jobGroup.AddSystemToUpdateList(world.CreateSystem<TimelineIJobEntityCoordinatorSystem>());
+                var clock = world.EntityManager.CreateEntity(typeof(TimelineClock));
+                var archetype = world.EntityManager.CreateArchetype(typeof(UnityRow), typeof(Health));
+                var row = world.EntityManager.CreateEntity(archetype);
+                world.EntityManager.SetComponentData(row, new UnityRow { Reference = timeline.Reference });
+                world.EntityManager.SetComponentData(row, new Health());
+
+                if (gated) TimelineIJobEntityCoordinatorSystem.Gate = new TlDiagNopJob().Schedule();
+
+                world.EntityManager.SetComponentData(clock, new TimelineClock { GameTick = 100u, Delta = 1 });
+                jobGroup.Update();
+                world.EntityManager.CompleteAllTrackedJobs();
+
+                UnityEngine.Debug.Log($"[TLDIAG] variant={variant} managedGroup={managedGroup} gated={gated} chunks={_diag[0]} rows={_diag[1]} skipped={_diag[2]} sink={_sink.Length} exclusions={TimelineEligibility.Count}");
+            }
+            finally
+            {
+                world.Dispose();
+            }
+        }
     }
 }
 }
