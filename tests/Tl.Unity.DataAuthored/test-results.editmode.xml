@@ -1,75 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
-<test-run id="2" testcasecount="22" result="Failed(Child)" total="22" passed="19" failed="3" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.1696217">
-  <test-suite type="TestSuite" id="1000" name="Tl.Unity.Project" fullname="Tl.Unity.Project" runstate="Runnable" testcasecount="22" result="Failed" site="Child" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.169622" total="22" passed="19" failed="3" inconclusive="0" skipped="0" asserts="0">
+<test-run id="2" testcasecount="22" result="Passed" total="22" passed="22" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.1620606">
+  <test-suite type="TestSuite" id="1000" name="Tl.Unity.Project" fullname="Tl.Unity.Project" runstate="Runnable" testcasecount="22" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.162061" total="22" passed="22" failed="0" inconclusive="0" skipped="0" asserts="0">
     <properties>
       <property name="platform" value="EditMode" />
     </properties>
-    <failure>
-      <message><![CDATA[One or more child tests had errors]]></message>
-    </failure>
-    <test-suite type="Assembly" id="1029" name="Tl.Runtime.Unity.Tests.dll" fullname="/home/i/GitHub/tl.unity/tests/Tl.Unity.DataAuthored/Library/ScriptAssemblies/Tl.Runtime.Unity.Tests.dll" runstate="Runnable" testcasecount="22" result="Failed" site="Child" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.165597" total="22" passed="19" failed="3" inconclusive="0" skipped="0" asserts="0">
+    <test-suite type="Assembly" id="1029" name="Tl.Runtime.Unity.Tests.dll" fullname="/home/i/GitHub/tl.unity/tests/Tl.Unity.DataAuthored/Library/ScriptAssemblies/Tl.Runtime.Unity.Tests.dll" runstate="Runnable" testcasecount="22" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.157848" total="22" passed="22" failed="0" inconclusive="0" skipped="0" asserts="0">
       <properties>
-        <property name="_PID" value="3106563" />
+        <property name="_PID" value="2154075" />
         <property name="_APPDOMAIN" value="Unity Child Domain" />
         <property name="platform" value="EditMode" />
         <property name="EditorOnly" value="True" />
       </properties>
-      <failure>
-        <message><![CDATA[One or more child tests had errors]]></message>
-      </failure>
-      <test-suite type="TestSuite" id="1030" name="Tl" fullname="Tl" runstate="Runnable" testcasecount="22" result="Failed" site="Child" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.165446" total="22" passed="19" failed="3" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestSuite" id="1031" name="Tl" fullname="Tl" runstate="Runnable" testcasecount="19" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.142289" total="19" passed="19" failed="0" inconclusive="0" skipped="0" asserts="0">
         <properties />
-        <failure>
-          <message><![CDATA[One or more child tests had errors]]></message>
-        </failure>
-        <test-suite type="TestSuite" id="1031" name="Unity" fullname="Tl.Unity" runstate="Runnable" testcasecount="22" result="Failed" site="Child" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.165398" total="22" passed="19" failed="3" inconclusive="0" skipped="0" asserts="0">
+        <test-suite type="TestSuite" id="1032" name="Unity" fullname="Tl.Unity" runstate="Runnable" testcasecount="19" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.142236" total="19" passed="19" failed="0" inconclusive="0" skipped="0" asserts="0">
           <properties />
-          <failure>
-            <message><![CDATA[One or more child tests had errors]]></message>
-          </failure>
-          <test-suite type="TestSuite" id="1032" name="Tests" fullname="Tl.Unity.Tests" runstate="Runnable" testcasecount="22" result="Failed" site="Child" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.165314" total="22" passed="19" failed="3" inconclusive="0" skipped="0" asserts="0">
+          <test-suite type="TestSuite" id="1033" name="Tests" fullname="Tl.Unity.Tests" runstate="Runnable" testcasecount="19" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.142156" total="19" passed="19" failed="0" inconclusive="0" skipped="0" asserts="0">
             <properties />
-            <failure>
-              <message><![CDATA[One or more child tests had errors]]></message>
-            </failure>
-            <test-suite type="TestFixture" id="1013" name="BurstEligibilityTests" fullname="Tl.Unity.Tests.BurstEligibilityTests" classname="Tl.Unity.Tests.BurstEligibilityTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.100553" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <test-suite type="TestFixture" id="1018" name="BurstEligibilityTests" fullname="Tl.Unity.Tests.BurstEligibilityTests" classname="Tl.Unity.Tests.BurstEligibilityTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.104421" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
               <properties />
-              <test-case id="1016" name="AllRowsExcludedIsObservableNoMatchNotConcealment" fullname="Tl.Unity.Tests.BurstEligibilityTests.AllRowsExcludedIsObservableNoMatchNotConcealment" methodname="AllRowsExcludedIsObservableNoMatchNotConcealment" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="1220734696" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.084560" asserts="0">
+              <test-case id="1021" name="AllRowsExcludedIsObservableNoMatchNotConcealment" fullname="Tl.Unity.Tests.BurstEligibilityTests.AllRowsExcludedIsObservableNoMatchNotConcealment" methodname="AllRowsExcludedIsObservableNoMatchNotConcealment" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="474177924" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.086719" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1014" name="DisabledMandatoryColumnExcludesRowBeforeTick" fullname="Tl.Unity.Tests.BurstEligibilityTests.DisabledMandatoryColumnExcludesRowBeforeTick" methodname="DisabledMandatoryColumnExcludesRowBeforeTick" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="1140056799" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.001957" asserts="0">
+              <test-case id="1019" name="DisabledMandatoryColumnExcludesRowBeforeTick" fullname="Tl.Unity.Tests.BurstEligibilityTests.DisabledMandatoryColumnExcludesRowBeforeTick" methodname="DisabledMandatoryColumnExcludesRowBeforeTick" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="702732504" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.001842" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1017" name="DisabledRowInsideSharedChunkSplitsEligibleRuns" fullname="Tl.Unity.Tests.BurstEligibilityTests.DisabledRowInsideSharedChunkSplitsEligibleRuns" methodname="DisabledRowInsideSharedChunkSplitsEligibleRuns" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="18645342" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.000625" asserts="0">
+              <test-case id="1022" name="DisabledRowInsideSharedChunkSplitsEligibleRuns" fullname="Tl.Unity.Tests.BurstEligibilityTests.DisabledRowInsideSharedChunkSplitsEligibleRuns" methodname="DisabledRowInsideSharedChunkSplitsEligibleRuns" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="132706261" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.000589" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1015" name="RemovedMandatoryColumnExcludesRowWithoutPartialExecution" fullname="Tl.Unity.Tests.BurstEligibilityTests.RemovedMandatoryColumnExcludesRowWithoutPartialExecution" methodname="RemovedMandatoryColumnExcludesRowWithoutPartialExecution" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="1865743221" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.001053" asserts="0">
+              <test-case id="1020" name="RemovedMandatoryColumnExcludesRowWithoutPartialExecution" fullname="Tl.Unity.Tests.BurstEligibilityTests.RemovedMandatoryColumnExcludesRowWithoutPartialExecution" methodname="RemovedMandatoryColumnExcludesRowWithoutPartialExecution" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="1139309069" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.001026" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
             </test-suite>
-            <test-suite type="TestFixture" id="1001" name="BurstOracleTests" fullname="Tl.Unity.Tests.BurstOracleTests" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" testcasecount="6" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.031228" total="6" passed="6" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <test-suite type="TestFixture" id="1006" name="BurstOracleTests" fullname="Tl.Unity.Tests.BurstOracleTests" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" testcasecount="6" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.028956" total="6" passed="6" failed="0" inconclusive="0" skipped="0" asserts="0">
               <properties />
-              <test-case id="1006" name="BurstAndManagedArmsReportInformalTimings" fullname="Tl.Unity.Tests.BurstOracleTests.BurstAndManagedArmsReportInformalTimings" methodname="BurstAndManagedArmsReportInformalTimings" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="1818902138" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.016187" asserts="0">
+              <test-case id="1011" name="BurstAndManagedArmsReportInformalTimings" fullname="Tl.Unity.Tests.BurstOracleTests.BurstAndManagedArmsReportInformalTimings" methodname="BurstAndManagedArmsReportInformalTimings" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="459742329" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.015331" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
-                <output><![CDATA[tl burst timings: managed=6ms burst=5ms ticks=2000 records=2000
+                <output><![CDATA[tl burst timings: managed=6ms burst=4ms ticks=2000 records=2000
 ]]></output>
               </test-case>
-              <test-case id="1004" name="BurstArmIsNonThrowingAndPreservesPrefix" fullname="Tl.Unity.Tests.BurstOracleTests.BurstArmIsNonThrowingAndPreservesPrefix" methodname="BurstArmIsNonThrowingAndPreservesPrefix" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="19473894" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.007956" asserts="0">
+              <test-case id="1009" name="BurstArmIsNonThrowingAndPreservesPrefix" fullname="Tl.Unity.Tests.BurstOracleTests.BurstArmIsNonThrowingAndPreservesPrefix" methodname="BurstArmIsNonThrowingAndPreservesPrefix" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="105531982" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.007256" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
@@ -84,7 +69,7 @@ Unity.Entities.SystemBaseRegistry+<>c__DisplayClass10_0.<SelectBurstFn>b__0 (Sys
 UnityEngine.Debug:LogException(Exception)
 Unity.Debug:LogException(Exception) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/Stubs/Unity/Debug.cs:17)
 Unity.Entities.<>c__DisplayClass10_0:<SelectBurstFn>b__0(IntPtr, IntPtr) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:246)
-Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:wrapper_native_indirect_0x555ecc1a4da8(IntPtr&, Void*)
+Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:wrapper_native_indirect_0x55a4ac315068(IntPtr&, Void*)
 Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:Invoke(Void*)
 Unity.Entities.WorldUnmanagedImpl:UnmanagedUpdate(Void*)
 Unity.Entities.WorldUnmanagedImpl:UpdateSystem(SystemHandle) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/WorldUnmanaged.cs:942)
@@ -103,300 +88,67 @@ UnityEditor.EditorApplication:Internal_CallUpdateFunctions() (at /home/bokken/bu
 
 ]]></output>
               </test-case>
-              <test-case id="1002" name="BurstArmMatchesManagedArmForwardAndBackward" fullname="Tl.Unity.Tests.BurstOracleTests.BurstArmMatchesManagedArmForwardAndBackward" methodname="BurstArmMatchesManagedArmForwardAndBackward" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="122432796" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.000893" asserts="0">
+              <test-case id="1007" name="BurstArmMatchesManagedArmForwardAndBackward" fullname="Tl.Unity.Tests.BurstOracleTests.BurstArmMatchesManagedArmForwardAndBackward" methodname="BurstArmMatchesManagedArmForwardAndBackward" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="1320729568" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.000865" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1003" name="BurstArmMirrorsConsumerOrderAndBlends" fullname="Tl.Unity.Tests.BurstOracleTests.BurstArmMirrorsConsumerOrderAndBlends" methodname="BurstArmMirrorsConsumerOrderAndBlends" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="2073585019" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.002447" asserts="0">
+              <test-case id="1008" name="BurstArmMirrorsConsumerOrderAndBlends" fullname="Tl.Unity.Tests.BurstOracleTests.BurstArmMirrorsConsumerOrderAndBlends" methodname="BurstArmMirrorsConsumerOrderAndBlends" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="1293231653" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.001307" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1007" name="BurstCoordinatorJobBodyRemainsCorrectWithoutBurst" fullname="Tl.Unity.Tests.BurstOracleTests.BurstCoordinatorJobBodyRemainsCorrectWithoutBurst" methodname="BurstCoordinatorJobBodyRemainsCorrectWithoutBurst" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="94844770" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.002065" asserts="0">
+              <test-case id="1012" name="BurstCoordinatorJobBodyRemainsCorrectWithoutBurst" fullname="Tl.Unity.Tests.BurstOracleTests.BurstCoordinatorJobBodyRemainsCorrectWithoutBurst" methodname="BurstCoordinatorJobBodyRemainsCorrectWithoutBurst" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="1652233147" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.002093" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1005" name="UnmanagedSeamDispatchRemainsCorrectUnderManagedCaller" fullname="Tl.Unity.Tests.BurstOracleTests.UnmanagedSeamDispatchRemainsCorrectUnderManagedCaller" methodname="UnmanagedSeamDispatchRemainsCorrectUnderManagedCaller" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="1920428583" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.000485" asserts="0">
-                <properties>
-                  <property name="retryIteration" value="0" />
-                  <property name="repeatIteration" value="0" />
-                </properties>
-              </test-case>
-            </test-suite>
-            <test-suite type="TestFixture" id="1021" name="DelayedDependencyTests" fullname="Tl.Unity.Tests.DelayedDependencyTests" classname="Tl.Unity.Tests.DelayedDependencyTests" runstate="Runnable" testcasecount="1" result="Failed" site="Child" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.013532" total="1" passed="0" failed="1" inconclusive="0" skipped="0" asserts="0">
-              <properties />
-              <failure>
-                <message><![CDATA[One or more child tests had errors]]></message>
-              </failure>
-              <test-case id="1022" name="DelayedSelectionDependencyBlocksCommitUntilCompletion" fullname="Tl.Unity.Tests.DelayedDependencyTests.DelayedSelectionDependencyBlocksCommitUntilCompletion" methodname="DelayedSelectionDependencyBlocksCommitUntilCompletion" classname="Tl.Unity.Tests.DelayedDependencyTests" runstate="Runnable" seed="1160168851" result="Failed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.012770" asserts="0">
-                <properties>
-                  <property name="retryIteration" value="0" />
-                  <property name="repeatIteration" value="0" />
-                </properties>
-                <failure>
-                  <message><![CDATA[System.InvalidOperationException : The previously scheduled job TimelineGateJob reads from the ComponentTypeHandle<Tl.Unity.Tests.Health> TimelineGateJob.JobData.HealthHandle. You must call JobHandle.Complete() on the job TimelineGateJob, before you can deallocate the ComponentTypeHandle<Tl.Unity.Tests.Health> safely.
-TearDown : Unhandled log message: '[Error] Disposing EntityManager but a job is still running against the ComponentData. It appears the job has not been registered with SystemBase.AddDependency.'. Use UnityEngine.TestTools.LogAssert.Expect]]></message>
-                  <stack-trace><![CDATA[Unity.Debug:LogError (object) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/Stubs/Unity/Debug.cs:11)
-Unity.Entities.ComponentSafetyHandles:PreDisposeCheck () (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSafetyHandles.cs:280)
-Unity.Entities.ComponentDependencyManager:PreDisposeCheck () (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentDependencyManager.cs:195)
-Unity.Entities.EntityManager:PreDisposeCheck () (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/EntityManager.cs:322)
-Unity.Entities.World:Dispose () (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/World.cs:319)
-Tl.Unity.Tests.DelayedDependencyTests:TearDown () (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:362)
-System.Reflection.MethodBase:Invoke (object,object[])
-NUnit.Framework.Internal.Reflect:InvokeMethod (System.Reflection.MethodInfo,object,object[])
-NUnit.Framework.Internal.Reflect:InvokeMethod (System.Reflection.MethodInfo,object)
-UnityEditor.EditorApplication:Internal_CallUpdateFunctions () (at /home/bokken/build/output/unity/unity/Editor/Mono/EditorApplication.cs:463)
-
-]]></stack-trace>
-                </failure>
-                <output><![CDATA['Tl.Unity.Tests.TimelineIJobEntityCoordinatorSystem' creates a type handle during OnUpdate. Please create the type handle in OnCreate instead and use type `_MyHandle.Update(ref systemState);` in OnUpdate to keep it up to date instead. This is significantly faster.
-The system unknown reads Tl.Unity.Tests.Health via TimelineGateJob but that type was not assigned to the Dependency property. To ensure correct behavior of other systems, the job or a dependency must be assigned to the Dependency property before returning from the OnUpdate method.
-InvalidOperationException: The previously scheduled job TimelineGateJob reads from the ComponentTypeHandle<Tl.Unity.Tests.Health> TimelineGateJob.JobData.HealthHandle. You must call JobHandle.Complete() on the job TimelineGateJob, before you can write to the ComponentTypeHandle<Tl.Unity.Tests.Health> safely.
-Unity.Collections.LowLevel.Unsafe.AtomicSafetyHandle.CheckWriteAndThrowNoEarlyOut (Unity.Collections.LowLevel.Unsafe.AtomicSafetyHandle handle) (at <4ef39f61e4ad42d39c0e572b9ed66101>:0)
-Unity.Entities.ArchetypeChunk.GetComponentDataPtrRW[T] (Unity.Entities.ComponentTypeHandle`1[T]& typeHandle) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/Iterators/ArchetypeChunkArray.cs:1975)
-Tl.Unity.ColumnAccess`1[T].PointerOf (Unity.Entities.SystemState& state, Unity.Entities.ArchetypeChunk chunk) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Runtime/TimelineCoordinator.cs:92)
-Tl.Unity.TimelineEligibility.Resolve (Unity.Entities.SystemState& state, Unity.Entities.EntityQuery rows, Unity.Entities.ComponentTypeHandle`1[Tl.Unity.TimelineComponent]& rowHandle, Unity.Entities.EntityTypeHandle& entityHandle, Unity.Collections.NativeList`1[T] runs, Unity.Collections.NativeList`1[T] bases) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Runtime/TimelineEligibility.cs:94)
-Tl.Unity.TimelineEligibility.RecordExclusions (Unity.Entities.SystemState& state, Unity.Entities.EntityQuery rows) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Runtime/TimelineEligibility.cs:53)
-Tl.Unity.Tests.TimelineIJobEntityCoordinatorSystem.OnUpdate (Unity.Entities.SystemState& state) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:141)
-Tl.Unity.Tests.TimelineIJobEntityCoordinatorSystem.__codegen__OnUpdate (System.IntPtr self, System.IntPtr state) (at <c7a80d1de8bd44b39e6a12b94ea840b3>:0)
-Unity.Entities.SystemBaseRegistry+<>c__DisplayClass10_0.<SelectBurstFn>b__0 (System.IntPtr system, System.IntPtr state) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:242)
-UnityEngine.Debug:LogException(Exception)
-Unity.Debug:LogException(Exception) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/Stubs/Unity/Debug.cs:17)
-Unity.Entities.<>c__DisplayClass10_0:<SelectBurstFn>b__0(IntPtr, IntPtr) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:246)
-Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:wrapper_native_indirect_0x555ecc1a4da8(IntPtr&, Void*)
-Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:Invoke(Void*)
-Unity.Entities.WorldUnmanagedImpl:UnmanagedUpdate(Void*)
-Unity.Entities.WorldUnmanagedImpl:UpdateSystem(SystemHandle) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/WorldUnmanaged.cs:942)
-Unity.Entities.ComponentSystemGroup:UpdateAllSystems() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSystemGroup.cs:726)
-Unity.Entities.ComponentSystemGroup:OnUpdate() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSystemGroup.cs:688)
-Unity.Entities.SystemBase:Update() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBase.cs:205)
-Tl.Unity.Tests.DelayedDependencyTests:DelayedSelectionDependencyBlocksCommitUntilCompletion() (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:390)
-System.Reflection.MethodBase:Invoke(Object, Object[])
-NUnit.Framework.Internal.Reflect:InvokeMethod(MethodInfo, Object, Object[])
-NUnit.Framework.Internal.MethodWrapper:Invoke(Object, Object[])
-NUnit.Framework.Internal.Commands.TestMethodCommand:RunNonAsyncTestMethod(ITestExecutionContext)
-NUnit.Framework.Internal.Commands.TestMethodCommand:RunTestMethod(ITestExecutionContext)
-NUnit.Framework.Internal.Commands.TestMethodCommand:Execute(ITestExecutionContext)
-UnityEditor.EditorApplication:Internal_CallUpdateFunctions() (at /home/bokken/build/output/unity/unity/Editor/Mono/EditorApplication.cs:463)
-
-Disposing EntityManager but a job is still running against the ComponentData. It appears the job has not been registered with SystemBase.AddDependency.
-]]></output>
-              </test-case>
-            </test-suite>
-            <test-suite type="TestFixture" id="1018" name="IJobEntityParityTests" fullname="Tl.Unity.Tests.IJobEntityParityTests" classname="Tl.Unity.Tests.IJobEntityParityTests" runstate="Runnable" testcasecount="2" result="Failed" site="Child" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.011329" total="2" passed="0" failed="2" inconclusive="0" skipped="0" asserts="0">
-              <properties />
-              <failure>
-                <message><![CDATA[One or more child tests had errors]]></message>
-              </failure>
-              <test-case id="1019" name="IJobEntityArmMatchesManagedArmForwardAndBackward" fullname="Tl.Unity.Tests.IJobEntityParityTests.IJobEntityArmMatchesManagedArmForwardAndBackward" methodname="IJobEntityArmMatchesManagedArmForwardAndBackward" classname="Tl.Unity.Tests.IJobEntityParityTests" runstate="Runnable" seed="1037142035" result="Failed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.008048" asserts="0">
-                <properties>
-                  <property name="retryIteration" value="0" />
-                  <property name="repeatIteration" value="0" />
-                </properties>
-                <failure>
-                  <message><![CDATA[  record count parity
-  Expected: 4
-  But was:  0
-]]></message>
-                  <stack-trace><![CDATA[at Tl.Unity.Tests.IJobEntityParityTests.IJobEntityArmMatchesManagedArmForwardAndBackward () [0x000b3] in /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:270
-]]></stack-trace>
-                </failure>
-                <output><![CDATA['Tl.Unity.Tests.TimelineIJobEntityCoordinatorSystem' creates a type handle during OnUpdate. Please create the type handle in OnCreate instead and use type `_MyHandle.Update(ref systemState);` in OnUpdate to keep it up to date instead. This is significantly faster.
-InvalidOperationException: The UNKNOWN_OBJECT_TYPE TimelineIJobEntityTickJobRunner.JobData.Job.__TypeHandle.__Tl_Unity_TimelineComponent_RW_ComponentTypeHandle has not been assigned or constructed. All containers must be valid when scheduling a job.
-Unity.Jobs.LowLevel.Unsafe.JobsUtility.Schedule (Unity.Jobs.LowLevel.Unsafe.JobsUtility+JobScheduleParameters& parameters) (at <4ef39f61e4ad42d39c0e572b9ed66101>:0)
-Unity.Entities.JobChunkExtensions.ScheduleInternal[T] (T& jobData, Unity.Entities.EntityQuery query, Unity.Jobs.JobHandle dependsOn, Unity.Jobs.LowLevel.Unsafe.ScheduleMode mode, Unity.Collections.NativeArray`1[T] chunkBaseEntityIndices) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/IJobChunk.cs:327)
-Unity.Entities.JobChunkExtensions.Schedule[T] (T jobData, Unity.Entities.EntityQuery query, Unity.Jobs.JobHandle dependsOn) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/IJobChunk.cs:134)
-Tl.Unity.Tests.TimelineIJobEntityCoordinatorSystem.OnUpdate (Unity.Entities.SystemState& state) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:146)
-Tl.Unity.Tests.TimelineIJobEntityCoordinatorSystem.__codegen__OnUpdate (System.IntPtr self, System.IntPtr state) (at <c7a80d1de8bd44b39e6a12b94ea840b3>:0)
-Unity.Entities.SystemBaseRegistry+<>c__DisplayClass10_0.<SelectBurstFn>b__0 (System.IntPtr system, System.IntPtr state) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:242)
-UnityEngine.Debug:LogException(Exception)
-Unity.Debug:LogException(Exception) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/Stubs/Unity/Debug.cs:17)
-Unity.Entities.<>c__DisplayClass10_0:<SelectBurstFn>b__0(IntPtr, IntPtr) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:246)
-Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:wrapper_native_indirect_0x555ecc1a4da8(IntPtr&, Void*)
-Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:Invoke(Void*)
-Unity.Entities.WorldUnmanagedImpl:UnmanagedUpdate(Void*)
-Unity.Entities.WorldUnmanagedImpl:UpdateSystem(SystemHandle) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/WorldUnmanaged.cs:942)
-Unity.Entities.ComponentSystemGroup:UpdateAllSystems() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSystemGroup.cs:726)
-Unity.Entities.ComponentSystemGroup:OnUpdate() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSystemGroup.cs:688)
-Unity.Entities.SystemBase:Update() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBase.cs:205)
-Tl.Unity.Tests.IJobEntityParityTests:Tick(UInt32, Int32, Boolean) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:225)
-Tl.Unity.Tests.IJobEntityParityTests:IJobEntityArmMatchesManagedArmForwardAndBackward() (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:263)
-System.Reflection.MethodBase:Invoke(Object, Object[])
-NUnit.Framework.Internal.Reflect:InvokeMethod(MethodInfo, Object, Object[])
-NUnit.Framework.Internal.MethodWrapper:Invoke(Object, Object[])
-NUnit.Framework.Internal.Commands.TestMethodCommand:RunNonAsyncTestMethod(ITestExecutionContext)
-NUnit.Framework.Internal.Commands.TestMethodCommand:RunTestMethod(ITestExecutionContext)
-NUnit.Framework.Internal.Commands.TestMethodCommand:Execute(ITestExecutionContext)
-UnityEditor.EditorApplication:Internal_CallUpdateFunctions() (at /home/bokken/build/output/unity/unity/Editor/Mono/EditorApplication.cs:463)
-
-InvalidOperationException: The UNKNOWN_OBJECT_TYPE TimelineIJobEntityTickJobRunner.JobData.Job.__TypeHandle.__Tl_Unity_TimelineComponent_RW_ComponentTypeHandle has not been assigned or constructed. All containers must be valid when scheduling a job.
-Unity.Jobs.LowLevel.Unsafe.JobsUtility.Schedule (Unity.Jobs.LowLevel.Unsafe.JobsUtility+JobScheduleParameters& parameters) (at <4ef39f61e4ad42d39c0e572b9ed66101>:0)
-Unity.Entities.JobChunkExtensions.ScheduleInternal[T] (T& jobData, Unity.Entities.EntityQuery query, Unity.Jobs.JobHandle dependsOn, Unity.Jobs.LowLevel.Unsafe.ScheduleMode mode, Unity.Collections.NativeArray`1[T] chunkBaseEntityIndices) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/IJobChunk.cs:327)
-Unity.Entities.JobChunkExtensions.Schedule[T] (T jobData, Unity.Entities.EntityQuery query, Unity.Jobs.JobHandle dependsOn) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/IJobChunk.cs:134)
-Tl.Unity.Tests.TimelineIJobEntityCoordinatorSystem.OnUpdate (Unity.Entities.SystemState& state) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:146)
-Tl.Unity.Tests.TimelineIJobEntityCoordinatorSystem.__codegen__OnUpdate (System.IntPtr self, System.IntPtr state) (at <c7a80d1de8bd44b39e6a12b94ea840b3>:0)
-Unity.Entities.SystemBaseRegistry+<>c__DisplayClass10_0.<SelectBurstFn>b__0 (System.IntPtr system, System.IntPtr state) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:242)
-UnityEngine.Debug:LogException(Exception)
-Unity.Debug:LogException(Exception) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/Stubs/Unity/Debug.cs:17)
-Unity.Entities.<>c__DisplayClass10_0:<SelectBurstFn>b__0(IntPtr, IntPtr) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:246)
-Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:wrapper_native_indirect_0x555ecc1a4da8(IntPtr&, Void*)
-Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:Invoke(Void*)
-Unity.Entities.WorldUnmanagedImpl:UnmanagedUpdate(Void*)
-Unity.Entities.WorldUnmanagedImpl:UpdateSystem(SystemHandle) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/WorldUnmanaged.cs:942)
-Unity.Entities.ComponentSystemGroup:UpdateAllSystems() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSystemGroup.cs:726)
-Unity.Entities.ComponentSystemGroup:OnUpdate() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSystemGroup.cs:688)
-Unity.Entities.SystemBase:Update() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBase.cs:205)
-Tl.Unity.Tests.IJobEntityParityTests:Tick(UInt32, Int32, Boolean) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:225)
-Tl.Unity.Tests.IJobEntityParityTests:IJobEntityArmMatchesManagedArmForwardAndBackward() (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:264)
-System.Reflection.MethodBase:Invoke(Object, Object[])
-NUnit.Framework.Internal.Reflect:InvokeMethod(MethodInfo, Object, Object[])
-NUnit.Framework.Internal.MethodWrapper:Invoke(Object, Object[])
-NUnit.Framework.Internal.Commands.TestMethodCommand:RunNonAsyncTestMethod(ITestExecutionContext)
-NUnit.Framework.Internal.Commands.TestMethodCommand:RunTestMethod(ITestExecutionContext)
-NUnit.Framework.Internal.Commands.TestMethodCommand:Execute(ITestExecutionContext)
-UnityEditor.EditorApplication:Internal_CallUpdateFunctions() (at /home/bokken/build/output/unity/unity/Editor/Mono/EditorApplication.cs:463)
-
-InvalidOperationException: The UNKNOWN_OBJECT_TYPE TimelineIJobEntityTickJobRunner.JobData.Job.__TypeHandle.__Tl_Unity_TimelineComponent_RW_ComponentTypeHandle has not been assigned or constructed. All containers must be valid when scheduling a job.
-Unity.Jobs.LowLevel.Unsafe.JobsUtility.Schedule (Unity.Jobs.LowLevel.Unsafe.JobsUtility+JobScheduleParameters& parameters) (at <4ef39f61e4ad42d39c0e572b9ed66101>:0)
-Unity.Entities.JobChunkExtensions.ScheduleInternal[T] (T& jobData, Unity.Entities.EntityQuery query, Unity.Jobs.JobHandle dependsOn, Unity.Jobs.LowLevel.Unsafe.ScheduleMode mode, Unity.Collections.NativeArray`1[T] chunkBaseEntityIndices) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/IJobChunk.cs:327)
-Unity.Entities.JobChunkExtensions.Schedule[T] (T jobData, Unity.Entities.EntityQuery query, Unity.Jobs.JobHandle dependsOn) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/IJobChunk.cs:134)
-Tl.Unity.Tests.TimelineIJobEntityCoordinatorSystem.OnUpdate (Unity.Entities.SystemState& state) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:146)
-Tl.Unity.Tests.TimelineIJobEntityCoordinatorSystem.__codegen__OnUpdate (System.IntPtr self, System.IntPtr state) (at <c7a80d1de8bd44b39e6a12b94ea840b3>:0)
-Unity.Entities.SystemBaseRegistry+<>c__DisplayClass10_0.<SelectBurstFn>b__0 (System.IntPtr system, System.IntPtr state) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:242)
-UnityEngine.Debug:LogException(Exception)
-Unity.Debug:LogException(Exception) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/Stubs/Unity/Debug.cs:17)
-Unity.Entities.<>c__DisplayClass10_0:<SelectBurstFn>b__0(IntPtr, IntPtr) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:246)
-Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:wrapper_native_indirect_0x555ecc1a4da8(IntPtr&, Void*)
-Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:Invoke(Void*)
-Unity.Entities.WorldUnmanagedImpl:UnmanagedUpdate(Void*)
-Unity.Entities.WorldUnmanagedImpl:UpdateSystem(SystemHandle) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/WorldUnmanaged.cs:942)
-Unity.Entities.ComponentSystemGroup:UpdateAllSystems() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSystemGroup.cs:726)
-Unity.Entities.ComponentSystemGroup:OnUpdate() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSystemGroup.cs:688)
-Unity.Entities.SystemBase:Update() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBase.cs:205)
-Tl.Unity.Tests.IJobEntityParityTests:Tick(UInt32, Int32, Boolean) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:225)
-Tl.Unity.Tests.IJobEntityParityTests:IJobEntityArmMatchesManagedArmForwardAndBackward() (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:265)
-System.Reflection.MethodBase:Invoke(Object, Object[])
-NUnit.Framework.Internal.Reflect:InvokeMethod(MethodInfo, Object, Object[])
-NUnit.Framework.Internal.MethodWrapper:Invoke(Object, Object[])
-NUnit.Framework.Internal.Commands.TestMethodCommand:RunNonAsyncTestMethod(ITestExecutionContext)
-NUnit.Framework.Internal.Commands.TestMethodCommand:RunTestMethod(ITestExecutionContext)
-NUnit.Framework.Internal.Commands.TestMethodCommand:Execute(ITestExecutionContext)
-UnityEditor.EditorApplication:Internal_CallUpdateFunctions() (at /home/bokken/build/output/unity/unity/Editor/Mono/EditorApplication.cs:463)
-
-InvalidOperationException: The UNKNOWN_OBJECT_TYPE TimelineIJobEntityTickJobRunner.JobData.Job.__TypeHandle.__Tl_Unity_TimelineComponent_RW_ComponentTypeHandle has not been assigned or constructed. All containers must be valid when scheduling a job.
-Unity.Jobs.LowLevel.Unsafe.JobsUtility.Schedule (Unity.Jobs.LowLevel.Unsafe.JobsUtility+JobScheduleParameters& parameters) (at <4ef39f61e4ad42d39c0e572b9ed66101>:0)
-Unity.Entities.JobChunkExtensions.ScheduleInternal[T] (T& jobData, Unity.Entities.EntityQuery query, Unity.Jobs.JobHandle dependsOn, Unity.Jobs.LowLevel.Unsafe.ScheduleMode mode, Unity.Collections.NativeArray`1[T] chunkBaseEntityIndices) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/IJobChunk.cs:327)
-Unity.Entities.JobChunkExtensions.Schedule[T] (T jobData, Unity.Entities.EntityQuery query, Unity.Jobs.JobHandle dependsOn) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/IJobChunk.cs:134)
-Tl.Unity.Tests.TimelineIJobEntityCoordinatorSystem.OnUpdate (Unity.Entities.SystemState& state) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:146)
-Tl.Unity.Tests.TimelineIJobEntityCoordinatorSystem.__codegen__OnUpdate (System.IntPtr self, System.IntPtr state) (at <c7a80d1de8bd44b39e6a12b94ea840b3>:0)
-Unity.Entities.SystemBaseRegistry+<>c__DisplayClass10_0.<SelectBurstFn>b__0 (System.IntPtr system, System.IntPtr state) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:242)
-UnityEngine.Debug:LogException(Exception)
-Unity.Debug:LogException(Exception) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/Stubs/Unity/Debug.cs:17)
-Unity.Entities.<>c__DisplayClass10_0:<SelectBurstFn>b__0(IntPtr, IntPtr) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:246)
-Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:wrapper_native_indirect_0x555ecc1a4da8(IntPtr&, Void*)
-Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:Invoke(Void*)
-Unity.Entities.WorldUnmanagedImpl:UnmanagedUpdate(Void*)
-Unity.Entities.WorldUnmanagedImpl:UpdateSystem(SystemHandle) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/WorldUnmanaged.cs:942)
-Unity.Entities.ComponentSystemGroup:UpdateAllSystems() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSystemGroup.cs:726)
-Unity.Entities.ComponentSystemGroup:OnUpdate() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSystemGroup.cs:688)
-Unity.Entities.SystemBase:Update() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBase.cs:205)
-Tl.Unity.Tests.IJobEntityParityTests:Tick(UInt32, Int32, Boolean) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:225)
-Tl.Unity.Tests.IJobEntityParityTests:IJobEntityArmMatchesManagedArmForwardAndBackward() (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:266)
-System.Reflection.MethodBase:Invoke(Object, Object[])
-NUnit.Framework.Internal.Reflect:InvokeMethod(MethodInfo, Object, Object[])
-NUnit.Framework.Internal.MethodWrapper:Invoke(Object, Object[])
-NUnit.Framework.Internal.Commands.TestMethodCommand:RunNonAsyncTestMethod(ITestExecutionContext)
-NUnit.Framework.Internal.Commands.TestMethodCommand:RunTestMethod(ITestExecutionContext)
-NUnit.Framework.Internal.Commands.TestMethodCommand:Execute(ITestExecutionContext)
-UnityEditor.EditorApplication:Internal_CallUpdateFunctions() (at /home/bokken/build/output/unity/unity/Editor/Mono/EditorApplication.cs:463)
-
-]]></output>
-              </test-case>
-              <test-case id="1020" name="IJobEntityDerivedQueryAppliesEligibilityPolicy" fullname="Tl.Unity.Tests.IJobEntityParityTests.IJobEntityDerivedQueryAppliesEligibilityPolicy" methodname="IJobEntityDerivedQueryAppliesEligibilityPolicy" classname="Tl.Unity.Tests.IJobEntityParityTests" runstate="Runnable" seed="1374187385" result="Failed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.002581" asserts="0">
-                <properties>
-                  <property name="retryIteration" value="0" />
-                  <property name="repeatIteration" value="0" />
-                </properties>
-                <failure>
-                  <message><![CDATA[  the derived query scheduled only the eligible row
-  Expected: 2
-  But was:  0
-]]></message>
-                  <stack-trace><![CDATA[at Tl.Unity.Tests.IJobEntityParityTests.IJobEntityDerivedQueryAppliesEligibilityPolicy () [0x0004e] in /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:292
-]]></stack-trace>
-                </failure>
-                <output><![CDATA['Tl.Unity.Tests.TimelineIJobEntityCoordinatorSystem' creates a type handle during OnUpdate. Please create the type handle in OnCreate instead and use type `_MyHandle.Update(ref systemState);` in OnUpdate to keep it up to date instead. This is significantly faster.
-InvalidOperationException: The UNKNOWN_OBJECT_TYPE TimelineIJobEntityTickJobRunner.JobData.Job.__TypeHandle.__Tl_Unity_TimelineComponent_RW_ComponentTypeHandle has not been assigned or constructed. All containers must be valid when scheduling a job.
-Unity.Jobs.LowLevel.Unsafe.JobsUtility.Schedule (Unity.Jobs.LowLevel.Unsafe.JobsUtility+JobScheduleParameters& parameters) (at <4ef39f61e4ad42d39c0e572b9ed66101>:0)
-Unity.Entities.JobChunkExtensions.ScheduleInternal[T] (T& jobData, Unity.Entities.EntityQuery query, Unity.Jobs.JobHandle dependsOn, Unity.Jobs.LowLevel.Unsafe.ScheduleMode mode, Unity.Collections.NativeArray`1[T] chunkBaseEntityIndices) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/IJobChunk.cs:327)
-Unity.Entities.JobChunkExtensions.Schedule[T] (T jobData, Unity.Entities.EntityQuery query, Unity.Jobs.JobHandle dependsOn) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/IJobChunk.cs:134)
-Tl.Unity.Tests.TimelineIJobEntityCoordinatorSystem.OnUpdate (Unity.Entities.SystemState& state) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:146)
-Tl.Unity.Tests.TimelineIJobEntityCoordinatorSystem.__codegen__OnUpdate (System.IntPtr self, System.IntPtr state) (at <c7a80d1de8bd44b39e6a12b94ea840b3>:0)
-Unity.Entities.SystemBaseRegistry+<>c__DisplayClass10_0.<SelectBurstFn>b__0 (System.IntPtr system, System.IntPtr state) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:242)
-UnityEngine.Debug:LogException(Exception)
-Unity.Debug:LogException(Exception) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/Stubs/Unity/Debug.cs:17)
-Unity.Entities.<>c__DisplayClass10_0:<SelectBurstFn>b__0(IntPtr, IntPtr) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:246)
-Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:wrapper_native_indirect_0x555ecc1a4da8(IntPtr&, Void*)
-Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:Invoke(Void*)
-Unity.Entities.WorldUnmanagedImpl:UnmanagedUpdate(Void*)
-Unity.Entities.WorldUnmanagedImpl:UpdateSystem(SystemHandle) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/WorldUnmanaged.cs:942)
-Unity.Entities.ComponentSystemGroup:UpdateAllSystems() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSystemGroup.cs:726)
-Unity.Entities.ComponentSystemGroup:OnUpdate() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/ComponentSystemGroup.cs:688)
-Unity.Entities.SystemBase:Update() (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBase.cs:205)
-Tl.Unity.Tests.IJobEntityParityTests:Tick(UInt32, Int32, Boolean) (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:225)
-Tl.Unity.Tests.IJobEntityParityTests:IJobEntityDerivedQueryAppliesEligibilityPolicy() (at /home/i/GitHub/tl.unity/com.iafahim.tl/Tests/IJobEntityParityTests.cs:289)
-System.Reflection.MethodBase:Invoke(Object, Object[])
-NUnit.Framework.Internal.Reflect:InvokeMethod(MethodInfo, Object, Object[])
-NUnit.Framework.Internal.MethodWrapper:Invoke(Object, Object[])
-NUnit.Framework.Internal.Commands.TestMethodCommand:RunNonAsyncTestMethod(ITestExecutionContext)
-NUnit.Framework.Internal.Commands.TestMethodCommand:RunTestMethod(ITestExecutionContext)
-NUnit.Framework.Internal.Commands.TestMethodCommand:Execute(ITestExecutionContext)
-UnityEditor.EditorApplication:Internal_CallUpdateFunctions() (at /home/bokken/build/output/unity/unity/Editor/Mono/EditorApplication.cs:463)
-
-]]></output>
-              </test-case>
-            </test-suite>
-            <test-suite type="TestFixture" id="1008" name="ManagedEligibilityTests" fullname="Tl.Unity.Tests.ManagedEligibilityTests" classname="Tl.Unity.Tests.ManagedEligibilityTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.002037" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
-              <properties />
-              <test-case id="1011" name="AllRowsExcludedIsObservableNoMatchNotConcealment" fullname="Tl.Unity.Tests.ManagedEligibilityTests.AllRowsExcludedIsObservableNoMatchNotConcealment" methodname="AllRowsExcludedIsObservableNoMatchNotConcealment" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="1289400234" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.000421" asserts="0">
-                <properties>
-                  <property name="retryIteration" value="0" />
-                  <property name="repeatIteration" value="0" />
-                </properties>
-              </test-case>
-              <test-case id="1009" name="DisabledMandatoryColumnExcludesRowBeforeTick" fullname="Tl.Unity.Tests.ManagedEligibilityTests.DisabledMandatoryColumnExcludesRowBeforeTick" methodname="DisabledMandatoryColumnExcludesRowBeforeTick" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="448554883" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.000306" asserts="0">
-                <properties>
-                  <property name="retryIteration" value="0" />
-                  <property name="repeatIteration" value="0" />
-                </properties>
-              </test-case>
-              <test-case id="1012" name="DisabledRowInsideSharedChunkSplitsEligibleRuns" fullname="Tl.Unity.Tests.ManagedEligibilityTests.DisabledRowInsideSharedChunkSplitsEligibleRuns" methodname="DisabledRowInsideSharedChunkSplitsEligibleRuns" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="1296686786" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.000269" asserts="0">
-                <properties>
-                  <property name="retryIteration" value="0" />
-                  <property name="repeatIteration" value="0" />
-                </properties>
-              </test-case>
-              <test-case id="1010" name="RemovedMandatoryColumnExcludesRowWithoutPartialExecution" fullname="Tl.Unity.Tests.ManagedEligibilityTests.RemovedMandatoryColumnExcludesRowWithoutPartialExecution" methodname="RemovedMandatoryColumnExcludesRowWithoutPartialExecution" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="204882055" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.000263" asserts="0">
+              <test-case id="1010" name="UnmanagedSeamDispatchRemainsCorrectUnderManagedCaller" fullname="Tl.Unity.Tests.BurstOracleTests.UnmanagedSeamDispatchRemainsCorrectUnderManagedCaller" methodname="UnmanagedSeamDispatchRemainsCorrectUnderManagedCaller" classname="Tl.Unity.Tests.BurstOracleTests" runstate="Runnable" seed="1622780063" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.000498" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
             </test-suite>
-            <test-suite type="TestFixture" id="1023" name="OracleTests" fullname="Tl.Unity.Tests.OracleTests" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.005788" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <test-suite type="TestFixture" id="1013" name="ManagedEligibilityTests" fullname="Tl.Unity.Tests.ManagedEligibilityTests" classname="Tl.Unity.Tests.ManagedEligibilityTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.001990" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
               <properties />
-              <test-case id="1024" name="BakedPairKeysMatchUnityRuntimeKeys" fullname="Tl.Unity.Tests.OracleTests.BakedPairKeysMatchUnityRuntimeKeys" methodname="BakedPairKeysMatchUnityRuntimeKeys" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="869347645" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.001036" asserts="0">
+              <test-case id="1016" name="AllRowsExcludedIsObservableNoMatchNotConcealment" fullname="Tl.Unity.Tests.ManagedEligibilityTests.AllRowsExcludedIsObservableNoMatchNotConcealment" methodname="AllRowsExcludedIsObservableNoMatchNotConcealment" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="1190928409" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.000365" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1028" name="ConsumerExceptionLeavesPrefixAndNoCommit" fullname="Tl.Unity.Tests.OracleTests.ConsumerExceptionLeavesPrefixAndNoCommit" methodname="ConsumerExceptionLeavesPrefixAndNoCommit" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="585135810" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.002287" asserts="0">
+              <test-case id="1014" name="DisabledMandatoryColumnExcludesRowBeforeTick" fullname="Tl.Unity.Tests.ManagedEligibilityTests.DisabledMandatoryColumnExcludesRowBeforeTick" methodname="DisabledMandatoryColumnExcludesRowBeforeTick" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="261322245" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.000295" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1017" name="DisabledRowInsideSharedChunkSplitsEligibleRuns" fullname="Tl.Unity.Tests.ManagedEligibilityTests.DisabledRowInsideSharedChunkSplitsEligibleRuns" methodname="DisabledRowInsideSharedChunkSplitsEligibleRuns" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="1879520310" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.000266" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1015" name="RemovedMandatoryColumnExcludesRowWithoutPartialExecution" fullname="Tl.Unity.Tests.ManagedEligibilityTests.RemovedMandatoryColumnExcludesRowWithoutPartialExecution" methodname="RemovedMandatoryColumnExcludesRowWithoutPartialExecution" classname="Tl.Unity.Tests.EligibilityPolicyTests" runstate="Runnable" seed="90266487" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.000264" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+            <test-suite type="TestFixture" id="1023" name="OracleTests" fullname="Tl.Unity.Tests.OracleTests" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.005998" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1024" name="BakedPairKeysMatchUnityRuntimeKeys" fullname="Tl.Unity.Tests.OracleTests.BakedPairKeysMatchUnityRuntimeKeys" methodname="BakedPairKeysMatchUnityRuntimeKeys" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="444021307" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.001053" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1028" name="ConsumerExceptionLeavesPrefixAndNoCommit" fullname="Tl.Unity.Tests.OracleTests.ConsumerExceptionLeavesPrefixAndNoCommit" methodname="ConsumerExceptionLeavesPrefixAndNoCommit" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="1210025985" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.002392" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
@@ -411,7 +163,7 @@ Unity.Entities.SystemBaseRegistry+<>c__DisplayClass10_0.<SelectBurstFn>b__0 (Sys
 UnityEngine.Debug:LogException(Exception)
 Unity.Debug:LogException(Exception) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/Stubs/Unity/Debug.cs:17)
 Unity.Entities.<>c__DisplayClass10_0:<SelectBurstFn>b__0(IntPtr, IntPtr) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/SystemBaseRegistry.cs:246)
-Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:wrapper_native_indirect_0x555ecc1a4da8(IntPtr&, Void*)
+Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:wrapper_native_indirect_0x55a4ac315068(IntPtr&, Void*)
 Unity.Entities.UnmanagedUpdate_00001622$BurstDirectCall:Invoke(Void*)
 Unity.Entities.WorldUnmanagedImpl:UnmanagedUpdate(Void*)
 Unity.Entities.WorldUnmanagedImpl:UpdateSystem(SystemHandle) (at ./Library/PackageCache/com.unity.entities@f1c61260f7c9/Unity.Entities/WorldUnmanaged.cs:942)
@@ -430,28 +182,60 @@ UnityEditor.EditorApplication:Internal_CallUpdateFunctions() (at /home/bokken/bu
 
 ]]></output>
               </test-case>
-              <test-case id="1027" name="TickExecutesAuthoredOrderAndMirroredConsumers" fullname="Tl.Unity.Tests.OracleTests.TickExecutesAuthoredOrderAndMirroredConsumers" methodname="TickExecutesAuthoredOrderAndMirroredConsumers" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="1998297987" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.000528" asserts="0">
+              <test-case id="1027" name="TickExecutesAuthoredOrderAndMirroredConsumers" fullname="Tl.Unity.Tests.OracleTests.TickExecutesAuthoredOrderAndMirroredConsumers" methodname="TickExecutesAuthoredOrderAndMirroredConsumers" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="139817565" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.000562" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1025" name="TickMatchesMovementOracleForwardAndBackward" fullname="Tl.Unity.Tests.OracleTests.TickMatchesMovementOracleForwardAndBackward" methodname="TickMatchesMovementOracleForwardAndBackward" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="322535185" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.000516" asserts="0">
+              <test-case id="1025" name="TickMatchesMovementOracleForwardAndBackward" fullname="Tl.Unity.Tests.OracleTests.TickMatchesMovementOracleForwardAndBackward" methodname="TickMatchesMovementOracleForwardAndBackward" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="1574861041" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.000538" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
               </test-case>
-              <test-case id="1026" name="TickResolvesBlendsOncePerVisitedFrame" fullname="Tl.Unity.Tests.OracleTests.TickResolvesBlendsOncePerVisitedFrame" methodname="TickResolvesBlendsOncePerVisitedFrame" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="175754218" result="Passed" start-time="2026-09-13 00:06:49Z" end-time="2026-09-13 00:06:49Z" duration="0.000600" asserts="0">
+              <test-case id="1026" name="TickResolvesBlendsOncePerVisitedFrame" fullname="Tl.Unity.Tests.OracleTests.TickResolvesBlendsOncePerVisitedFrame" methodname="TickResolvesBlendsOncePerVisitedFrame" classname="Tl.Unity.Tests.OracleTests" runstate="Runnable" seed="1991447200" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.000597" asserts="0">
                 <properties>
                   <property name="retryIteration" value="0" />
                   <property name="repeatIteration" value="0" />
                 </properties>
-                <output><![CDATA[Saving results to: /home/i/.config/unity3d/DefaultCompany/Tl.Unity.Project/TestResults.xml
-]]></output>
               </test-case>
             </test-suite>
           </test-suite>
+        </test-suite>
+      </test-suite>
+      <test-suite type="TestSuite" id="1030" name="TlUnityJobs" fullname="TlUnityJobs" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.015280" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestFixture" id="1004" name="DelayedDependencyTests" fullname="TlUnityJobs.DelayedDependencyTests" classname="TlUnityJobs.DelayedDependencyTests" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.010824" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-case id="1005" name="DelayedSelectionDependencyBlocksCommitUntilCompletion" fullname="TlUnityJobs.DelayedDependencyTests.DelayedSelectionDependencyBlocksCommitUntilCompletion" methodname="DelayedSelectionDependencyBlocksCommitUntilCompletion" classname="TlUnityJobs.DelayedDependencyTests" runstate="Runnable" seed="1521808354" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.010352" asserts="0">
+            <properties>
+              <property name="retryIteration" value="0" />
+              <property name="repeatIteration" value="0" />
+            </properties>
+            <output><![CDATA['TlUnityJobs.TimelineIJobEntityCoordinatorSystem' creates a type handle during OnUpdate. Please create the type handle in OnCreate instead and use type `_MyHandle.Update(ref systemState);` in OnUpdate to keep it up to date instead. This is significantly faster.
+]]></output>
+          </test-case>
+        </test-suite>
+        <test-suite type="TestFixture" id="1001" name="IJobEntityParityTests" fullname="TlUnityJobs.IJobEntityParityTests" classname="TlUnityJobs.IJobEntityParityTests" runstate="Runnable" testcasecount="2" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.004216" total="2" passed="2" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-case id="1002" name="IJobEntityArmMatchesManagedArmForwardAndBackward" fullname="TlUnityJobs.IJobEntityParityTests.IJobEntityArmMatchesManagedArmForwardAndBackward" methodname="IJobEntityArmMatchesManagedArmForwardAndBackward" classname="TlUnityJobs.IJobEntityParityTests" runstate="Runnable" seed="224936333" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.001979" asserts="0">
+            <properties>
+              <property name="retryIteration" value="0" />
+              <property name="repeatIteration" value="0" />
+            </properties>
+            <output><![CDATA['TlUnityJobs.TimelineIJobEntityCoordinatorSystem' creates a type handle during OnUpdate. Please create the type handle in OnCreate instead and use type `_MyHandle.Update(ref systemState);` in OnUpdate to keep it up to date instead. This is significantly faster.
+]]></output>
+          </test-case>
+          <test-case id="1003" name="IJobEntityDerivedQueryAppliesEligibilityPolicy" fullname="TlUnityJobs.IJobEntityParityTests.IJobEntityDerivedQueryAppliesEligibilityPolicy" methodname="IJobEntityDerivedQueryAppliesEligibilityPolicy" classname="TlUnityJobs.IJobEntityParityTests" runstate="Runnable" seed="2023441544" result="Passed" start-time="2026-09-13 02:07:07Z" end-time="2026-09-13 02:07:07Z" duration="0.001546" asserts="0">
+            <properties>
+              <property name="retryIteration" value="0" />
+              <property name="repeatIteration" value="0" />
+            </properties>
+            <output><![CDATA['TlUnityJobs.TimelineIJobEntityCoordinatorSystem' creates a type handle during OnUpdate. Please create the type handle in OnCreate instead and use type `_MyHandle.Update(ref systemState);` in OnUpdate to keep it up to date instead. This is significantly faster.
+Saving results to: /home/i/.config/unity3d/DefaultCompany/Tl.Unity.Project/TestResults.xml
+]]></output>
+          </test-case>
         </test-suite>
       </test-suite>
     </test-suite>

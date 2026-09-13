@@ -44,7 +44,7 @@ namespace TlUnityJobs
     }
 }
 
-namespace Tl.Unity.Tests
+namespace TlUnityJobs
 {
 
 public struct TimelineGateJob : IJob
@@ -74,6 +74,7 @@ public struct TimelineObserveTickJob : IJobChunk
 
 [DisableAutoCreation]
 [UpdateInGroup(typeof(TimelineSystemGroup))]
+[UpdateAfter(typeof(TimelineIJobEntityCoordinatorSystem))]
 public partial class TimelineObserveSystem : SystemBase
 {
     public NativeArray<float> Captured;
@@ -89,7 +90,7 @@ public partial class TimelineObserveSystem : SystemBase
         {
             Captured = Captured,
             HealthHandle = GetComponentTypeHandle<Health>(true),
-        }.Schedule(_health, Dependency);
+        }.Schedule(_health, JobHandle.CombineDependencies(Dependency, TimelineIJobEntityCoordinatorSystem.LastSelection));
 }
 
 [DisableAutoCreation]
@@ -97,6 +98,7 @@ public partial class TimelineObserveSystem : SystemBase
 public unsafe partial struct TimelineIJobEntityCoordinatorSystem : ISystem
 {
     public static JobHandle Gate;
+    public static JobHandle LastSelection;
 
     private EntityQuery _rows;
     private EntityQuery _clock;
@@ -104,9 +106,9 @@ public unsafe partial struct TimelineIJobEntityCoordinatorSystem : ISystem
 
     public void OnCreate(ref SystemState state)
     {
-        _rows = state.GetEntityQuery(ComponentType.ReadWrite<TimelineComponent>());
+        _rows = state.GetEntityQuery(ComponentType.ReadWrite<UnityRow>());
         _clock = state.GetEntityQuery(ComponentType.ReadOnly<TimelineClock>());
-        _derived = state.GetEntityQuery(ComponentType.ReadWrite<TimelineComponent>(), ComponentType.ReadWrite<Health>());
+        _derived = state.GetEntityQuery(ComponentType.ReadWrite<UnityRow>(), ComponentType.ReadWrite<Health>());
     }
 
     public void OnUpdate(ref SystemState state)
@@ -127,6 +129,7 @@ public unsafe partial struct TimelineIJobEntityCoordinatorSystem : ISystem
             Delta = clock.Delta,
             HealthKey = TimelineEcs.ComponentKey<Health>(),
         }.Schedule(_derived, selection);
+        LastSelection = state.Dependency;
     }
 }
 
@@ -318,6 +321,7 @@ public sealed class DelayedDependencyTests
         TimelineEligibility.Reset();
         TimelineGateJob.Release = 0;
         TimelineIJobEntityCoordinatorSystem.Gate = default;
+        TimelineIJobEntityCoordinatorSystem.LastSelection = default;
         _gate = default;
         _observed = new NativeArray<float>(1, Allocator.Persistent);
         _captured = new NativeArray<float>(1, Allocator.Persistent);
