@@ -1,181 +1,108 @@
-# WORK-REPORT — R17: eligibility/diagnostic policy + remaining gate-5 receipts
+# WORK-REPORT — R17b: finish gate-5 (split-run receipt, IJobEntity parity + delayed jobs)
 
-**Status: PARTIAL** (Phases 0 and 1 complete and green; Phase 2 harness written but
-not green within the 90-minute box — committed as a clearly labeled WIP checkpoint
-with an exact resume point)
+**Status: PARTIAL** — Part 1 (split-run receipt) is complete and green as commit
+`a1bc696`. Part 2 (IJobEntity parity + delayed jobs) is a compiling harness whose
+three receipts are still red; it is committed as a clearly labeled WIP checkpoint
+`56ba086` with the exact resume point. The time-box was exceeded during the last
+red/green cycles, so per loop protocol this report is filed now.
 
 Repository: `/home/i/GitHub/tl.unity` (standalone local repo; deliverable = local
-commits on `main`). Session: 2026-09-13, 04:15–05:50 +06:00. No pushes, no network
-calls, nothing outside this repo was written (the tl-56 worktree was only read via
-`git show`).
+commits on `main`). Session 2026-09-13, ~05:05–07:20 +06:00. No pushes, no network
+calls, nothing written outside this repository.
 
-## Final commit chain
+## Commit chain
 
 | Commit | Subject | Result |
 |---|---|---|
-| `946492b` | Refresh external tl snapshot to 323c85a | Phase 0, green (11/11, exit 0) |
-| `ead1b5b` | Adopt host-side eligibility and diagnostic policy | Phase 1, green (17 passed / 0 failed / 2 skipped Explicit, exit 0) |
-| *(final)* | Record R17 work report + Phase 2 WIP checkpoint | report + WIP harness |
+| `a1bc696` | Fix split-run column bases and prove the receipt un-skipped | Part 1 GREEN: 19 passed / 0 failed / 0 skipped, exit 0, `error CS`=0 |
+| `56ba086` | Checkpoint: Phase 2 IJobEntity harness compiles, receipts still red | Part 2 WIP: 19 passed / 3 failed, exit 2; production runtime code unchanged from `a1bc696` |
+| *(final)* | Record R17b work report | this file |
 
-## Phase 0 — snapshot refresh (complete)
+## Part 1 — `DisabledRowInsideSharedChunkSplitsEligibleRuns` (COMPLETE, GREEN)
 
-- Per-file diff of `external/tl` against tl@`323c85a`: only
-  `Tl.Core/Kernels.cs` differs. It gains the phase-2 seam: `Chain` takes an
-  `int* scratch` borrowed per execute instead of `stackalloc` per occurrence
-  and is now `[MethodImpl(AggressiveInlining)]`; the reverse path streams
-  through the scratch, the forward path walks the chain directly. All other
-  Tl.Core, Tl.Compiler, and Tl.Gen.CSharp sources are byte-identical between
-  `bd3c3ca` and `323c85a` (verified per file; the only other tl diffs are
-  generated kernels, docs, and tooling outside the snapshot).
-- `com.iafahim.tl/Runtime/Data.cs` vs `323c85a:src/Tl.Core/Data.cs` remains
-  exactly the four documented R16 divergence hunks (9 changed lines:
-  `307c307` Cdecl, `317a318-320` explicit-table `TickUnmanaged` overload,
-  `657c660` Cdecl, `669c672` Cdecl). No touched region shifted; nothing
-  re-applied.
-- Receipts: `dotnet build tools/TlBakeShim/TlBakeShim.csproj -c Release` →
-  exit 0, 0 warnings; Unity 6000.7.0a5 EditMode suite → **11/11 passed,
-  0 failed, UNITY_EXIT=0** (run at 2026-09-12 21:0xZ).
+Un-skipped the test in `com.iafahim.tl/Tests/EligibilityTests.cs` and fixed two
+real host-side bugs; policy and `Data.cs` untouched.
 
-## Phase 1 — eligibility/diagnostic policy (complete)
+1. **Base-list stride mismatch.** Both run consumers indexed the shared column
+   base list with stride `TimelineEcs.ColumnLimit` (4) while `Emit` appends
+   `columnCount` (1 here) entries per run. Managed arm read `bases[4]` of a
+   2-entry list (indexer throw after 2 records); Burst arm read an unchecked
+   out-of-bounds pointer. Fix: managed coordinator strides by `columnCount`;
+   `TimelineUnmanagedTickJob` strides by `KeyCount` (identical value).
+2. **Column bases not offset per run.** Ticks pass span-relative row indices to
+   consumers while the consumers index chunk-base pointers, so a run starting at
+   chunk row N executed its consumers against rows `[0..count)` of the chunk
+   (observed after fix 1: the excluded-middle test wrote the first row's Health
+   twice — 330 vs 165 — on both arms). Fix: `Emit` now offsets each run's column
+   base by `startRow * elementSize`; `ColumnEntry` carries the element size
+   captured at registration via `sizeof(T)`.
 
-Policy text lives in `README.md` ("Eligibility and diagnostic policy (Unity
-adapter)"); the integrator lifts it into the tl contract doc. Summary:
+Receipts (`tests/Tl.Unity.DataAuthored/test-results.editmode.xml`, run at
+2026-09-12T23:20:41Z): `result=Passed total=19 passed=19 failed=0 skipped=0`,
+`UNITY_EXIT=0`, `error CS` count in log = 0. The split-run receipt passes on BOTH
+the managed and Burst coordinator arms; all six BurstOracle and five OracleTests
+remain green.
 
-1. Candidate rows are all `TimelineComponent` entities. The coordinator row
-   query is now `TimelineComponent`-only, so an entity that loses a mandatory
-   column stays visible to the coordinator instead of silently vanishing from
-   an all-in-one query (this is the concealment fix).
-2. Presence is chunk-uniform: a chunk whose archetype lacks a registered
-   mandatory column excludes every row in it with reason
-   `MissingMandatoryColumn`, before any effect.
-3. Enabled masks: per-row enabled bits of enableable mandatory columns are
-   read on the main thread before scheduling (`Host-owned mask read`);
-   present-but-disabled rows are excluded with `DisabledMandatoryColumn`.
-4. Exclusion is a total no-op: no consumer executes, no movement commits
-   (column values, `Position`, `Cycle` untouched); other eligible rows still
-   execute.
-5. Eligibility resolves host-side before job scheduling: excluded rows never
-   enter the job's row list — the host emits one entry per maximal contiguous
-   eligible run and the Burst job `Execute` body is unchanged code over that
-   list (job diff vs R16 = two field declarations only). No eligibility logic
-   exists inside the job.
-6. No concealment: every exclusion is recorded into the preallocated
-   `TimelineEligibility` sink (entity, chunk index, row index, reason); a
-   no-match iteration is always explainable (consumer record sink = what
-   executed, exclusion sink = why the rest did not). Capacity exhaustion
-   throws rather than truncating.
-7. Allocation: resolution runs on the main thread with unmanaged temporaries
-   plus the preallocated sinks; the warm path adds no managed allocation.
-   Exclusions are cleared and re-evaluated every coordinator update.
+## Part 2 — IJobEntity parity + delayed jobs (WIP, exact resume point inside)
 
-Production files: new `com.iafahim.tl/Runtime/TimelineEligibility.cs` (+meta:
-sink, `Resolve`, public `RecordExclusions(ref SystemState, EntityQuery)` for
-query-driven arms); `TimelineCoordinator.cs` (row-only queries,
-`TimelineEcs.EnableableColumn<T>` seam with per-column `Enabled` fn-ptr via
-`EnableableColumnAccess<T>`, both coordinators iterate host-resolved runs);
-`TimelineBurst.cs` (host resolves runs, copies them into exactly-sized
-`Allocator.TempJob` arrays; job `Execute` byte-identical); `Domain.cs`
-(`Health : IComponentData, IEnableableComponent`).
+Followed `tests/Tl.Unity.DataAuthored/WIP/README.txt`: copied the harness into
+`com.iafahim.tl/Tests/`, then red/greened through Unity runs 3–8 (logs
+`/tmp/tl-unity-editmode-r17b-run3..8.log`). The R17 "generator skips the job"
+issue turned out to be three stacked, independently reproducible causes:
 
-Phase 1 receipts (Unity 6000.7.0a5, EditMode, committed in
-`tests/Tl.Unity.DataAuthored/test-results.editmode.xml`): `result="Passed"
-total=19 passed=17 failed=0 skipped=2`, `CS_ERRORS=0`, exit 0. Green on BOTH
-the managed and Burst coordinator arms: disabled-mask exclusion (disabled
-row's column and position untouched, enabled row executes, exactly one
-recorded exclusion with entity+reason), removed-column exclusion without
-partial execution or commit, all-rows-excluded observable no-match plus
-per-tick re-evaluation after re-enable. All six BurstOracle parity tests and
-five OracleTests remain green.
+1. **File-scoped namespaces break the JobEntityGenerator's injection.** Its
+   `GetBaseDeclaration` only walks `SyntaxKind.NamespaceDeclaration`; with
+   `namespace X;` the injected partial lands in the global namespace and the job
+   never gains `IJobChunk`/`__TypeHandle` (CS0426/CS0315/CS1061 at the generated
+   Schedule extensions). Block-scoping the namespace fixed injection.
+2. **`Tl.Unity` shadows unqualified `Unity.Entities` inside generated code**
+   (CS0234 "'Entities' does not exist in 'Tl.Unity'"): the generator emits
+   unqualified `Unity.*` references, and enclosing namespace `Tl` contains our
+   runtime namespace `Tl.Unity`. Hosting the IJobEntity in top-level namespace
+   `TlUnityJobs` fixed resolution.
+3. **Editor 6000.7.0a5 binary/source drift:** the prebuilt `Unity.Entities`
+   binary lacks `ComponentSystemBase.OnCreateForCompiler()` while the shipped
+   SystemGenerator emits `protected override` for SystemBase systems with
+   rewritten bodies (CS0115). Durable consequence: any SystemBase here must stay
+   free of SystemAPI-rewritten constructs. `TimelineObserveSystem` uses an
+   IJobChunk observe job and passes.
 
-Two test-infrastructure defects were found and fixed on the way (recorded in
-the commit body):
+The harness in `com.iafahim.tl/Tests/IJobEntityParityTests.cs` now compiles
+(`error CS`=0 in run 8) and all 19 pre-existing tests stay green. Receipt 1/2
+scheduling deviates from the brief: the IJobEntity struct is genuine and its
+injection succeeds, but the coordinator schedules a hand-written
+generator-equivalent runner (`TimelineIJobEntityTickJobRunner : IJobChunk`,
+masked Execute, per-row enableable skip, calls the IJobEntity `Execute` per row)
+over a query derived from the Execute signature, because the generated
+query-less Schedule path could not be proven within the box.
 
-- `BurstArms.Install()` is now idempotent: `UnmanagedTable.Install` PREPENDS
-  a chain node, so a second test fixture calling Install appended a second
-  Alpha consumer and doubled every record (8 vs 4) and every health
-  contribution (330 vs 165). Durable note for future fixtures: install
-  consumer chains once per process.
-- Eligibility fixtures must touch `TimelineConsumers` before coordinator
-  creation: its static constructor registers the columns and must run before
-  `TimelineEcs.Seal()`; a fixture that never touched the type poisoned the
-  initializer domain-wide (all 19 tests failing with
-  "Timeline columns are sealed after coordinator creation").
+Remaining reds and next actions (all in one Unity run):
 
-Skipped (Explicit, the one open Phase 1 item and first resume point):
-`DisabledRowInsideSharedChunkSplitsEligibleRuns` — with rows [eligible,
-disabled, eligible] the run after the excluded row records no frames
-(managed arm: 2 records, expected 4; burst arm showed 3 during the
-double-install noise, needs one clean live cycle). The emit logic traces
-correct by hand; the failure is real and needs one diagnosis run.
+- `IJobEntityArmMatchesManagedArmForwardAndBackward` +
+  `IJobEntityDerivedQueryAppliesEligibilityPolicy`: the runner arm records 0.
+  The identical runner recorded 2 and committed correctly inside
+  `DelayedSelectionDependencyBlocksCommitUntilCompletion` in the same run —
+  bisect the fixture delta: parity/policy fixtures also create the managed
+  group (`TimelineEcs.CreateGroup`) in the same world and schedule with
+  `selection = state.Dependency` (default), while delayed schedules with a
+  non-default combined dependency and no managed group.
+- `DelayedSelectionDependencyBlocksCommitUntilCompletion`: the test body passes
+  completely (no early commit, exactly-once commit, pre-tick observed value,
+  chained observe read) but TearDown fails: the dependency manager still holds
+  the gate job's `HealthHandle` registration at world dispose. Keep the
+  `ScheduleGate` JobHandle and `Complete()` it explicitly after release, or
+  route the gate through `_observe.Dependency`.
+- Then: delete `tests/Tl.Unity.DataAuthored/WIP/`, commit the Phase 2 atom.
 
-## Phase 2 — IJobEntity parity + delayed jobs (NOT green: harness shelved)
+## Validation performed
 
-The full harness is written and committed as a WIP checkpoint at
-`tests/Tl.Unity.DataAuthored/WIP/` (sibling of `Assets/`, not compiled by
-Unity): `IJobEntityParityTests.cs` + `README.txt` resume instructions.
-
-Harness design (receipts it will produce once compiling):
-
-1. `TimelineIJobEntityTickJob : IJobEntity` — Unity derives the query from
-   `Execute(ref TimelineComponent row, ref Health health)`; the body drives
-   the same unmanaged seam (`Tl.Timeline.TickUnmanaged` per row, Burst
-   consumers), so records must match the direct/Burst arms over the
-   forward+mirrored-backward window 100,101,102,103(-3) on fixture_a.
-2. `TimelineIJobEntityCoordinatorSystem : ISystem` — completes the previous
-   dependency, records host-side exclusions via the public
-   `TimelineEligibility.RecordExclusions` walk, consumes an optional
-   `Gate` JobHandle, schedules the consumer with the combined selection
-   dependency, and publishes the result through `state.Dependency` (the
-   contract's supply/collect/combine idiom).
-3. `TimelineIJobEntityDerivedQueryAppliesEligibilityPolicy` — proves the
-   derived query's default enableable filtering enforces the same policy
-   (disabled row untouched, exclusion recorded host-side), plus the
-   removed-column case.
-4. `DelayedSelectionDependencyBlocksCommitUntilCompletion` — a gate job holds
-   an in-flight `ReadOnly` read of Health and spins on a volatile flag;
-   while the selection dependency is incomplete the record sink must be
-   empty (no early overwrite or commit); after release the commit lands
-   exactly once (2 records, 165f, position 3); the gate's captured value
-   stays the pre-tick 0f; the observe stage chained on the published
-   dependency reads the committed 165f.
-
-Known compile issues already fixed in the WIP copy (evidence: two Unity runs):
-
-- `ComponentSystem` does not exist in Entities `6.7.0` (f1c61260f7c9) —
-  `TimelineObserveSystem` derives from `SystemBase`.
-- CS0426 `InternalCompilerQueryAndHandleData` missing: the IJobEntity source
-  generator skipped a job declared `unsafe partial struct`; fix applied =
-  `unsafe` moved to the `Execute` method. If generation still skips it, next
-  suspects (in order): `[BurstCompile]` on an IJobEntity inside this test
-  asmdef, or the `UnityRow` using-alias in the Execute signature (spell
-  `Tl.Unity.TimelineComponent` directly).
-
-Gate item "compiler assemblies stay out of players" (brief item 3): the
-existing check already covers it — `tests/Tl.Unity.Project/Assets/Tests/
-Editor/EditorTests.PlayerGraphContainsRuntimeWithoutCompilerOrRoslyn` forbids
-`Tl.Compiler`, `Tl.Gen`, `Tl.Gen.CSharp`, `Tl.Gen.Unity`, and
-`Microsoft.CodeAnalysis*` in the player assembly graph; `com.iafahim.tl`
-contains no compiler references (grep-verified) and `external/tl` lives
-outside every Unity project. Nothing to extend; state noted here.
-
-## Command log (this session, exact outcomes)
-
-| Command | Result |
-|---|---|
-| Unity EditMode runs (log files `/tmp/tl-unity-editmode-r17-p0..p1i.log`) | p0: 11/11 exit 0; p1a/p1b/p1c: CS0315/CS1615/CS0234 compile errors (TestRunner executed stale assemblies while exiting 0 — logs grepped for `error CS` from then on); p1e: 2 CS errors in the Phase 2 harness only; p1f/p1g: 0 CS, runtime failure (seal order, then Temp-view job registration); p1h: 11/19 (double consumer chain + split-run failure); **p1i: Passed 17 / failed 0 / skipped 2, exit 0** |
-| `dotnet build tools/TlBakeShim/TlBakeShim.csproj -c Release` | exit 0, 0 warnings |
-| `git commit` | `946492b`, `ead1b5b`, final report commit |
-
-## Exact resume point for the next atom
-
-1. Re-unblock `DisabledRowInsideSharedChunkSplitsEligibleRuns` (remove its
-   `[Explicit]` in `com.iafahim.tl/Tests/EligibilityTests.cs`): diagnose why
-   the second eligible run records no frames on the managed arm with rows
-   [eligible, disabled, eligible] in one chunk; single-run and
-   disabled-last configurations are already green.
-2. Phase 2: follow `tests/Tl.Unity.DataAuthored/WIP/README.txt` — copy the
-   harness into `com.iafahim.tl/Tests/`, red/green the IJobEntity generator
-   issue, then commit the Phase 2 atom with the three receipt tests.
-3. Durable constraints honored this session: no `InternalsVisibleTo` from
-   `Tl.Runtime.Unity`; the four `Data.cs` divergence hunks remain the only
-   divergence from the tl snapshot; nothing was pushed.
+- EditMode runs only (per-task scope). Unity 6000.7.0a5 at
+  `/home/i/Unity/Hub/Editor/6000.7.0a5/Editor/Unity`, invocation:
+  `-batchmode -runTests -projectPath …/tests/Tl.Unity.DataAuthored -testResults
+  …/test-results.editmode.xml -testPlatform EditMode -logFile <log>`; every log
+  grepped for `error CS` (0 in runs 2, 7, 8; each earlier red run diagnosed).
+- Production diff vs `a1bc696` (Part 2): empty. `Data.cs` divergence remains
+  exactly the four documented hunks; no `InternalsVisibleTo` added; consumer
+  chains still install once per process; job bodies remain eligibility-free.
+- Deviation note: `NEXT-TASK.md` carries the coordinator's own R17b rewrite as
+  an uncommitted change (pre-existing at session start); left uncommitted.
