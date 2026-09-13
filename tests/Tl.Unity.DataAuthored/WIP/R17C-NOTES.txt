@@ -1,0 +1,37 @@
+R17c checkpoint notes (uncompiled; this directory is a sibling of Assets/).
+
+State at R17c session end (see WORK-REPORT.md at repo root):
+1. Fix 2 (delayed TearDown) applied in com.iafahim.tl/Tests/IJobEntityParityTests.cs:
+   DelayedDependencyTests keeps `_gate = _observe.ScheduleGate(_observed)` and calls
+   `_gate.Complete()` after the release + CompleteAllTrackedJobs. NOT yet validated by a
+   completed Unity run. DO NOT route the gate through TimelineObserveSystem.Dependency —
+   proven live deadlock (see report section 3).
+2. Fix 1 (parity/policy runner records 0) is still open. Two candidate deltas identified,
+   neither confirmed. Ready-made diagnostic experiment (add temporarily, run once, remove):
+
+   - On TimelineIJobEntityTickJobRunner add: `internal static NativeArray<int> Diag;`
+     and in Execute increment Diag[0] per chunk, Diag[1] per executed row, Diag[2] per
+     enableable-skipped row (Diag.IsCreated guard; ScheduleMode.Single = one job).
+   - In TimelineIJobEntityCoordinatorSystem.OnUpdate after Schedule:
+     `UnityEngine.Debug.Log($"[TLDIAG] sched chunks={_derived.CalculateChunkCount()} ents={_derived.CalculateEntityCount()} gated={!gate.Equals(default)}");`
+   - Temporary [Test] TlDiagClonedWorldShapes: 4 variants of a one-row world
+     (managedGroup x nopGate). Gate source for nop variants:
+     `internal struct TlDiagNopJob : IJob { public void Execute() { } }`,
+     `TimelineIJobEntityCoordinatorSystem.Gate = new TlDiagNopJob().Schedule();`
+     variant0: no managed group, default dep; variant1: managed group, default dep;
+     variant2: no managed group, nop gate; variant3: both. Log Diag + _sink.Length per
+     variant after CompleteAllTrackedJobs. This bisects the two fixture deltas in ONE run.
+   - Interpretation: chunks=0 -> _derived chunk cache/query issue; rows=0+chunks=1 ->
+     enableable mask skipping everything; rows>0+sink=0 -> TickUnmanaged/consumer chain;
+     variant matrix isolates managed group vs default selection.
+3. Fix 3 (genuine generated Schedule) — the [BurstCompile] IJobEntity cannot be
+   Burst-compiled because TimelineIJobEntityTickJob.Execute calls the static-table
+   TickUnmanaged overload (UnmanagedTable static ctor -> NativeMemory.AlignedAlloc ->
+   UnsafeUtility.Malloc icall -> Burst error BC1091 at load; see report section 2).
+   The runner path is unaffected (managed Mono execution). Genuine-path options and the
+   InternalsVisibleTo ban are in the report.
+4. Unity invocation that WORKS (do NOT pass -quit with -runTests; a -quit run exits
+   before tests): /home/i/Unity/Hub/Editor/6000.7.0a5/Editor/Unity -batchmode -runTests
+   -projectPath .../tests/Tl.Unity.DataAuthored -testResults .../test-results.editmode.xml
+   -testPlatform EditMode -logFile <log>. Expect 3-6 min; a 100%-CPU hang means a
+   spinning gate job is being waited on from the main thread.

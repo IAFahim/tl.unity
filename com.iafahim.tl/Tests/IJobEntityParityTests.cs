@@ -325,6 +325,7 @@ public sealed class DelayedDependencyTests
     private NativeList<Record> _sink;
     private NativeArray<float> _observed;
     private NativeArray<float> _captured;
+    private JobHandle _gate;
 
     [OneTimeSetUp]
     public void OneTimeSetUp() => _sink = BurstArms.Install();
@@ -344,6 +345,7 @@ public sealed class DelayedDependencyTests
         TimelineEligibility.Reset();
         TimelineGateJob.Release = 0;
         TimelineIJobEntityCoordinatorSystem.Gate = default;
+        _gate = default;
         _observed = new NativeArray<float>(1, Allocator.Persistent);
         _captured = new NativeArray<float>(1, Allocator.Persistent);
         _world = new World("TlDelayed");
@@ -384,7 +386,8 @@ public sealed class DelayedDependencyTests
         _world.EntityManager.SetComponentData(row, new Health());
 
         TimelineGateJob.Release = 0;
-        TimelineIJobEntityCoordinatorSystem.Gate = _observe.ScheduleGate(_observed);
+        _gate = _observe.ScheduleGate(_observed);
+        TimelineIJobEntityCoordinatorSystem.Gate = _gate;
 
         _world.EntityManager.SetComponentData(_clock, new TimelineClock { GameTick = 100u, Delta = 5 });
         _group.Update();
@@ -394,6 +397,7 @@ public sealed class DelayedDependencyTests
 
         Volatile.Write(ref TimelineGateJob.Release, 1);
         _world.EntityManager.CompleteAllTrackedJobs();
+        _gate.Complete();
 
         Assert.AreEqual(2, _sink.Length, "the commit lands exactly once after the dependency completes");
         Assert.AreEqual(165f, HealthOf(row).Value, "exactly-once commit: no double commit, no partial commit");
