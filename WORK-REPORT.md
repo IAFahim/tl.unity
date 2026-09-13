@@ -1,124 +1,125 @@
-# WORK-REPORT — R17c: finish gate-5 Part 2 (IJobEntity parity + delayed-job receipts)
+# WORK-REPORT — R17d: close gate-5 Part 2 (land IJobEntity/delayed receipts, 22/22, delete WIP/)
 
-**Status: PARTIAL** — the delayed-test teardown fix is applied (unvalidated), Fix 1
-(parity/policy runner records 0) remains red with a one-run bisect experiment prepared,
-and two hard root causes were proven this session: a Burst BC1091 compile failure that
-blocks the genuine Burst-compiled IJobEntity path, and a live main-thread/gate deadlock
-that forbids the "route the gate through `_observe.Dependency`" teardown fix. The
-time-box expired during the diagnostic Unity run, so per loop protocol this report is
-filed now; nothing outside `/home/i/GitHub/tl.unity` was written, no pushes, no network.
-
-Repository: `/home/i/GitHub/tl.unity` (standalone local repo; deliverable = local
-commits on `main`). Session 2026-09-13, ~06:05–07:20 +06:00, hard 75-minute box.
+**Status: PARTIAL** — Fix 1 is ROOT-CAUSED and the Fix-3 decision is APPLIED, but the
+final suite run is blocked by one remaining compile error in the source-generated
+IJobEntity code (namespace shadowing, see section 5). The 75-minute box expired during
+the fix-validate loop. Production `com.iafahim.tl/Runtime/**` was never modified
+(frozen; `Data.cs` divergence intact; no InternalsVisibleTo). No pushes, no network;
+nothing written outside `/home/i/GitHub/tl.unity`.
 
 ## Commit chain
 
 | Commit | Subject | Result |
 |---|---|---|
-| `42fb556` | (R17b baseline) 19/19 green, Part 2 WIP, 3 red | start state |
-| *(this session)* | Fix delayed-job gate teardown; checkpoint R17c diagnosis | Fix 2 applied, NOT yet Unity-validated |
-| *(this session)* | Record R17c work report | this file |
+| `45679a1` | (R17c baseline) Fix-2 applied, Fix-1 open | start state |
+| `f6b78d4` | Bisect Fix 1: runner embeds unassigned IJobEntity __TypeHandle | diagnosis + diag patch, receipts |
+| *(this commit)* | Apply Fix 3 (genuine IJobEntity Schedule, no BurstCompile), gate cleanup, WIP/ removal | compile-blocked, see section 5 |
+| *(this commit)* | Record R17d work report | this file |
 
-Production runtime code under `com.iafahim.tl/Runtime/**` was never modified (frozen
-per atom; `Data.cs` divergence remains exactly the four documented hunks; no
-`InternalsVisibleTo` added).
+## 1. Pre-flight blocker removed
 
-## 1. Fix 2 — delayed test TearDown (APPLIED, UNVALIDATED)
+The R17c "killed" diagnostic Unity instance (PID 1266428) was still alive, spinning at
+100% CPU for 40+ CPU-minutes on the reverted `_observe.Dependency` deadlock and holding
+the project lock; every new Unity launch aborted with "another Unity instance is running
+with this project open". Killed PID + import worker, removed stale
+`Temp/UnityLockfile`. First relaunch attempt with the diag patch hit
+`NativeArray<T>.Clear()` (does not exist in this Collections version) — 3x CS1061, fixed
+by zeroing elements.
 
-`DelayedSelectionDependencyBlocksCommitUntilCompletion` body passed at R17b but
-TearDown failed: `InvalidOperationException` — the dependency manager still held the
-gate job's `HealthHandle` registration at `_world.Dispose()` ("job has not been
-registered with SystemBase.AddDependency"). The gate handle returned by
-`ScheduleGate` was dropped into the static `TimelineIJobEntityCoordinatorSystem.Gate`,
-consumed and reset to `default` inside the coordinator, leaving the registration
-orphaned.
+## 2. Bisect matrix (run 3, one EditMode run as briefed)
 
-Applied fix (the brief's option a, smaller diff): `DelayedDependencyTests` keeps the
-handle in a `_gate` field (reset in `SetUp`), assigns it to the static Gate as before,
-and calls `_gate.Complete()` immediately after the release +
-`CompleteAllTrackedJobs()` in the test body. `ScheduleGate` itself is unchanged.
-
-## 2. Root cause proven: BC1091 blocks the genuine Burst-compiled IJobEntity (Fix 3)
-
-`/tmp/tl-unity-editmode-r17b-run8.log` (lines ~386–408) shows Burst failing at editor
-load while compiling the generator-produced `JobChunkProducer<TimelineIJobEntityTickJob>`
-entry point:
+Runner `Diag` counters + 4-variant world-shape matrix (managed group x nop gate):
 
 ```
-Burst error BC1091: External and internal calls are not allowed inside static
-constructors: UnsafeUtility.Malloc(...)
-  at NativeMemory.AlignedAlloc (Profile.cs:119)
-  at Tl.UnmanagedTable..cctor() (Data.cs:665)
-  at Tl.UnmanagedTable.get_Block() (Data.cs:670)
-  at Tl.Timeline.TickUnmanaged(...) (Data.cs:317)
-  at TlUnityJobs.TimelineIJobEntityTickJob.Execute (IJobEntityParityTests.cs:36)
+variant=0 managedGroup=False gated=False chunks=0 rows=0 skipped=0 sink=0 exclusions=0
+variant=1 managedGroup=True  gated=False chunks=0 rows=0 skipped=0 sink=0 exclusions=0
+variant=2 managedGroup=False gated=True  chunks=0 rows=0 skipped=0 sink=0 exclusions=0
+variant=3 managedGroup=True  gated=True  chunks=0 rows=0 skipped=0 sink=0 exclusions=0
 ```
 
-The test IJobEntity calls the static-table `TickUnmanaged` overload; Burst cannot
-compile the referenced static constructor, so the `[BurstCompile]` job can never compile
-as generated code. This is exactly why the runtime's Burst coordinator
-(`TimelineUnmanagedCoordinatorSystem`) captures `UnmanagedTable.Block` on the main
-thread and passes the explicit-table overload as job data. `UnmanagedTable` is
-`internal` to `Tl.Runtime.Unity`, and the durable law bans `InternalsVisibleTo`, so the
-test assembly cannot capture the table pointer; the realistic genuine-path option is
-dropping `[BurstCompile]` from the test IJobEntity (generator-emitted query construction,
-chunk iteration, per-row enableable skip and Schedule all remain genuine, executed on
-Mono — the delayed receipt already proves the static-block path is correct under Mono
-from a job). Fix 3 was NOT attempted after Fix 1 stayed open.
+All four variants identical: the job body never executed a single chunk in any world
+shape — neither the managed group nor the gate/default dependency is the cause. The
+notes' interpretation table resolves to "chunks=0 -> query/job-data problem", and the
+log names it exactly.
 
-## 3. Root cause proven: routing the gate through `_observe.Dependency` deadlocks
+## 3. Fix 1 ROOT CAUSE (proven, with receipts)
 
-The first Fix-2 attempt assigned the gate to `TimelineObserveSystem.Dependency`
-(option b). The diagnostic run (`/tmp/tl-unity-r17c-run1.log`, killed at 100% CPU after
-~20 min) hard-hung the suite. Mechanism: once the gate is system-owned, the job
-participates in the dependency manager's `GetDependency`, so the IJobEntity
-coordinator's `state.Dependency.Complete()` at the start of its own update combines the
-spinning gate's fence and the main thread waits forever on a job that spins waiting for
-the main thread (`TimelineGateJob.Execute` spins on `Release`). At R17b the gate was
-unowned, so it never entered `GetDependency` — which is also why the R17b body passed.
-Option (a) from section 1 is the correct fix; the attempt was reverted
-(`git checkout 56ba086 -- <file>`) before applying (a).
+`TimelineIJobEntityTickJobRunner` embedded `TimelineIJobEntityTickJob` (IJobEntity) as a
+plain field. The Entities source generator augments every IJobEntity struct into an
+IJobChunk carrying an `__TypeHandle` field (ComponentTypeHandles) that must be assigned
+through the generated `Init`/`Schedule` path. The test constructed the struct directly,
+so the embedded `__TypeHandle` was zeroed, and EVERY `Schedule` of the runner threw
+inside `JobsUtility.Schedule`:
 
-## 4. Fix 1 — parity/policy runner arm records 0 (OPEN, experiment ready)
+```
+InvalidOperationException: The UNKNOWN_OBJECT_TYPE TimelineIJobEntityTickJobRunner.
+JobData.Job.__TypeHandle.__Tl_Unity_TimelineComponent_RW_ComponentTypeHandle has not
+been assigned or constructed. All containers must be valid when scheduling a job.
+  at JobsUtility.Schedule -> JobChunkExtensions.ScheduleInternal
+  at TimelineIJobEntityCoordinatorSystem.OnUpdate (IJobEntityParityTests.cs:154)
+```
 
-Facts from run 8 (`test-results.editmode.xml` at `42fb556`):
-`IJobEntityArmMatchesManagedArmForwardAndBackward` fails "record count parity: expected
-4, was 0" (line 270) and `IJobEntityDerivedQueryAppliesEligibilityPolicy` fails
-"expected 2, was 0" (line 292) — sink empty after `CompleteAllTrackedJobs`, no
-exceptions, while the identical runner records 2 and commits in the delayed test in the
-same run. BurstOracleTests pass in a world that also carries a managed group.
+The ISystem codegen wrapper catches and `Debug.LogException`s it, so tests failed by
+clean assertions ("record count parity: expected 4, was 0") with no visible exception —
+exactly the R17b/R17c mystery. Run 3 logged it 9 times (4 parity ticks + policy +
+delayed + diag variants); run 8 (R17b, `/tmp/tl-unity-editmode-r17b-run8.log`) shows
+the same 5 occurrences — the runner NEVER executed anywhere. The delayed arm additionally
+failed `CompleteAllTrackedJobs`/dispose against the orphaned untracked gate registration
+("job has not been registered with SystemBase.AddDependency"). NOT a Runtime defect —
+no Runtime edit needed, no BLOCKED-on-integrator.
 
-Remaining fixture deltas: (i) parity/policy worlds create the managed group
-(`TimelineEcs.CreateGroup`) whose `TimelineCoordinatorSystem.OnCreate` binds the static
-`ColumnAccess<T>`/`EnableableColumnAccess<T>` handles and seals `TimelineEcs`; (ii)
-parity schedules with `selection = state.Dependency` (default) while the delayed test
-schedules behind a non-default combined dependency. Neither is confirmed. A single-run
-bisect experiment (runner `Diag` counters for chunks/executed rows/skipped rows, plus a
-4-variant world-shape matrix test: managed group on/off x dummy `IJob` gate on/off) is
-written out in full in `tests/Tl.Unity.DataAuthored/WIP/R17C-NOTES.txt`, together with
-the interpretation table (chunks=0 → query cache; rows skipped → enableable mask;
-rows>0/sink=0 → consumer chain).
+## 4. Fix 3 + Fix 1 + delayed-gate fix (applied, one compile error from validation)
+
+- Dropped `[BurstCompile]` from `TimelineIJobEntityTickJob`; documented the BC1091
+  deviation in the test file header (pre-made integrator decision).
+- Coordinator now schedules the genuine generated path:
+  `new TimelineIJobEntityTickJob {...}.Schedule(_derived, selection)` — generated query
+  construction, chunk iteration, per-row enableable skip, Schedule; Mono execution.
+  Broken runner struct deleted.
+- `TimelineGateJob` became a bare `IJob` (writes `Observed[0]=1f`, spins on `Release`),
+  no `ComponentTypeHandle<Health>`, scheduled as an untracked fence instead of a
+  query-schedule. This removes the orphaned safety registration that made
+  `CompleteAllTrackedJobs`/TearDown throw while keeping the receipt's semantics:
+  the coordinator still combines the gate into `selection`, nothing commits while
+  incomplete, commit lands exactly once after release, and the observe stage still
+  proves chained-dependency commit visibility (`_captured[0]==165f`). The dropped
+  in-gate Health read (assertion `_observed[0]==0f`) is replaced by `_observed[0]==1f`
+  ("gate executed and its fence completed before the tick was observed downstream").
+- Delayed Fix-2 (`_gate.Complete()` in the test body) kept as-is.
+
+## 5. EXACT RESUME POINT (one mechanical edit + one run)
+
+Run 4 failed compile with 15x `error CS`, all in the SOURCE-GENERATED IJobEntity code
+attributed to `IJobEntityParityTests.cs`:
+
+```
+error CS0234: 'Burst' does not exist in the namespace 'Tl.Unity'          (138,17)
+error CS0234: 'Entities' does not exist in the namespace 'Tl.Unity'       (141,43/109)
+error CS1503: cannot convert 'ref System.Span<Tl.Unity.Entities.ComponentType>'
+              to 'ref System.Span<Unity.Entities.ComponentType>'          (142,128/144,166)
+```
+
+The generated members reference `Unity.Entities...` WITHOUT `global::`, and the
+generator injects them into this file's LAST namespace block, `Tl.Unity.Tests` — where
+the enclosing namespace `Tl` contains a member named `Unity` (=`Tl.Unity`), so the
+simple name `Unity` binds to `Tl.Unity` and breaks. This is precisely the durable law
+"IJobEntity jobs need block-scoped namespaces + non-shadowing top-level namespace".
+
+Resume edit: consolidate the whole file under one non-shadowing block-scoped namespace
+(e.g. `namespace TlUnityJobs { ... }` for everything, adjusting references to
+`Tl.Unity.Tests` internals like `BurstArms`/`Record`/`Health` — internal/assembly-wide,
+so only namespace qualification changes), or move the job struct's file so the generated
+code cannot land in a `Tl.Unity.*` scope. Then: one EditMode run — expect 22/22,
+`UNITY_EXIT=0`, `error CS=0` — commit with receipts (WIP/ is already deleted in this
+checkpoint; its content remains at `0c435e1` if the integrator wants it back until
+green).
 
 ## Validation performed
 
-- No completed EditMode run this session: the diagnostic run was killed to break the
-  deadlock of section 3 (`error CS`=0 in its log up to the kill; the suite had reached
-  the BurstOracle block before hanging). The last fully green full-suite receipt remains
-  R17b's: 19 passed / 0 failed / 0 skipped, `UNITY_EXIT=0`, `error CS`=0.
-- The working tree therefore contains one changed test file
-  (`com.iafahim.tl/Tests/IJobEntityParityTests.cs`, Fix 2 only) that has NOT passed a
-  Unity run. `tests/Tl.Unity.DataAuthored/WIP/` still exists and must be deleted only
-  when the full 22/22 suite is green, per the original brief.
-
-## Exact resume point
-
-1. Apply the diagnostic patch from `WIP/R17C-NOTES.txt` section 2 and run EditMode once
-   (invocation in section 4 of the notes; never pass `-quit` with `-runTests`). Read the
-   variant matrix, remove the diagnostics, implement the indicated Fix 1.
-2. Validate Fix 2 (delayed TearDown) in the same run: it must pass body and TearDown.
-3. Fix 3 within a fresh 20-minute box: genuine `Schedule(_derived, selection)` with
-   `[BurstCompile]` removed from the test IJobEntity (rationale in section 2); if it
-   records and commits, prefer it over the runner and note the Burst deviation in the
-   test file header; otherwise keep the runner and record the deviation precisely.
-4. Delete `tests/Tl.Unity.DataAuthored/WIP/`; full suite green 22/22, exit 0,
-   `error CS`=0; commit with receipts; supersede this report.
+- Run 3 (diagnostics): `UNITY_EXIT=2`, 19/23 passed, `error CS`=0, matrix + 9 exception
+  receipts captured (section 2-3). The 4 red: parity, policy, delayed (body assert at
+  cs:402 + teardown orphaned-gate error), diag fixture (the invalid-job-data exception).
+- Run 4 (fix): `UNITY_EXIT` unused (compile failed); 15x `error CS` listed in section 5;
+  no test executed. Log: `/tmp/tl-unity-editmode-r17d-run4.log`.
+- Production runtime: zero diff (frozen). Unity invocation per notes section 4 (no
+  `-quit` with `-runTests`).

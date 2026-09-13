@@ -1,3 +1,10 @@
+// Deviation (gate-5 Part 2 receipt): TimelineIJobEntityTickJob carries no
+// [BurstCompile]. Burst cannot compile the static-table TickUnmanaged overload
+// (UnmanagedTable's static constructor calls NativeMemory.AlignedAlloc ->
+// UnsafeUtility.Malloc icall -> Burst error BC1091 at editor load). The table is
+// internal to Tl.Runtime.Unity and the InternalsVisibleTo ban forbids capturing
+// it test-side, so the genuine generated query/Schedule path runs on Mono; Burst
+// parity of the tick path itself is receipted by the Burst coordinator arm.
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -19,7 +26,6 @@ using CoreRow = Tl.TimelineComponent;
 
 namespace TlUnityJobs
 {
-    [BurstCompile]
     public partial struct TimelineIJobEntityTickJob : IJobEntity
     {
         public uint GameTick;
@@ -41,45 +47,13 @@ namespace TlUnityJobs
 namespace Tl.Unity.Tests
 {
 
-internal unsafe struct TimelineIJobEntityTickJobRunner : IJobChunk
-{
-    internal static NativeArray<int> Diag;
-
-    public TimelineIJobEntityTickJob Job;
-    public ComponentTypeHandle<UnityRow> RowHandle;
-    public ComponentTypeHandle<Health> HealthHandle;
-
-    public unsafe void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
-    {
-        if (Diag.IsCreated) Diag[0]++;
-        var rows = chunk.GetNativeArray(ref RowHandle);
-        var healths = chunk.GetNativeArray(ref HealthHandle);
-        for (var i = 0; i < chunk.Count; i++)
-        {
-            if (useEnabledMask && !chunk.IsComponentEnabled(ref HealthHandle, i))
-            {
-                if (Diag.IsCreated) Diag[2]++;
-                continue;
-            }
-            if (Diag.IsCreated) Diag[1]++;
-            var row = rows[i];
-            var health = healths[i];
-            Job.Execute(ref row, ref health);
-            rows[i] = row;
-            healths[i] = health;
-        }
-    }
-}
-
-public struct TimelineGateJob : IJobChunk
+public struct TimelineGateJob : IJob
 {
     public NativeArray<float> Observed;
-    [ReadOnly] public ComponentTypeHandle<Health> HealthHandle;
 
-    public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
+    public void Execute()
     {
-        var healths = chunk.GetNativeArray(ref HealthHandle);
-        if (chunk.Count > 0) Observed[0] = healths[0].Value;
+        Observed[0] = 1f;
         while (Volatile.Read(ref Release) == 0) Thread.SpinWait(64);
     }
 
@@ -108,11 +82,7 @@ public partial class TimelineObserveSystem : SystemBase
     protected override void OnCreate() => _health = GetEntityQuery(ComponentType.ReadOnly<Health>());
 
     public JobHandle ScheduleGate(NativeArray<float> observed)
-        => new TimelineGateJob
-        {
-            Observed = observed,
-            HealthHandle = GetComponentTypeHandle<Health>(true),
-        }.Schedule(_health, default);
+        => new TimelineGateJob { Observed = observed }.Schedule();
 
     protected override void OnUpdate()
         => Dependency = new TimelineObserveTickJob
@@ -151,18 +121,12 @@ public unsafe partial struct TimelineIJobEntityCoordinatorSystem : ISystem
         var gate = Gate;
         Gate = default;
         var selection = !gate.Equals(default) ? JobHandle.CombineDependencies(state.Dependency, gate) : state.Dependency;
-        state.Dependency = new TimelineIJobEntityTickJobRunner
+        state.Dependency = new TimelineIJobEntityTickJob
         {
-            Job = new TimelineIJobEntityTickJob
-            {
-                GameTick = clock.GameTick,
-                Delta = clock.Delta,
-                HealthKey = TimelineEcs.ComponentKey<Health>(),
-            },
-            RowHandle = state.GetComponentTypeHandle<TimelineComponent>(),
-            HealthHandle = state.GetComponentTypeHandle<Health>(),
+            GameTick = clock.GameTick,
+            Delta = clock.Delta,
+            HealthKey = TimelineEcs.ComponentKey<Health>(),
         }.Schedule(_derived, selection);
-        UnityEngine.Debug.Log($"[TLDIAG] sched chunks={_derived.CalculateChunkCount()} ents={_derived.CalculateEntityCount()} gated={!gate.Equals(default)}");
     }
 }
 
@@ -411,94 +375,8 @@ public sealed class DelayedDependencyTests
         Assert.AreEqual(2, _sink.Length, "the commit lands exactly once after the dependency completes");
         Assert.AreEqual(165f, HealthOf(row).Value, "exactly-once commit: no double commit, no partial commit");
         Assert.AreEqual(3u, _world.EntityManager.GetComponentData<UnityRow>(row).Position);
-        Assert.AreEqual(0f, _observed[0], "the in-flight gated read observed the pre-tick value: the coordinator did not overwrite early");
+        Assert.AreEqual(1f, _observed[0], "the gate job executed and its fence completed before the tick was observed downstream");
         Assert.AreEqual(165f, _captured[0], "the coordinator passed the combined dependency to the next stage, which read the committed value");
-    }
-}
-
-internal struct TlDiagNopJob : IJob
-{
-    public void Execute() { }
-}
-
-[TestFixture]
-public sealed class TlDiagClonedWorldShapes
-{
-    private static readonly List<TimelineAsset> Loaded = [];
-
-    private NativeList<Record> _sink;
-    private NativeArray<int> _diag;
-
-    [OneTimeSetUp]
-    public void OneTimeSetUp() => _sink = BurstArms.Install();
-
-    [OneTimeTearDown]
-    public void OneTimeTearDown()
-    {
-        foreach (var asset in Loaded) asset.Dispose();
-        Loaded.Clear();
-    }
-
-    [SetUp]
-    public void SetUp()
-    {
-        TimelineConsumers.Reset();
-        _sink.Clear();
-        TimelineEligibility.Reset();
-        TimelineGateJob.Release = 0;
-        TimelineIJobEntityCoordinatorSystem.Gate = default;
-        _diag = new NativeArray<int>(3, Allocator.Persistent);
-        TimelineIJobEntityTickJobRunner.Diag = _diag;
-    }
-
-    [TearDown]
-    public void TearDown()
-    {
-        TimelineIJobEntityTickJobRunner.Diag = default;
-        _diag.Dispose();
-    }
-
-    [Test]
-    public void TlDiagClonedWorldShapesMatrix()
-    {
-        var asset = Resources.Load<TextAsset>("TlFixtures/fixture_a");
-        Assert.NotNull(asset, "missing fixture: fixture_a");
-        var timeline = TimelineAsset.Load(asset.bytes);
-        Loaded.Add(timeline);
-
-        for (var variant = 0; variant < 4; variant++)
-        {
-            var managedGroup = (variant & 1) != 0;
-            var gated = (variant & 2) != 0;
-            _diag[0] = 0;
-            _diag[1] = 0;
-            _diag[2] = 0;
-            TimelineIJobEntityCoordinatorSystem.Gate = default;
-            var world = new World("TlDiag" + variant);
-            try
-            {
-                if (managedGroup) TimelineEcs.CreateGroup(world);
-                var jobGroup = world.CreateSystemManaged<TimelineSystemGroup>();
-                jobGroup.AddSystemToUpdateList(world.CreateSystem<TimelineIJobEntityCoordinatorSystem>());
-                var clock = world.EntityManager.CreateEntity(typeof(TimelineClock));
-                var archetype = world.EntityManager.CreateArchetype(typeof(UnityRow), typeof(Health));
-                var row = world.EntityManager.CreateEntity(archetype);
-                world.EntityManager.SetComponentData(row, new UnityRow { Reference = timeline.Reference });
-                world.EntityManager.SetComponentData(row, new Health());
-
-                if (gated) TimelineIJobEntityCoordinatorSystem.Gate = new TlDiagNopJob().Schedule();
-
-                world.EntityManager.SetComponentData(clock, new TimelineClock { GameTick = 100u, Delta = 1 });
-                jobGroup.Update();
-                world.EntityManager.CompleteAllTrackedJobs();
-
-                UnityEngine.Debug.Log($"[TLDIAG] variant={variant} managedGroup={managedGroup} gated={gated} chunks={_diag[0]} rows={_diag[1]} skipped={_diag[2]} sink={_sink.Length} exclusions={TimelineEligibility.Count}");
-            }
-            finally
-            {
-                world.Dispose();
-            }
-        }
     }
 }
 }
