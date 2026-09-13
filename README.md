@@ -10,6 +10,8 @@ the git history of `unity/`, `tests/Tl.UnityAnalyzerReceipt`,
 `tests/Tl.Unity.DataAuthored`, and `tests/Tl.Unity.Project` is preserved and
 grafted here.
 
+End-to-end walkthrough (JSON bake to Unity ECS typed queries): [END-TO-END.md](END-TO-END.md)
+
 License: to be decided by the repository owner.
 
 ## Snapshot notes
