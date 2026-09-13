@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using Fixtures;
 using NUnit.Framework;
 using Tl;
@@ -51,9 +50,7 @@ namespace TlUnityQueries
         {
             foreach (var timeline in SystemAPI.Query<RefRO<UnityRow>>())
             {
-                var row = timeline.ValueRO;
-                var core = Unsafe.As<UnityRow, Tl.TimelineComponent>(ref row);
-                foreach (var frame in Timeline.Query<AlphaTrack, AlphaClip>(in core))
+                foreach (var frame in TimelineEcs.Query<AlphaTrack, AlphaClip>(in timeline.ValueRO))
                 {
                     Observed[Count++] = new QueriedFrame(
                         frame.Track.Code,

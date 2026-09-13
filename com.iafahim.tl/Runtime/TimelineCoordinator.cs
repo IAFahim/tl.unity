@@ -61,6 +61,15 @@ public static class TimelineEcs
 
     public static ulong ComponentKey<T>() => TypeKey<T>.Value;
 
+    public static unsafe FrameQuery<TTrack, TClip> Query<TTrack, TClip>(in TimelineComponent component)
+        where TTrack : unmanaged, IBlend<TClip>
+        where TClip : unmanaged
+    {
+        ref readonly var core = ref System.Runtime.CompilerServices.Unsafe.As<TimelineComponent, global::Tl.TimelineComponent>(
+            ref System.Runtime.CompilerServices.Unsafe.AsRef(in component));
+        return new FrameQuery<TTrack, TClip>(in core);
+    }
+
     public static TimelineSystemGroup CreateGroup(World world)
     {
         var group = world.CreateSystemManaged<TimelineSystemGroup>();

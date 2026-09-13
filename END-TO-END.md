@@ -194,32 +194,26 @@ This is the exact verified harness shape (from `DirectQueryTests`), runnable as
 an EditMode test today:
 
 ```cs
-using System.Runtime.CompilerServices;
 using Combat;
-using Tl;
 using Tl.Unity;
 using Unity.Entities;
-using UnityEngine;
-using UnityRow = Tl.Unity.TimelineComponent;
 
 // IMPORTANT (verified the hard way): systems that use SystemAPI/generated
 // code must NOT live inside a Tl.* namespace — the enclosing namespace Tl
 // shadows Unity.* in generated code. Use a top-level, block-scoped namespace.
 namespace GameTimelines
 {
-    [DisableAutoCreation]
+    // In a normal project, drop [DisableAutoCreation]: Unity auto-creates the
+    // system into the default world and updates it in the player loop. It is
+    // only needed when you create and update the system manually yourself.
     public partial struct DamageQuerySystem : ISystem
     {
         public void OnUpdate(ref SystemState state)
         {
-            foreach (var (unityRow, resistance, health) in
-                     SystemAPI.Query<RefRO<UnityRow>, RefRO<Resistance>, RefRW<Health>>())
+            foreach (var (timeline, resistance, health) in
+                     SystemAPI.Query<RefRO<TimelineComponent>, RefRO<Resistance>, RefRW<Health>>())
             {
-                // Unity's ECS component and the core row are distinct types
-                // with identical layout; reinterpret per the layout law.
-                var row = unityRow.ValueRO;
-                var core = Unsafe.As<UnityRow, Tl.TimelineComponent>(ref row);
-                foreach (var frame in Timeline.Query<DamageTrack, DamageClip>(in core))
+                foreach (var frame in TimelineEcs.Query<DamageTrack, DamageClip>(in timeline.ValueRO))
                 {
                     var r = resistance.ValueRO;
                     var h = health.ValueRW;
@@ -231,6 +225,10 @@ namespace GameTimelines
     }
 }
 ```
+
+`TimelineEcs.Query<TTrack, TClip>(in row)` is the Unity-facing entry: it
+reinterprets the ECS component to the layout-identical core row inside the
+package, so user code never touches `Unsafe.As` or the two-type split.
 
 Bootstrap and drive (EditMode / test harness form):
 
