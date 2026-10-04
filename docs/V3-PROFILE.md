@@ -11,7 +11,7 @@ git checkout feat/1-v3-unity-profile
 bash eng/gate-v3.sh unity
 ```
 
-The gate builds the pinned generator and baker, checks every fixture word against the real .NET v3 decoder, packs the runtime and sample domain into `artifacts/packages`, and restores the clean test project through NuGetForUnity. Add that local feed to your project's NuGet configuration and install `Tl.Runtime.Unity`. No runtime source or DLL is copied into Assets by the gate.
+The gate builds the pinned generator and baker, checks every fixture word against the real .NET v3 decoder, runs cold and prepared Apply in separate Mono processes, packs the runtime and sample domain into `artifacts/packages`, and restores the clean test project through NuGetForUnity. Set `TL_MONO` to the installed Unity Mono executable if it is not found automatically. Add that local feed to your project's NuGet configuration and install `Tl.Runtime.Unity`. No runtime source or DLL is copied into Assets by the gate.
 
 Use `samples/Game.Domain/Game.Domain.csproj` as the portable domain template. Keep its .NET Standard 2.1 target, runtime reference, pinned `TlGenAssembly` and `CompileGeneratedBindings` target. Add ordinary unmanaged structs and `ITrack` consumers. The CLI's `unity-entities` backend emits bindings automatically. Package the compiled domain with a new version and install it through NuGetForUnity. Bake against the corresponding .NET game domain assembly, or the portable assembly with the pinned baker; field layouts are checked at preparation. The Studio worker runs game code out of the editor service process.
 
@@ -25,7 +25,7 @@ Timeline<RecoilTrack, RecoilClip>.Apply<ushort, ushort>(indices, clocks, true, i
 Timeline.Advance(indices, clocks, true);
 ```
 
-`Fold` depends on authored content. `ExecuteActive` sees current inputs. `Apply` leaves clocks unchanged. The game owns every column, job dependency, world and update boundary. Asset content is interned; different entities can share its index. There are no per-track or per-clip entities.
+`Fold` depends on authored content. `ExecuteActive` sees current inputs. `Apply` initializes generated consumers on first use and leaves clocks unchanged; a prior `Prepare` call is optional for managed dispatch. The game owns every column, job dependency, world and update boundary. Asset content is interned; different entities can share its index. There are no per-track or per-clip entities.
 
 ## Burst and lifetime
 

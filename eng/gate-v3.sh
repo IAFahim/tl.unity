@@ -7,7 +7,9 @@ dotnet build external/v3/src/Tl.Gen.CSharp -c Release -f net10.0
 dotnet build external/v3/tools/Tl.Bake -c Release
 dotnet build tests/V3.Oracle -c Release
 dotnet build tests/Profile.Oracle -c Release
+dotnet build tests/Cold.Mono -c Release
 python3 eng/prepare-v3.py
+python3 eng/check-cold-mono.py
 dotnet pack src/Tl.Runtime.Unity -c Release -o artifacts/packages
 dotnet pack samples/Game.Domain -c Release -o artifacts/packages
 dotnet tool restore

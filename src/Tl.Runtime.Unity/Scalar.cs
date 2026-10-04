@@ -40,6 +40,7 @@ public static unsafe partial class Timeline<TTrack, TClip>
     private static int capacity;
     private static int gate;
     private static ulong generation;
+    private static bool consumersReady;
     private const string Head = "Timeline column binding:";
 
     internal readonly struct BankHandle
@@ -49,6 +50,15 @@ public static unsafe partial class Timeline<TTrack, TClip>
 
     private static BankHandle Bank() => default;
 
+    private static void EnsureConsumers()
+    {
+        if (Volatile.Read(ref consumersReady)) return;
+        RuntimeHelpers.RunModuleConstructor(typeof(TTrack).Module.ModuleHandle);
+        if (typeof(TClip).Module != typeof(TTrack).Module)
+            RuntimeHelpers.RunModuleConstructor(typeof(TClip).Module.ModuleHandle);
+        Volatile.Write(ref consumersReady, true);
+    }
+
     private static void Resolve(ushort index)
     {
         while (Interlocked.CompareExchange(ref gate, 1, 0) != 0) Thread.SpinWait(1);
@@ -57,9 +67,7 @@ public static unsafe partial class Timeline<TTrack, TClip>
             var reference = TimelineTable.Reference(index);
             if (index < capacity && views[index] != null) return;
             var key = PairRuntime<TTrack, TClip>.Key;
-            System.Runtime.CompilerServices.RuntimeHelpers.RunModuleConstructor(typeof(TTrack).Module.ModuleHandle);
-            if (typeof(TClip).Module != typeof(TTrack).Module)
-                System.Runtime.CompilerServices.RuntimeHelpers.RunModuleConstructor(typeof(TClip).Module.ModuleHandle);
+            EnsureConsumers();
             if (!reference.Uses(key)) throw new ArgumentException("The asset does not contain this timeline pair.");
             var expected = reference.LayoutOf(key);
             var actual = PairTable.LayoutOf(key);

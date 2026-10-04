@@ -99,7 +99,14 @@ methods = [
     'public static void Apply<TIndex, TPosition>(ReadOnlySpan<TIndex> indices, ReadOnlySpan<TPosition> positions, bool forward, in ColumnSet caller)',
     'static void ApplyLive(',
 ]
-extra = '\n'.join(section(pair, name) for name in methods)
+projected_methods = []
+for name in methods:
+    method = section(pair, name)
+    if name == 'static void ApplyLive(':
+        body = method.index('{') + 1
+        method = method[:body] + '\n\t\tEnsureConsumers();' + method[body:]
+    projected_methods.append(method)
+extra = '\n'.join(projected_methods)
 for declaration in ['static void CheckSizes<TIndex, TPosition, TEffect>', 'static void CheckSizes<TIndex, TPosition>', 'static void ThrowColumnSizes(', 'static void ThrowColumnRowMismatch(', 'static void ThrowMemoRow(', 'static void ThrowLiveFrame(', 'static void* CellOf(']:
     if declaration in pair:
         extra += '\n' + section(pair, declaration)
