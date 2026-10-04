@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+artifacts/
+**/Library/
+**/Logs/
+**/Temp/
+**/UserSettings/
+**/Assets/Packages/
+**/Assets/Packages.meta
+tests/Tl.V3.Project/Assets/Tests/Resources/
+tests/Tl.V3.Project/Assets/Tests/Resources.meta

@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><AllowUnsafeBlocks>true</AllowUnsafeBlocks><ImplicitUsings>enable</ImplicitUsings><DefineConstants>V3_ORACLE</DefineConstants></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../external/v3/src/Tl.Core/Tl.Core.csproj" /><ProjectReference Include="../V3.Domain/V3.Domain.csproj" /><Compile Include="../Oracle.cs" Link="Program.cs" /></ItemGroup>
+</Project>

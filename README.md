@@ -1,3 +1,5 @@
+> **New: native tl v3 Unity profile.** See [docs/V3-PROFILE.md](docs/V3-PROFILE.md) for the NuGetForUnity install, portable generated consumers, Burst boundary and end-to-end gate. The package below is the historical v1 extraction.
+
 # tl for Unity
 
 `com.iafahim.tl` is the data-authored timeline runtime package for Unity ECS and

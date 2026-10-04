@@ -1,0 +1,22 @@
+{
+  "name": "Typed Lane Diagnostics",
+  "duration": 16,
+  "loop": false,
+  "tracks": [
+    {
+      "name": "Signals",
+      "assembly": "Game.Domain",
+      "namespace": "Rifle",
+      "type": "DiagTrack",
+      "data": { "Scale": 1 },
+      "clips": [
+        { "name": "Extremes", "assembly": "Game.Domain", "namespace": "Rifle", "type": "DiagClip", "start": 2, "end": 6, "data": { "Gate": true, "Step": -128, "Level": -32768, "Phase": 2147483647, "Span": 9223372036854775807, "Curve": -3.0 } },
+        { "name": "SignedZero", "assembly": "Game.Domain", "namespace": "Rifle", "type": "DiagClip", "start": 6, "end": 8, "data": { "Gate": false, "Step": 0, "Level": 0, "Phase": 0, "Span": 0, "Curve": 0.0 } },
+        { "name": "RampA", "assembly": "Game.Domain", "namespace": "Rifle", "type": "DiagClip", "start": 8, "end": 12, "data": { "Gate": true, "Step": 1, "Level": 1, "Phase": 1, "Span": 1, "Curve": 1.0 } },
+        { "name": "RampB", "assembly": "Game.Domain", "namespace": "Rifle", "type": "DiagClip", "start": 9, "end": 13, "data": { "Gate": true, "Step": 1, "Level": 1, "Phase": 1, "Span": 1, "Curve": 3.0 } },
+        { "name": "Denormal", "assembly": "Game.Domain", "namespace": "Rifle", "type": "DiagClip", "start": 13, "end": 14, "data": { "Gate": true, "Step": -1, "Level": 1, "Phase": 1, "Span": 1, "Curve": 1.4e-45 } },
+        { "name": "NegativePole", "assembly": "Game.Domain", "namespace": "Rifle", "type": "DiagClip", "start": 14, "end": 16, "data": { "Gate": true, "Step": 127, "Level": 32767, "Phase": -2147483648, "Span": -9223372036854775808, "Curve": -2.0 } }
+      ]
+    }
+  ]
+}

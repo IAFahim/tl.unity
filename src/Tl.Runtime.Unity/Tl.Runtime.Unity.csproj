@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>14</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Tl.Core</AssemblyName>
+    <AssemblyVersion>3.0.0.0</AssemblyVersion>
+    <PackageId>Tl.Runtime.Unity</PackageId>
+    <Version>3.0.1-preview.1</Version>
+    <Authors>IAFahim</Authors>
+    <Description>Source-pinned tl v3 .NET Standard 2.1 runtime profile for Unity, with explicit prepared Burst views.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>$(NoWarn);CS8500</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
+    <Compile Include="*.cs" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+  <Target Name="ProjectV3Sources" BeforeTargets="CoreCompile">
+    <Exec Command="python3 &quot;$(MSBuildThisFileDirectory)../../eng/project-v3-profile.py&quot; &quot;$(MSBuildThisFileDirectory)../../external/v3&quot; &quot;$(IntermediateOutputPath)projected&quot;" />
+    <ItemGroup><Compile Include="$(IntermediateOutputPath)projected/*.cs" /></ItemGroup>
+  </Target>
+</Project>

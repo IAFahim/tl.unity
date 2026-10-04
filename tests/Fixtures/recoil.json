@@ -1,0 +1,25 @@
+{
+  "name": "Rifle Recoil",
+  "duration": 30,
+  "loop": false,
+  "tracks": [
+    {
+      "name": "Recoil",
+      "assembly": "Game.Domain",
+      "namespace": "Rifle",
+      "type": "RecoilTrack",
+      "data": { "Gain": 1.0 },
+      "clips": [
+        {
+          "name": "Kick",
+          "assembly": "Game.Domain",
+          "namespace": "Rifle",
+          "type": "RecoilClip",
+          "start": 6,
+          "end": 7,
+          "data": { "Impulse": 12.0 }
+        }
+      ]
+    }
+  ]
+}

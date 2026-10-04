@@ -1,0 +1,25 @@
+{
+  "name": "Menu Slide",
+  "duration": 30,
+  "loop": false,
+  "tracks": [
+    {
+      "name": "Horizontal",
+      "assembly": "Game.Domain",
+      "namespace": "Ui",
+      "type": "SlideTrack",
+      "data": { "Scale": 1.0 },
+      "clips": [
+        {
+          "name": "Enter",
+          "assembly": "Game.Domain",
+          "namespace": "Ui",
+          "type": "SlideClip",
+          "start": 0,
+          "end": 12,
+          "data": { "Pixels": 8.0 }
+        }
+      ]
+    }
+  ]
+}
