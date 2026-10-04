@@ -2,6 +2,8 @@
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
+stage="${1:-mono}"
+case "$stage" in dotnet|mono|unity) ;; *) echo "Use dotnet, mono or unity." >&2; exit 2 ;; esac
 mkdir -p artifacts/packages artifacts/tests
 dotnet build external/v3/src/Tl.Gen.CSharp -c Release -f net10.0
 dotnet build external/v3/tools/Tl.Bake -c Release
@@ -9,12 +11,12 @@ dotnet build tests/V3.Oracle -c Release
 dotnet build tests/Profile.Oracle -c Release
 dotnet build tests/Cold.Mono -c Release
 python3 eng/prepare-v3.py
-python3 eng/check-cold-mono.py
+if [ "$stage" != dotnet ]; then python3 eng/check-cold-mono.py; fi
 dotnet pack src/Tl.Runtime.Unity -c Release -o artifacts/packages
 dotnet pack samples/Game.Domain -c Release -o artifacts/packages
 dotnet tool restore
 python3 eng/restore-v3.py
-if [ "${1:-dotnet}" = unity ]; then
+if [ "$stage" = unity ]; then
   for mode in EditMode PlayMode; do
     DISPLAY=:0 unity test "$root/tests/Tl.V3.Project" --mode "$mode" --output "$root/artifacts/tests/v3-$mode.xml" --timeout 600 -- -logFile "$root/artifacts/v3-$mode.log"
     python3 - "$root/artifacts/tests/v3-$mode.xml" <<'PY'
