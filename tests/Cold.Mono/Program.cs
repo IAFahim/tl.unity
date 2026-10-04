@@ -15,7 +15,7 @@ internal static class Program
         Span<RecoilFx> effects = stackalloc RecoilFx[2];
         effects.Clear();
         Span<RecoilStrength> inputs = stackalloc RecoilStrength[] { new() { Value = .5f }, new() { Value = 2f } };
-        var columns = new ColumnSet();
+        scoped ColumnSet columns = new ColumnSet();
         columns.Add<RecoilFx>(effects);
         columns.Add<RecoilStrength>(inputs);
         if (args[1] == "prepared") Timeline<RecoilTrack, RecoilClip>.Prepare(asset);
