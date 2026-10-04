@@ -1,0 +1,1 @@
+{"name":"Tl.V3.Tests","references":["Unity.Entities","Unity.Collections","Unity.Burst"],"allowUnsafeCode":true,"overrideReferences":true,"precompiledReferences":["nunit.framework.dll","Tl.Core.dll","Game.Domain.dll","Newtonsoft.Json.dll","System.Runtime.CompilerServices.Unsafe.dll"],"optionalUnityReferences":["TestAssemblies"]}

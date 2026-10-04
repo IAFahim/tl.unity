@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-04",
+  "issue": 1,
+  "tlSource": "a464bfe95e158fb79e97f7b0848bd8e8d9c79b7b",
+  "regression": {
+    "beforeSource": "d4fe330f3e4285c3f5a98c90894d133b85011c2d",
+    "coldBefore": "ArgumentException: fold-fed columns exceed the 0-slot live buffer",
+    "preparedBefore": "pass",
+    "after": {
+      "mono": "Mono JIT compiler version 6.13.0 (explicit/54681c7b Wed Aug  5 20:06:06 UTC 2026)",
+      "freshProcesses": [
+        {
+          "mode": "cold",
+          "exitCode": 0,
+          "result": "Mono cold: forward=6/24 backward=-6/-24 clocks=6/6 warmAllocatedBytes=0"
+        },
+        {
+          "mode": "prepared",
+          "exitCode": 0,
+          "result": "Mono prepared: forward=6/24 backward=-6/-24 clocks=6/6 warmAllocatedBytes=0"
+        }
+      ]
+    }
+  },
+  "parity": "Every raw lane word for four fixtures in both directions and live execution equals pinned .NET v3",
+  "unity": {
+    "version": "6000.7.0a6",
+    "tests": {
+      "EditMode": {
+        "passed": 8,
+        "start": "2026-10-04 05:37:59Z",
+        "end": "2026-10-04 05:37:59Z"
+      },
+      "PlayMode": {
+        "passed": 8,
+        "start": "2026-10-04 05:38:26Z",
+        "end": "2026-10-04 05:38:26Z"
+      }
+    },
+    "burst": "BurstDiscard marker proves compiled execution",
+    "warmApplyAllocatedBytes": 0
+  },
+  "command": "bash eng/gate-v3.sh unity",
+  "review": "Fix for independently reported cold-start failure; exact-head re-review pending."
+}

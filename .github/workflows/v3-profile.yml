@@ -1,0 +1,27 @@
+name: v3 Unity profile parity
+on: [push, pull_request]
+concurrency:
+  group: v3-profile-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive}
+      - uses: actions/setup-dotnet@v4
+        with: {dotnet-version: '10.0.x'}
+      - run: bash eng/gate-v3.sh dotnet
+      - uses: actions/upload-artifact@v4
+        with: {name: profile-parity-and-local-packages, path: artifacts}
+  native-unity:
+    name: Unity Mono + EditMode + PlayMode
+    runs-on: [self-hosted, unity]
+    needs: parity
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive}
+      - run: bash eng/gate-v3.sh unity
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: native-unity-reports, path: artifacts}

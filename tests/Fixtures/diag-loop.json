@@ -1,0 +1,17 @@
+{
+  "name": "Typed Lane Loop",
+  "duration": 8,
+  "loop": true,
+  "tracks": [
+    {
+      "name": "Wrapped",
+      "assembly": "Game.Domain",
+      "namespace": "Rifle",
+      "type": "DiagTrack",
+      "data": { "Scale": 1 },
+      "clips": [
+        { "name": "Carrier", "assembly": "Game.Domain", "namespace": "Rifle", "type": "DiagClip", "start": 2, "end": 8, "data": { "Gate": true, "Step": -2, "Level": -2, "Phase": 5, "Span": 81985529216486895, "Curve": 2.5 } }
+      ]
+    }
+  ]
+}

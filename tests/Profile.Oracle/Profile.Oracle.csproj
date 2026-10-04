@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><AllowUnsafeBlocks>true</AllowUnsafeBlocks><ImplicitUsings>enable</ImplicitUsings><DefineConstants>UNITY_PROFILE</DefineConstants></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/Tl.Runtime.Unity/Tl.Runtime.Unity.csproj" /><ProjectReference Include="../../samples/Game.Domain/Game.Domain.csproj" SetTargetFramework="TargetFramework=netstandard2.1" /><Compile Include="../Oracle.cs" Link="Program.cs" /></ItemGroup>
+</Project>
