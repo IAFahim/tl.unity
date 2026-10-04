@@ -10,10 +10,11 @@ internal static class Program
         if (args.Length != 2 || (args[1] != "cold" && args[1] != "prepared"))
             throw new ArgumentException("Expected recoil.tlb path and cold/prepared mode.");
         using var asset = TimelineAsset.LoadOwned(File.ReadAllBytes(args[0]));
-        ushort[] indices = { asset.Index, asset.Index };
-        ushort[] clocks = { 6, 6 };
-        RecoilFx[] effects = { default, default };
-        RecoilStrength[] inputs = { new() { Value = .5f }, new() { Value = 2f } };
+        Span<ushort> indices = stackalloc ushort[] { asset.Index, asset.Index };
+        Span<ushort> clocks = stackalloc ushort[] { 6, 6 };
+        Span<RecoilFx> effects = stackalloc RecoilFx[2];
+        effects.Clear();
+        Span<RecoilStrength> inputs = stackalloc RecoilStrength[] { new() { Value = .5f }, new() { Value = 2f } };
         var columns = new ColumnSet();
         columns.Add<RecoilFx>(effects);
         columns.Add<RecoilStrength>(inputs);

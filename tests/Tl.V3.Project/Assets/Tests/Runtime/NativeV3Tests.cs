@@ -94,18 +94,22 @@ public unsafe class NativeV3Tests
             ushort[] indices={first.Index,second.Index}; ushort[] clocks={6,6};
             RecoilFx[] effects={default,default};
             RecoilStrength[] inputs={new RecoilStrength{Value=.5f},new RecoilStrength{Value=2f}};
-            var columns=new ColumnSet(); columns.Add<RecoilFx>(effects);columns.Add<RecoilStrength>(inputs);
-            Timeline<RecoilTrack,RecoilClip>.Apply<ushort,ushort>(indices,clocks,true,in columns);
-            Assert.AreEqual(6,effects[0].Value);Assert.AreEqual(24,effects[1].Value);
-            CollectionAssert.AreEqual(new ushort[]{6,6},clocks);
-            inputs[0].Value=3;
-            effects[0]=default;effects[1]=default;
-            Timeline<RecoilTrack,RecoilClip>.Apply<ushort,ushort>(indices,clocks,true,in columns);
-            Assert.AreEqual(36,effects[0].Value);
-            Timeline.Advance(indices,clocks,true);
-            CollectionAssert.AreEqual(new ushort[]{7,7},clocks);
-            first.Dispose();
-            Assert.DoesNotThrow(()=>Timeline<RecoilTrack,RecoilClip>.Prepare(second));
+            fixed(RecoilFx* effectCells=effects)
+            fixed(RecoilStrength* inputCells=inputs)
+            {
+                var columns=new ColumnSet(); columns.Add<RecoilFx>(effects);columns.Add<RecoilStrength>(inputs);
+                Timeline<RecoilTrack,RecoilClip>.Apply<ushort,ushort>(indices,clocks,true,in columns);
+                Assert.AreEqual(6,effects[0].Value);Assert.AreEqual(24,effects[1].Value);
+                CollectionAssert.AreEqual(new ushort[]{6,6},clocks);
+                inputs[0].Value=3;
+                effects[0]=default;effects[1]=default;
+                Timeline<RecoilTrack,RecoilClip>.Apply<ushort,ushort>(indices,clocks,true,in columns);
+                Assert.AreEqual(36,effects[0].Value);
+                Timeline.Advance(indices,clocks,true);
+                CollectionAssert.AreEqual(new ushort[]{7,7},clocks);
+                first.Dispose();
+                Assert.DoesNotThrow(()=>Timeline<RecoilTrack,RecoilClip>.Prepare(second));
+            }
         }
     }
 
@@ -165,11 +169,15 @@ public unsafe class NativeV3Tests
         {
             ushort[] indices={asset.Index};ushort[] positions={6};
             RecoilFx[] effects={default};RecoilStrength[] inputs={new RecoilStrength{Value=1}};
-            var columns=new ColumnSet();columns.Add<RecoilFx>(effects);columns.Add<RecoilStrength>(inputs);
-            for(var i=0;i<32;i++)Timeline<RecoilTrack,RecoilClip>.Apply<ushort,ushort>(indices,positions,true,in columns);
-            var before=GC.GetAllocatedBytesForCurrentThread();
-            for(var i=0;i<1024;i++)Timeline<RecoilTrack,RecoilClip>.Apply<ushort,ushort>(indices,positions,true,in columns);
-            Assert.AreEqual(0,GC.GetAllocatedBytesForCurrentThread()-before);
+            fixed(RecoilFx* effectCells=effects)
+            fixed(RecoilStrength* inputCells=inputs)
+            {
+                var columns=new ColumnSet();columns.Add<RecoilFx>(effects);columns.Add<RecoilStrength>(inputs);
+                for(var i=0;i<32;i++)Timeline<RecoilTrack,RecoilClip>.Apply<ushort,ushort>(indices,positions,true,in columns);
+                var before=GC.GetAllocatedBytesForCurrentThread();
+                for(var i=0;i<1024;i++)Timeline<RecoilTrack,RecoilClip>.Apply<ushort,ushort>(indices,positions,true,in columns);
+                Assert.AreEqual(0,GC.GetAllocatedBytesForCurrentThread()-before);
+            }
         }
     }
 

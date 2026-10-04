@@ -33,6 +33,8 @@ Prepare on the managed cold path. Pass `PreparedTimeline` by value to a job, loc
 
 Complete jobs before releasing their columns, clearing a pair's prepared banks, unloading a domain or shutting down the game. `TimelineAsset.LoadOwned` owns one acquisition; disposing one acquisition does not invalidate another load of the same content. Prepared banks own their copied folded values and remain valid until `ClearPrepared` or domain unload. `ClearPrepared` invalidates every prepared view for that pair. Native cold allocations are released on domain unload/process exit; this cleanup does not complete game jobs. Type registrations and content identities have process/domain lifetime as in the pinned runtime.
 
+`ColumnSet` borrows raw column addresses. Use stack or unmanaged storage, or pin managed arrays for the whole `Add`/`Apply` interval, including the first cold call. The game keeps those columns alive and unmoved until dispatch finishes.
+
 ## Qualified boundary
 
 Validated on Unity 6000.7.0a6 Linux: actual NuGetForUnity restore, Mono, EditMode and PlayMode, real Burst jobs, exact forward/backward raw words, finite/loop clocks, 1/2/4/8-byte results, signed zero, NaN/infinity, live input changes, shared content ownership, failed loads and 0 B managed allocation for warm Apply. Run the gate for the current receipt.
