@@ -19,10 +19,15 @@ try {
     if ($From) {
         Copy-Item (Join-Path $From "Tl.Runtime.Unity.*.nupkg"), (Join-Path $From "SHA256SUMS") $work
         $Tag = "local"
+    } elseif ((Get-Command gh -ErrorAction SilentlyContinue) -and (gh auth status 2>$null; $LASTEXITCODE -eq 0)) {
+        if (-not $Tag) { $Tag = (gh release list -R $repo --limit 1 --json tagName -q '.[0].tagName') }
+        if (-not $Tag) { Fail "$repo has no releases" }
+        gh release download $Tag -R $repo -p 'Tl.Runtime.Unity.*.nupkg' -p SHA256SUMS -D $work
+        if ($LASTEXITCODE -ne 0) { Fail "release $Tag download failed" }
     } else {
         $api = if ($Tag) { "https://api.github.com/repos/$repo/releases/tags/$Tag" } else { "https://api.github.com/repos/$repo/releases?per_page=1" }
         try { $release = Invoke-RestMethod -Uri $api -Headers @{ Accept = "application/vnd.github+json" } }
-        catch { Fail "no release found at $api" }
+        catch { Fail "no release found at $api (private repository? run gh auth login)" }
         if ($release -is [array]) { $release = $release[0] }
         if (-not $release) { Fail "$repo has no releases" }
         $Tag = $release.tag_name

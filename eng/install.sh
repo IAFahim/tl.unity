@@ -25,9 +25,13 @@ trap 'rm -rf "$work"' EXIT
 if [ -n "$from" ]; then
   cp "$from"/Tl.Runtime.Unity.*.nupkg "$from"/SHA256SUMS "$work"/
   tag="local"
+elif command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
+  [ -n "$tag" ] || tag="$(gh release list -R "$repo" --limit 1 --json tagName -q '.[0].tagName')"
+  [ -n "$tag" ] || fail "$repo has no releases"
+  gh release download "$tag" -R "$repo" -p 'Tl.Runtime.Unity.*.nupkg' -p SHA256SUMS -D "$work" || fail "release $tag download failed"
 else
   if [ -n "$tag" ]; then api="https://api.github.com/repos/$repo/releases/tags/$tag"; else api="https://api.github.com/repos/$repo/releases?per_page=1"; fi
-  curl -fsSL -H "Accept: application/vnd.github+json" "$api" -o "$work/release.json" || fail "no release found at $api"
+  curl -fsSL -H "Accept: application/vnd.github+json" "$api" -o "$work/release.json" || fail "no release found at $api (private repository? run gh auth login)"
   tag="$(sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' "$work/release.json" | head -n1)"
   [ -n "$tag" ] || fail "release response has no tag_name"
   base="https://github.com/$repo/releases/download/$tag"
