@@ -10,5 +10,12 @@
   },
   "dependencies": {
     "com.unity.entities": "6.7.0"
-  }
+  },
+  "samples": [
+    {
+      "displayName": "Kinds IL2CPP player",
+      "description": "Runs the 600-step kind script on a Linux IL2CPP player and prints whether its hash equals the .NET hash.",
+      "path": "Samples~/KindsIL2CPP"
+    }
+  ]
 }

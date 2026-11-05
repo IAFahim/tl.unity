@@ -1,0 +1,7 @@
+{
+  "name": "Tl.Unity.Kinds.Sample",
+  "references": [
+    "Tl.Unity.Kinds"
+  ],
+  "autoReferenced": true
+}

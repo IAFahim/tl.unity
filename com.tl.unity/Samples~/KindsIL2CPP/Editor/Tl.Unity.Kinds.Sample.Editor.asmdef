@@ -1,0 +1,10 @@
+{
+  "name": "Tl.Unity.Kinds.Sample.Editor",
+  "references": [
+    "Tl.Unity.Kinds.Sample"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "autoReferenced": true
+}
