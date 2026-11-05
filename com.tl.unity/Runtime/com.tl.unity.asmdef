@@ -1,0 +1,11 @@
+{
+  "name": "Tl.Unity",
+  "rootNamespace": "Tl.Unity",
+  "references": [
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities"
+  ],
+  "allowUnsafeCode": true,
+  "noEngineReferences": true
+}

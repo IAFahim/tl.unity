@@ -1,0 +1,19 @@
+{
+  "name": "Tl.Unity.Tests",
+  "rootNamespace": "Tl.Unity.Tests",
+  "references": [
+    "Tl.Unity",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "allowUnsafeCode": true
+}

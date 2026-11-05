@@ -1,0 +1,12 @@
+{
+  "name": "Tl.Unity.Editor",
+  "rootNamespace": "Tl.Unity.Editor",
+  "references": [
+    "Tl.Unity"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "allowUnsafeCode": true,
+  "noEngineReferences": false
+}
