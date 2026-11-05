@@ -12,7 +12,8 @@ namespace KindGame
         protected override void OnUpdate()
         {
             var view = GetSingleton<TimelineLibrary>().View;
-            Dependency = TimelineJobs.Movement(ref CheckedStateRef, view, TimelineLibraryBootstrap.Kinds, Forward, Dependency);
+            var anchors = new AnchorLookup { Anchors = GetComponentLookup<Anchor>(true) };
+            Dependency = TimelineJobs.Movement(ref CheckedStateRef, view, TimelineLibraryBootstrap.Kinds, Forward, anchors, Dependency);
         }
     }
 
@@ -62,6 +63,7 @@ namespace KindGame
                 typeof(Movement_MotionData),
                 typeof(Movement_WalkStatData),
                 typeof(Movement_JumpPowerData),
+                typeof(Movement_TargetData),
                 typeof(Movement_StaminaData),
                 typeof(Vitals_HealthData),
             };
@@ -127,6 +129,31 @@ namespace KindGame
             writer.Begin(0);
             StatChangeKind.Pulses(writer).To(Rows[target], delta);
             writer.End();
+        }
+
+        public Playback[] Slots(int row)
+        {
+            var buffer = Entities.GetBuffer<Playback>(Rows[row]);
+            var slots = new Playback[buffer.Length];
+            for (var i = 0; i < slots.Length; i++)
+                slots[i] = buffer[i];
+            return slots;
+        }
+
+        public void Edit(int row, int slot, Func<Playback, Playback> change)
+        {
+            var buffer = Entities.GetBuffer<Playback>(Rows[row]);
+            buffer[slot] = change(buffer[slot]);
+        }
+
+        public int Entries<T>(int row) where T : unmanaged, IBufferElementData
+        {
+            return Entities.GetBuffer<T>(Rows[row]).Length;
+        }
+
+        public bool Active<T>(int row) where T : unmanaged, IComponentData, IEnableableComponent
+        {
+            return Entities.IsComponentEnabled<T>(Rows[row]);
         }
 
         public Motion Motion(int row) => Entities.GetComponentData<Movement_MotionData>(Rows[row]).Value;

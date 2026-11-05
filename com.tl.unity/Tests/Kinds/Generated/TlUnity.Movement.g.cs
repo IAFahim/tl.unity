@@ -8,6 +8,7 @@ namespace KindGame
 public struct Movement_MotionData : IComponentData { public global::KindGame.Motion Value; }
 public struct Movement_WalkStatData : IComponentData { public global::KindGame.WalkStat Value; }
 public struct Movement_JumpPowerData : IComponentData { public global::KindGame.JumpPower Value; }
+public struct Movement_TargetData : IComponentData { public global::KindGame.Target Value; }
 public struct Movement_StaminaData : IComponentData { public global::KindGame.Stamina Value; }
 [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
 public unsafe partial struct MovementChunkJob : IJobChunk
@@ -19,7 +20,9 @@ public bool Forward;
 public ComponentTypeHandle<Movement_MotionData> MotionHandle;
 [ReadOnly] public ComponentTypeHandle<Movement_WalkStatData> WalkStatHandle;
 [ReadOnly] public ComponentTypeHandle<Movement_JumpPowerData> JumpPowerHandle;
+[ReadOnly] public ComponentTypeHandle<Movement_TargetData> TargetHandle;
 public ComponentTypeHandle<Movement_StaminaData> StaminaHandle;
+public global::KindGame.AnchorLookup Anchors;
 public BufferTypeHandle<global::KindGame.LiftEntry> LiftEntryHandle;
 public ComponentTypeHandle<global::KindGame.LiftActive> LiftActiveHandle;
 [ReadOnly] public ComponentTypeHandle<global::KindGame.LiftEnabled> LiftEnabledHandle;
@@ -35,12 +38,13 @@ var __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
 var __c0 = (global::KindGame.Motion*)chunk.GetRequiredComponentDataPtrRW(ref MotionHandle);
 var __c1 = (global::KindGame.WalkStat*)chunk.GetRequiredComponentDataPtrRO(ref WalkStatHandle);
 var __c2 = (global::KindGame.JumpPower*)chunk.GetRequiredComponentDataPtrRO(ref JumpPowerHandle);
-var __c3 = (global::KindGame.Stamina*)chunk.GetRequiredComponentDataPtrRW(ref StaminaHandle);
-Kind_0(chunk, __playbacks, __c0, __c1, __c2, __c3);
-Kind_1(chunk, __playbacks, __c0, __c1, __c2, __c3);
-Kind_2(chunk, __playbacks, __c0, __c1, __c2, __c3);
+var __c3 = (global::KindGame.Target*)chunk.GetRequiredComponentDataPtrRO(ref TargetHandle);
+var __c4 = (global::KindGame.Stamina*)chunk.GetRequiredComponentDataPtrRW(ref StaminaHandle);
+Kind_0(chunk, __playbacks, __c0, __c1, __c2, __c3, __c4);
+Kind_1(chunk, __playbacks, __c0, __c1, __c2, __c3, __c4);
+Kind_2(chunk, __playbacks, __c0, __c1, __c2, __c3, __c4);
 }
-void Kind_0(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Motion* __c0, global::KindGame.WalkStat* __c1, global::KindGame.JumpPower* __c2, global::KindGame.Stamina* __c3)
+void Kind_0(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Motion* __c0, global::KindGame.WalkStat* __c1, global::KindGame.JumpPower* __c2, global::KindGame.Target* __c3, global::KindGame.Stamina* __c4)
 {
 if (!chunk.Has(ref LiftEntryHandle)) return;
 var __acc = chunk.GetBufferAccessor(ref LiftEntryHandle);
@@ -143,7 +147,7 @@ if (__buf.Capacity > global::KindGame.KindCapacity.Lift && __buf.Length <= globa
 }
 }
 }
-void Kind_1(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Motion* __c0, global::KindGame.WalkStat* __c1, global::KindGame.JumpPower* __c2, global::KindGame.Stamina* __c3)
+void Kind_1(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Motion* __c0, global::KindGame.WalkStat* __c1, global::KindGame.JumpPower* __c2, global::KindGame.Target* __c3, global::KindGame.Stamina* __c4)
 {
 if (!chunk.Has(ref LocomotionEntryHandle)) return;
 var __acc = chunk.GetBufferAccessor(ref LocomotionEntryHandle);
@@ -204,7 +208,7 @@ ushort __len3 = (ushort)(__def->WindowEnd - __def->WindowStart);
 ushort __within3 = (ushort)(__tick - __def->WindowStart);
 sbyte __dir3 = __backward ? (sbyte)-1 : (sbyte)1;
 global::TlUnityGenerated.TlUnityFrames.Frame_0_3(__row3, __first3, __second3, __blend3, __tick, __len3, __within3, (ushort)__def->TrackIndex, (ushort)__tl->Duration, __dir3, __kflags, out var __t3, out var __cc3, out var __f3);
-__v = global::KindGame.Walk.Evaluate(in __f3, in __c1[__row]);
+__v = global::KindGame.Walk.Evaluate(in __f3, in __c1[__row], in __c3[__row], in Anchors);
 __ok = true;
 break;
 }
@@ -236,7 +240,7 @@ if (__buf.Capacity > global::KindGame.KindCapacity.Locomotion && __buf.Length <=
 }
 }
 }
-void Kind_2(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Motion* __c0, global::KindGame.WalkStat* __c1, global::KindGame.JumpPower* __c2, global::KindGame.Stamina* __c3)
+void Kind_2(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Motion* __c0, global::KindGame.WalkStat* __c1, global::KindGame.JumpPower* __c2, global::KindGame.Target* __c3, global::KindGame.Stamina* __c4)
 {
 if (!chunk.Has(ref StatChangeEntryHandle)) return;
 var __acc = chunk.GetBufferAccessor(ref StatChangeEntryHandle);
@@ -312,7 +316,7 @@ break;
 }
 if (!__ok) continue;
 }
-global::KindGame.StatChange.Apply(in __v, ref __c3[__row]);
+global::KindGame.StatChange.Apply(in __v, ref __c4[__row]);
 }
 if (__pulses == __len)
 {
@@ -338,12 +342,13 @@ if (__buf.Capacity > global::KindGame.KindCapacity.StatChange && __buf.Length <=
 }
 public static partial class TimelineJobs
 {
-public static JobHandle Movement(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward, JobHandle dependsOn)
+public static JobHandle Movement(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward, global::KindGame.AnchorLookup Anchors, JobHandle dependsOn)
 {
 var builder = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.Playback>();
 builder = builder.WithAllRW<Movement_MotionData>();
 builder = builder.WithAll<Movement_WalkStatData>();
 builder = builder.WithAll<Movement_JumpPowerData>();
+builder = builder.WithAll<Movement_TargetData>();
 builder = builder.WithAllRW<Movement_StaminaData>();
 builder = builder.WithAnyRW<global::KindGame.LiftEntry>();
 builder = builder.WithAnyRW<global::KindGame.LocomotionEntry>();
@@ -354,7 +359,9 @@ var job = new MovementChunkJob { View = view, Index = index, Forward = forward, 
 , MotionHandle = state.GetComponentTypeHandle<Movement_MotionData>(false)
 , WalkStatHandle = state.GetComponentTypeHandle<Movement_WalkStatData>(true)
 , JumpPowerHandle = state.GetComponentTypeHandle<Movement_JumpPowerData>(true)
+, TargetHandle = state.GetComponentTypeHandle<Movement_TargetData>(true)
 , StaminaHandle = state.GetComponentTypeHandle<Movement_StaminaData>(false)
+, Anchors = Anchors
 , LiftEntryHandle = state.GetBufferTypeHandle<global::KindGame.LiftEntry>(false)
 , LiftActiveHandle = state.GetComponentTypeHandle<global::KindGame.LiftActive>(false)
 , LiftEnabledHandle = state.GetComponentTypeHandle<global::KindGame.LiftEnabled>(true)

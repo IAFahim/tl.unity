@@ -1,5 +1,7 @@
 using System;
 using Tl;
+using Unity.Collections;
+using Unity.Entities;
 
 namespace KindGame
 {
@@ -10,6 +12,15 @@ public struct Stamina { public int Value; }
 public struct WalkStat { public float Value; }
 public struct JumpPower { public float Value; }
 public struct Speed { public float Value; public byte Priority; }
+public struct Target { public Entity Value; }
+public struct Anchor : IComponentData { public float Boost; }
+
+public struct AnchorLookup
+{
+    [ReadOnly] public ComponentLookup<Anchor> Anchors;
+
+    public float Boost(in Target target) => Anchors.TryGetComponent(target.Value, out var anchor) ? anchor.Boost : 1f;
+}
 
 public struct WalkClip { public float Speed; public byte Priority; }
 public struct WalkTrack : IBlend<WalkClip>
@@ -71,8 +82,8 @@ public struct StatChange
 public struct Walk : ITrack<WalkTrack, WalkClip>
 {
     [Feeds(typeof(Locomotion))]
-    public static Speed Evaluate(in Frame<WalkTrack, WalkClip> f, in WalkStat stat)
-        => new Speed { Value = f.Direction * f.Clip.Speed * f.Track.Scale * stat.Value, Priority = f.Clip.Priority };
+    public static Speed Evaluate(in Frame<WalkTrack, WalkClip> f, in WalkStat stat, in Target target, in AnchorLookup anchors)
+        => new Speed { Value = f.Direction * f.Clip.Speed * f.Track.Scale * stat.Value * anchors.Boost(in target), Priority = f.Clip.Priority };
 }
 
 public struct Jump : ITrack<ArcTrack, ArcClip>
@@ -110,6 +121,8 @@ public ref partial struct Movement
     public Span<Motion> Motion;
     public ReadOnlySpan<WalkStat> WalkStat;
     public ReadOnlySpan<JumpPower> JumpPower;
+    public ReadOnlySpan<Target> Target;
+    public AnchorLookup Anchors;
     public Span<Stamina> Stamina;
 }
 

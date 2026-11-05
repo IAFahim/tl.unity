@@ -69,14 +69,14 @@ public static global::Tl.Unity.KindPulses<int> Pulses(global::Tl.Unity.KindPulse
 }
 namespace TlUnityGenerated
 {
-public sealed class TlUnityModule_Tl_Unity_Kinds_Tests : global::Tl.ITlModule, global::Tl.Unity.IKindModule
+public sealed class TlUnityModule_Tl_Unity_Kinds : global::Tl.ITlModule, global::Tl.Unity.IKindModule
 {
 public int PairCount { get { return 1; } }
 public ulong PairKey(int index)
 {
 switch (index)
 {
-case 0: return 16149979621879687093UL;
+case 0: return 1690521228904453719UL;
 default: return 0UL;
 }
 }

@@ -8,6 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="UnityStubs.cs" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Remove="UnityStubs.cs" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.1" />
     <ProjectReference Include="../Tl.Gen.Unity/Tl.Gen.Unity.csproj" />
   </ItemGroup>

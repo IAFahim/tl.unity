@@ -18,6 +18,7 @@ foreach (var file in Directory.GetFiles(game, "*.cs", SearchOption.AllDirectorie
         continue;
     trees.Add(CSharpSyntaxTree.ParseText(File.ReadAllText(file), options, file));
 }
+trees.Add(CSharpSyntaxTree.ParseText(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "UnityStubs.cs")), options, "UnityStubs.cs"));
 trees.Add(CSharpSyntaxTree.ParseText("global using global::System; global using global::System.Collections.Generic; global using global::System.IO; global using global::System.Linq; global using global::System.Threading; global using global::System.Threading.Tasks;", options, "GlobalUsings.cs"));
 var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)
     .Where(static p => Path.GetFileName(p).StartsWith("System.") || Path.GetFileName(p) is "mscorlib.dll" or "netstandard.dll")
