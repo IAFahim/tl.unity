@@ -40,11 +40,14 @@ namespace Tl.Unity
             base.OnCreate();
             _requestQuery = GetEntityQuery(ComponentType.ReadOnly<TimelineRequest>(), ComponentType.ReadWrite<Playback>());
             _closedQuery = GetEntityQuery(ComponentType.ReadOnly<TimelineLibrary>());
+            RequireForUpdate<TimelineLibrary>();
         }
 
         protected override void OnUpdate()
         {
             var view = GetSingleton<TimelineLibrary>().View;
+            if (!view.Kinds.IsEmpty)
+                return;
             using (var entities = _requestQuery.ToEntityArray(Allocator.Temp))
             {
                 if (entities.Length == 0)
@@ -141,11 +144,14 @@ namespace Tl.Unity
         {
             base.OnCreate();
             _playbackQuery = GetEntityQuery(ComponentType.ReadWrite<Playback>());
+            RequireForUpdate<TimelineLibrary>();
         }
 
         protected override void OnUpdate()
         {
             var view = GetSingleton<TimelineLibrary>().View;
+            if (!view.Kinds.IsEmpty)
+                return;
             Dependency = TimelineJobs.ScheduleAdvance(this, _playbackQuery, view, Dependency);
         }
     }

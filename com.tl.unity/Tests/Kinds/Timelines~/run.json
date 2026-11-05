@@ -1,0 +1,27 @@
+{
+  "name": "run",
+  "duration": 40,
+  "loop": true,
+  "channel": "locomotion",
+  "tracks": [
+    {
+      "namespace": "KindGame",
+      "type": "WalkTrack",
+      "data": {
+        "Scale": 1
+      },
+      "clips": [
+        {
+          "namespace": "KindGame",
+          "type": "WalkClip",
+          "start": 0,
+          "end": 40,
+          "data": {
+            "Speed": 2,
+            "Priority": 0
+          }
+        }
+      ]
+    }
+  ]
+}

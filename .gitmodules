@@ -1,3 +1,6 @@
 [submodule "external/v3"]
 	path = external/v3
 	url = https://github.com/IAFahim/tl.git
+[submodule "external/tl-kinds"]
+	path = external/tl-kinds
+	url = https://github.com/IAFahim/tl.git

@@ -8,7 +8,7 @@ namespace Tl.Unity
     [BurstCompile]
     public partial struct TimelineAdvanceJob : IJobChunk
     {
-        public global::Tl.LibraryView View;
+        [global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public global::Tl.LibraryView View;
         public BufferTypeHandle<Playback> PlaybackHandle;
 
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in global::Unity.Burst.Intrinsics.v128 chunkEnabledMask)

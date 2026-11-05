@@ -1,0 +1,68 @@
+using Microsoft.CodeAnalysis;
+using Tl.Gen.CSharp.Model;
+
+namespace Tl.Gen.Unity
+{
+    internal static class UnityKindPlan
+    {
+        internal static IReadOnlyList<UnityKindInfo> Plan(Compilation compilation, IReadOnlyList<SystemAssignment> assignments, SourceProductionContext context)
+        {
+            var byName = new SortedDictionary<string, KindDecl>(StringComparer.Ordinal);
+            foreach (var assignment in assignments)
+            {
+                foreach (var kind in assignment.Kinds)
+                {
+                    if (kind.Group.Length != 0)
+                    {
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            new DiagnosticDescriptor("TLUNITY9104", "Kind group not supported", "Kind '{0}' uses Group '{1}'; kind groups run on .NET only in this release and are skipped on Unity.", "Tl.Unity", DiagnosticSeverity.Warning, true),
+                            Location.None, kind.Name, kind.Group));
+                        continue;
+                    }
+                    byName[kind.TypeName] = kind;
+                }
+                foreach (var consumer in assignment.Consumers)
+                    foreach (var method in consumer.Methods)
+                        if (method.Kind != ConsumerMethodKind.Feeder && method.Kind != ConsumerMethodKind.Fold)
+                        {
+                            context.ReportDiagnostic(Diagnostic.Create(
+                                new DiagnosticDescriptor("TLUNITY9105", "Legacy consumer method not dispatched", "Consumer '{0}' declares {1}; legacy consumers are not dispatched on Unity yet. Feed a kind instead.", "Tl.Unity", DiagnosticSeverity.Warning, true),
+                                Location.None, consumer.ConsumerTypeName, method.Kind.ToString()));
+                        }
+            }
+            var infos = new List<UnityKindInfo>();
+            var registry = 0;
+            foreach (var pair in byName)
+            {
+                var kind = pair.Value;
+                var value = UnityLayout.Resolve(compilation, kind.ValueTypeName);
+                if (value is null || !UnityLayout.TrySize(value, out var valueBytes, out _))
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        new DiagnosticDescriptor("TLUNITY9102", "Kind value layout", "Kind '{0}' value type '{1}' needs a sequential unmanaged layout of primitives, enums and structs.", "Tl.Unity", DiagnosticSeverity.Error, true),
+                        Location.None, kind.Name, kind.ValueTypeName));
+                    continue;
+                }
+                var entryBytes = kind.Accepts == 0 ? 8 : 8 + UnityLayout.Round(valueBytes, 4);
+                infos.Add(new UnityKindInfo(kind, registry++, valueBytes, entryBytes, Capacity(compilation, kind, context), UnityKindEmitter.NamespaceOf(kind.TypeName), UnityKindEmitter.Signature(assignments, kind)));
+            }
+            return infos;
+        }
+
+        static string Capacity(Compilation compilation, KindDecl kind, SourceProductionContext context)
+        {
+            foreach (var symbol in compilation.GetSymbolsWithName("KindCapacity", SymbolFilter.Type))
+            {
+                if (symbol is not INamedTypeSymbol type)
+                    continue;
+                foreach (var member in type.GetMembers(kind.Name))
+                    if (member is IFieldSymbol { IsConst: true })
+                        return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + kind.Name;
+            }
+            context.ReportDiagnostic(Diagnostic.Create(
+                new DiagnosticDescriptor("TLUNITY9103", "Kind capacity missing", "KindCapacity.{0} does not exist yet; inline capacity falls back to 0. Bake the library with tlb to write Kinds.g.cs.", "Tl.Unity", DiagnosticSeverity.Warning, true),
+                Location.None, kind.Name));
+            return "0";
+        }
+    }
+}

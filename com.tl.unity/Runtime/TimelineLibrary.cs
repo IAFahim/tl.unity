@@ -14,6 +14,7 @@ namespace Tl.Unity
     public sealed class TimelineLibraryOwner : IDisposable
     {
         global::Tl.TimelineWorld _world;
+        KindIndex _kinds;
         readonly string _path;
         long _writeTicks;
         bool _disposed;
@@ -26,7 +27,18 @@ namespace Tl.Unity
                 throw new ArgumentException("Timeline library bytes are empty.", nameof(tlib));
             _path = path;
             _world = new global::Tl.TimelineWorld(tlib);
+            _kinds = KindIndex.Build(_world.View, _world);
             _writeTicks = Stamp(path);
+        }
+
+        public KindIndex Kinds
+        {
+            get
+            {
+                if (_disposed)
+                    throw new ObjectDisposedException(nameof(TimelineLibraryOwner));
+                return _kinds;
+            }
         }
 
         public global::Tl.LibraryView View
@@ -47,6 +59,8 @@ namespace Tl.Unity
             if (stamp == _writeTicks)
                 return false;
             _world.Reload(File.ReadAllBytes(_path));
+            _kinds.Dispose();
+            _kinds = KindIndex.Build(_world.View, _world);
             _writeTicks = Stamp(_path);
             return true;
         }
@@ -56,6 +70,7 @@ namespace Tl.Unity
             if (_disposed)
                 return;
             _disposed = true;
+            _kinds.Dispose();
             _world.Dispose();
             GC.SuppressFinalize(this);
         }
@@ -150,6 +165,11 @@ namespace Tl.Unity
         static TimelineLibraryOwner Owner;
         static Entity OwnerEntity;
         static bool HasOwnerEntity;
+        static uint Version;
+
+        public static KindIndex Kinds => Owner != null ? Owner.Kinds : default;
+
+        public static uint Generation => Version;
 
         public static TimelineLibraryOwner Ensure(EntityManager entities, string path, byte[] tlib)
         {
@@ -159,6 +179,7 @@ namespace Tl.Unity
             OwnerEntity = entities.CreateEntity(typeof(TimelineLibrary), typeof(ClosedPlayback));
             entities.SetComponentData(OwnerEntity, new TimelineLibrary { View = Owner.View });
             HasOwnerEntity = true;
+            Version++;
             return Owner;
         }
 
@@ -167,6 +188,7 @@ namespace Tl.Unity
             if (Owner == null || !HasOwnerEntity)
                 return;
             entities.SetComponentData(OwnerEntity, new TimelineLibrary { View = Owner.View });
+            Version++;
         }
 
         public static bool TryPollReload()

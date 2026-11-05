@@ -34,12 +34,12 @@ namespace Tl.Gen.Unity
             writer.Append("public partial struct ");
             writer.Append(model.SystemTypeName);
             writer.Append("ChunkJob : IJobChunk\n{\n");
-            writer.Append("public global::Tl.LibraryView View;\n");
-            writer.Append("public BufferTypeHandle<global::Tl.Unity.Playback> PlaybackHandle;\n");
+            writer.Append("[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public global::Tl.LibraryView View;\n");
+            writer.Append("[ReadOnly] public BufferTypeHandle<global::Tl.Unity.Playback> PlaybackHandle;\n");
             for (var i = 0; i < model.Columns.Count; i++)
             {
                 var column = model.Columns[i];
-                writer.Append("public ComponentTypeHandle<");
+                writer.Append(column.ReadOnly ? "[ReadOnly] public ComponentTypeHandle<" : "public ComponentTypeHandle<");
                 writer.Append(ComponentName(model, column));
                 writer.Append("> ");
                 writer.Append(column.Name);

@@ -1,0 +1,419 @@
+using Unity.Burst;
+using Unity.Burst.Intrinsics;
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.Entities;
+using Unity.Entities.LowLevel.Unsafe;
+
+namespace Tl.Unity
+{
+    public static class KindCounter
+    {
+        public const int DroppedPulses = 0;
+        public const int DroppedStarts = 1;
+        public const int Count = 2;
+    }
+
+    [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
+    public unsafe struct KindTickJob : IJobChunk
+    {
+        [NativeDisableUnsafePtrRestriction] public KindIndex Index;
+        public BufferTypeHandle<Playback> PlaybackHandle;
+        public BufferTypeHandle<TimelineRequest> RequestHandle;
+        public ComponentTypeHandle<TimelinePlaying> PlayingHandle;
+        public KindHandleSet Handles;
+        [NativeDisableUnsafePtrRestriction] public int* Counters;
+        public int StepDir;
+
+        public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
+        {
+            var count = chunk.Count;
+            var playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
+            var buffers = stackalloc UnsafeUntypedBufferAccessor[64];
+            var ctx = new KindCursor { Index = Index, Chunk = chunk, Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers, Counters = Counters };
+            for (var k = 0; k < Index.KindCount; k++)
+            {
+                if (!KindHandleSet.IsMapped(ctx.Handles, k) || !chunk.Has(ref *KindHandleSet.Entry(ctx.Handles, k))) continue;
+                buffers[k] = chunk.GetUntypedBufferAccessor(ref *KindHandleSet.Entry(ctx.Handles, k));
+                ctx.Reach |= 1ul << k;
+            }
+            if (chunk.Has(ref RequestHandle))
+            {
+                var requests = chunk.GetBufferAccessor(ref RequestHandle);
+                for (var row = 0; row < count; row++)
+                {
+                    var queue = requests[row];
+                    if (queue.Length == 0) continue;
+                    var slots = playbacks[row];
+                    for (var r = 0; r < queue.Length; r++)
+                        ctx.Apply(row, ref slots, queue[r]);
+                    queue.Clear();
+                    chunk.SetComponentEnabled(ref PlayingHandle, row, true);
+                }
+            }
+            for (var row = 0; row < count; row++)
+            {
+                if (!chunk.IsComponentEnabled(ref PlayingHandle, row)) continue;
+                var slots = playbacks[row];
+                if (!ctx.TickEntity(row, ref slots, StepDir))
+                    chunk.SetComponentEnabled(ref PlayingHandle, row, false);
+            }
+        }
+    }
+
+    public unsafe struct KindCursor
+    {
+        public KindIndex Index;
+        public ArchetypeChunk Chunk;
+        public KindHandleSet* Handles;
+        public UnsafeUntypedBufferAccessor* Buffers;
+        public int* Counters;
+        public ulong Reach;
+
+        const int MaxSlots = 256;
+
+        public void Apply(int row, ref DynamicBuffer<Playback> slots, in TimelineRequest request)
+        {
+            switch (request.Op)
+            {
+                case global::Tl.RequestOp.Start:
+                    Start(row, ref slots, request.Timeline, request.At);
+                    return;
+                case global::Tl.RequestOp.Stop:
+                    for (var i = 0; i < slots.Length; i++)
+                    {
+                        var s = slots[i];
+                        if (s.Timeline == request.Timeline && (s.Flags & global::Tl.PlaybackFlags.Stopping) == 0)
+                        {
+                            Close(row, ref slots, i);
+                            return;
+                        }
+                    }
+                    return;
+                case global::Tl.RequestOp.StopChannel:
+                    for (var i = 0; i < slots.Length; i++)
+                    {
+                        var s = slots[i];
+                        if (s.Timeline != 0 && (s.Flags & global::Tl.PlaybackFlags.Stopping) == 0 && s.Channel == (byte)request.Timeline)
+                        {
+                            Close(row, ref slots, i);
+                            return;
+                        }
+                    }
+                    return;
+                default:
+                    for (var i = 0; i < slots.Length; i++)
+                    {
+                        var s = slots[i];
+                        if (s.Timeline != 0 && (s.Flags & global::Tl.PlaybackFlags.Stopping) == 0)
+                            Close(row, ref slots, i);
+                    }
+                    return;
+            }
+        }
+
+        void Start(int row, ref DynamicBuffer<Playback> slots, ushort timeline, ushort at)
+        {
+            if (timeline == 0 || (uint)(timeline - 1) >= (uint)Index.TimelineCount) return;
+            var tl = Index.Timelines + (timeline - 1);
+            var duration = tl->Duration;
+            if (duration == 0) return;
+            var tick = tl->Loop != 0 ? (ushort)(at % duration) : at < duration ? at : (ushort)(duration - 1);
+            var channel = (byte)tl->Channel;
+            var count = slots.Length;
+            if (channel != 0)
+                for (var i = 0; i < count; i++)
+                {
+                    var s = slots[i];
+                    if (s.Timeline != 0 && s.Channel == channel && (s.Flags & global::Tl.PlaybackFlags.Stopping) == 0)
+                    {
+                        Close(row, ref slots, i);
+                        break;
+                    }
+                }
+            var free = count;
+            for (var i = count - 1; i >= 0; i--)
+            {
+                var s = slots[i];
+                if (s.Timeline == 0) free = i;
+                else if (s.Timeline == timeline && (s.Flags & global::Tl.PlaybackFlags.Stopping) == 0) return;
+            }
+            if (free == MaxSlots) return;
+            if (Index.KindCount != 0 && (Index.Closure[timeline - 1] & ~Reach) != 0)
+            {
+                Counters[KindCounter.DroppedStarts]++;
+                return;
+            }
+            var playback = new Playback { Timeline = timeline, Tick = tick, Channel = channel, Flags = global::Tl.PlaybackFlags.StartPending };
+            if (free == count) slots.Add(playback);
+            else slots[free] = playback;
+        }
+
+        void Close(int row, ref DynamicBuffer<Playback> slots, int slot)
+        {
+            var s = slots[slot];
+            Stop(row, slot, ref s);
+            s.Flags = (s.Flags & (global::Tl.PlaybackFlags.Reverse | global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.StartPending)) | global::Tl.PlaybackFlags.Stopping;
+            slots[slot] = s;
+        }
+
+        void Stop(int row, int slot, ref Playback s)
+        {
+            if (Index.KindCount == 0 || (s.Flags & (global::Tl.PlaybackFlags.StartPending | global::Tl.PlaybackFlags.Ended)) != 0) return;
+            var id = s.Timeline;
+            var tk = Index.Sec.Timelines + (id - 1);
+            if (tk->KindMask == 0) return;
+            var windows = Index.Sec.Windows(tk);
+            int tick = s.Tick;
+            for (var k = Index.PairStart[id - 1]; k < Index.PairStart[id]; k++)
+            {
+                var w = (int)(Index.Pairs[k] >> 16);
+                var f = (int)(Index.Pairs[k] & 0xffff);
+                if (tick < windows[w].Start || tick >= windows[w].End) continue;
+                var feeder = Index.Sec.Feeders + f;
+                if (feeder->Trigger == 0) RemoveSpan(row, feeder->Kind, (byte)slot, id, (ushort)w);
+                else if (feeder->Trigger == 2 && tick < windows[w].End - 1) Append(row, feeder, slot, id, w, global::Tl.KindEntryFlags.Pulse | global::Tl.KindEntryFlags.Interrupted);
+            }
+        }
+
+        public bool TickEntity(int row, ref DynamicBuffer<Playback> slots, int stepDir)
+        {
+            var count = slots.Length;
+            var live = false;
+            var tls = Index.Timelines;
+            var sec = Index.Sec;
+            for (var i = 0; i < count; i++)
+            {
+                var s = slots[i];
+                var id = s.Timeline;
+                if (id == 0) continue;
+                var flags = s.Flags;
+                if ((flags & ~global::Tl.PlaybackFlags.Reverse) == 0)
+                {
+                    var dir = flags == 0 ? stepDir : -stepDir;
+                    var t = s.Tick + dir;
+                    if ((uint)t < tls[id - 1].Duration)
+                    {
+                        s.Tick = (ushort)t;
+                        slots[i] = s;
+                        if (Index.KindCount != 0 && sec.Timelines[id - 1].KindMask != 0 && (sec.EventBitsAt(sec.Timelines + (id - 1), t) & (dir > 0 ? 1 : 2)) != 0) ApplyEvents(row, i, id, t, dir);
+                        live = true;
+                        continue;
+                    }
+                }
+                live |= TickSlot(row, i, ref slots, stepDir);
+            }
+            return live;
+        }
+
+        bool TickSlot(int row, int i, ref DynamicBuffer<Playback> slots, int stepDir)
+        {
+            var s = slots[i];
+            s.Flags &= ~global::Tl.PlaybackFlags.Began;
+            if ((s.Flags & global::Tl.PlaybackFlags.Stopping) != 0)
+            {
+                if ((s.Flags & global::Tl.PlaybackFlags.StopAged) != 0)
+                {
+                    slots[i] = default;
+                    return false;
+                }
+                s.Flags |= global::Tl.PlaybackFlags.StopAged;
+                slots[i] = s;
+                return true;
+            }
+            if ((s.Flags & global::Tl.PlaybackFlags.StartPending) != 0)
+            {
+                Begin(row, i, ref s, stepDir);
+                slots[i] = s;
+                return true;
+            }
+            if ((s.Flags & global::Tl.PlaybackFlags.Paused) != 0)
+            {
+                slots[i] = s;
+                return true;
+            }
+            if ((s.Flags & global::Tl.PlaybackFlags.Ended) != 0)
+            {
+                slots[i] = s;
+                return false;
+            }
+            var dir = (s.Flags & global::Tl.PlaybackFlags.Reverse) != 0 ? -stepDir : stepDir;
+            var id = s.Timeline;
+            var tl = Index.Timelines + (id - 1);
+            int duration = (int)tl->Duration;
+            var t = s.Tick + dir;
+            if ((uint)t < (uint)duration)
+            {
+                s.Tick = (ushort)t;
+                slots[i] = s;
+                Events(row, i, id, t, dir);
+                return true;
+            }
+            if (tl->Loop != 0)
+            {
+                WrapRemove(row, i, id, dir);
+                t = dir > 0 ? 0 : duration - 1;
+                s.Tick = (ushort)t;
+                slots[i] = s;
+                Events(row, i, id, t, dir);
+                return true;
+            }
+            RemoveActiveSpans(row, i, in s);
+            if (tl->Next != 0)
+            {
+                var next = Index.Timelines + (tl->Next - 1);
+                s.Timeline = tl->Next;
+                s.Channel = (byte)next->Channel;
+                s.Tick = (ushort)(dir > 0 ? 0 : next->Duration - 1);
+                Begin(row, i, ref s, stepDir);
+                slots[i] = s;
+                return true;
+            }
+            if (tl->Hold != 0)
+            {
+                s.Tick = (ushort)(duration - 1);
+                s.Flags |= global::Tl.PlaybackFlags.Ended;
+                slots[i] = s;
+                return false;
+            }
+            slots[i] = default;
+            return false;
+        }
+
+        void Events(int row, int i, ushort id, int tick, int dir)
+        {
+            var sec = Index.Sec;
+            if (Index.KindCount != 0 && sec.Timelines[id - 1].KindMask != 0 && (sec.EventBitsAt(sec.Timelines + (id - 1), tick) & (dir > 0 ? 1 : 2)) != 0) ApplyEvents(row, i, id, tick, dir);
+        }
+
+        void Begin(int row, int i, ref Playback s, int stepDir)
+        {
+            s.Flags = (s.Flags & ~global::Tl.PlaybackFlags.StartPending) | global::Tl.PlaybackFlags.Began;
+            var id = s.Timeline;
+            if (Index.KindCount == 0 || Index.Sec.Timelines[id - 1].KindMask == 0) return;
+            var dir = (s.Flags & global::Tl.PlaybackFlags.Reverse) != 0 ? -stepDir : stepDir;
+            var windows = Index.Sec.Windows(Index.Sec.Timelines + (id - 1));
+            int tick = s.Tick;
+            for (var k = Index.PairStart[id - 1]; k < Index.PairStart[id]; k++)
+            {
+                var w = (int)(Index.Pairs[k] >> 16);
+                var f = (int)(Index.Pairs[k] & 0xffff);
+                var window = windows[w];
+                var feeder = Index.Sec.Feeders + f;
+                var inside = tick >= window.Start && tick < window.End;
+                switch (feeder->Trigger)
+                {
+                    case 0:
+                        if (inside) Append(row, feeder, i, id, w, global::Tl.KindEntryFlags.Span | ((dir > 0 ? tick != window.Start : tick != window.End - 1) ? global::Tl.KindEntryFlags.Synthetic : 0));
+                        break;
+                    case 1:
+                        if (inside) Append(row, feeder, i, id, w, global::Tl.KindEntryFlags.Pulse | (tick != window.Start ? global::Tl.KindEntryFlags.Synthetic : 0));
+                        break;
+                    case 2:
+                        if (tick == window.End - 1) Append(row, feeder, i, id, w, global::Tl.KindEntryFlags.Pulse);
+                        break;
+                    default:
+                        if (tick == window.Start) Append(row, feeder, i, id, w, global::Tl.KindEntryFlags.Pulse);
+                        break;
+                }
+            }
+        }
+
+        void RemoveActiveSpans(int row, int i, in Playback s)
+        {
+            var id = s.Timeline;
+            if (Index.KindCount == 0 || Index.Sec.Timelines[id - 1].KindMask == 0) return;
+            var windows = Index.Sec.Windows(Index.Sec.Timelines + (id - 1));
+            int tick = s.Tick;
+            for (var k = Index.PairStart[id - 1]; k < Index.PairStart[id]; k++)
+            {
+                var w = (int)(Index.Pairs[k] >> 16);
+                var feeder = Index.Sec.Feeders + (Index.Pairs[k] & 0xffff);
+                if (feeder->Trigger == 0 && tick >= windows[w].Start && tick < windows[w].End) RemoveSpan(row, feeder->Kind, (byte)i, id, (ushort)w);
+            }
+        }
+
+        void WrapRemove(int row, int i, ushort id, int dir)
+        {
+            if (Index.KindCount == 0) return;
+            var tk = Index.Sec.Timelines + (id - 1);
+            if (tk->KindMask == 0) return;
+            var events = Index.Sec.Events(tk);
+            var from = dir > 0 ? tk->WrapForward : tk->WrapBackward;
+            var to = from + (dir > 0 ? tk->WrapForwardCount : tk->WrapBackwardCount);
+            for (var n = from; n < to; n++)
+            {
+                var feeder = Index.Sec.Feeders + events[n].Feeder;
+                RemoveSpan(row, feeder->Kind, (byte)i, id, events[n].Window);
+            }
+        }
+
+        void ApplyEvents(int row, int i, ushort id, int tick, int dir)
+        {
+            var tk = Index.Sec.Timelines + (id - 1);
+            var events = Index.Sec.Events(tk);
+            var d = dir > 0 ? 0 : 1;
+            var to = Index.Sec.EventEnd(tk, tick, d);
+            for (var n = Index.Sec.EventStart(tk, tick, d); n < to; n++)
+            {
+                var ev = events[n];
+                var feeder = Index.Sec.Feeders + ev.Feeder;
+                switch ((global::Tl.KindEventOp)ev.Op)
+                {
+                    case global::Tl.KindEventOp.Remove:
+                        RemoveSpan(row, feeder->Kind, (byte)i, id, ev.Window);
+                        break;
+                    case global::Tl.KindEventOp.Insert:
+                        Append(row, feeder, i, id, ev.Window, global::Tl.KindEntryFlags.Span);
+                        break;
+                    default:
+                        Append(row, feeder, i, id, ev.Window, global::Tl.KindEntryFlags.Pulse);
+                        break;
+                }
+            }
+        }
+
+        void Append(int row, global::Tl.LibraryFeeder* feeder, int slot, ushort timeline, int window, global::Tl.KindEntryFlags flags)
+        {
+            var entry = AppendEntry(row, feeder->Kind);
+            if (entry == null) return;
+            entry->Timeline = timeline;
+            entry->Step = (ushort)window;
+            entry->Slot = (byte)slot;
+            entry->Feeder = feeder->Ordinal;
+            entry->Flags = flags;
+            entry->Reserved = 0;
+        }
+
+        public global::Tl.KindEntry* AppendEntry(int row, int kind)
+        {
+            if ((Reach & (1ul << kind)) == 0) return null;
+            var stride = (int)Index.Sec.Kinds[kind].EntryBytes;
+            var length = Buffers[kind].GetBufferLength(row);
+            Buffers[kind].ResizeUninitialized(row, length + 1);
+            var entry = (byte*)Buffers[kind].GetUnsafePtr(row) + (long)length * stride;
+            UnsafeUtility.MemClear(entry, stride);
+            if (length == 0) Chunk.SetComponentEnabled(ref *KindHandleSet.Active(Handles, kind), row, true);
+            return (global::Tl.KindEntry*)entry;
+        }
+
+        public bool RemoveSpan(int row, int kind, byte slot, ushort timeline, ushort step)
+        {
+            if ((Reach & (1ul << kind)) == 0) return false;
+            var stride = (int)Index.Sec.Kinds[kind].EntryBytes;
+            var length = Buffers[kind].GetBufferLength(row);
+            var data = (byte*)Buffers[kind].GetUnsafePtr(row);
+            for (var i = 0; i < length; i++)
+            {
+                var e = (global::Tl.KindEntry*)(data + (long)i * stride);
+                if ((e->Flags & global::Tl.KindEntryFlags.Span) == 0 || e->Slot != slot || e->Timeline != timeline || e->Step != step) continue;
+                var tail = (length - i - 1) * stride;
+                if (tail > 0) UnsafeUtility.MemMove(data + (long)i * stride, data + (long)(i + 1) * stride, tail);
+                Buffers[kind].ResizeUninitialized(row, length - 1);
+                if (length == 1) Chunk.SetComponentEnabled(ref *KindHandleSet.Active(Handles, kind), row, false);
+                return true;
+            }
+            return false;
+        }
+    }
+}

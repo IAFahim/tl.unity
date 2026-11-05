@@ -1,0 +1,15 @@
+{
+  "tickRate": 60,
+  "channels": [
+    "locomotion",
+    "action"
+  ],
+  "timelines": [
+    "run.json",
+    "run_legacy.json",
+    "speed_boost.json",
+    "jump.json",
+    "potion_hop.json",
+    "stomp.json"
+  ]
+}

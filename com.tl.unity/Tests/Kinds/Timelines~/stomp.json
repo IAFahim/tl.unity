@@ -1,0 +1,34 @@
+{
+  "name": "stomp",
+  "duration": 8,
+  "channel": "action",
+  "tracks": [
+    {
+      "namespace": "KindGame",
+      "type": "HitTrack",
+      "data": {
+        "Scale": 1
+      },
+      "clips": [
+        {
+          "namespace": "KindGame",
+          "type": "HitClip",
+          "start": 2,
+          "end": 4,
+          "data": {
+            "Amount": 25
+          }
+        },
+        {
+          "namespace": "KindGame",
+          "type": "HitClip",
+          "start": 5,
+          "end": 7,
+          "data": {
+            "Amount": 10
+          }
+        }
+      ]
+    }
+  ]
+}
