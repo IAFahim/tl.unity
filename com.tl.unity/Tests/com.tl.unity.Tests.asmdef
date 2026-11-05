@@ -2,6 +2,7 @@
   "name": "Tl.Unity.Tests",
   "rootNamespace": "Tl.Unity.Tests",
   "references": [
+    "Tl.Core",
     "Tl.Unity",
     "Unity.Burst",
     "Unity.Collections",
