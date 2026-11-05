@@ -179,8 +179,6 @@ namespace Tl.Gen.Unity
             W(writer, "var builder = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.Playback>();");
             foreach (var column in model.Columns)
                 W(writer, column.ReadOnly ? "builder = builder.WithAll<" + ComponentName(model, column) + ">();" : "builder = builder.WithAllRW<" + ComponentName(model, column) + ">();");
-            foreach (var kind in kinds)
-                W(writer, "builder = builder.WithAnyRW<" + kind.Entry + ">();");
             W(writer, "var query = state.GetEntityQuery(builder);");
             W(writer, "builder.Dispose();");
             W(writer, "var job = new " + model.SystemTypeName + "ChunkJob { View = view, Index = index, Forward = forward, PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true)");

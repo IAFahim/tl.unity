@@ -123,7 +123,6 @@ public static JobHandle Vitals(ref SystemState state, global::Tl.LibraryView vie
 {
 var builder = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.Playback>();
 builder = builder.WithAllRW<Vitals_HealthData>();
-builder = builder.WithAnyRW<global::KindGame.DamageEntry>();
 var query = state.GetEntityQuery(builder);
 builder.Dispose();
 var job = new VitalsChunkJob { View = view, Index = index, Forward = forward, PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true)

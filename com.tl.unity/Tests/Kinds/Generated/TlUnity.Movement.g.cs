@@ -350,9 +350,6 @@ builder = builder.WithAll<Movement_WalkStatData>();
 builder = builder.WithAll<Movement_JumpPowerData>();
 builder = builder.WithAll<Movement_TargetData>();
 builder = builder.WithAllRW<Movement_StaminaData>();
-builder = builder.WithAnyRW<global::KindGame.LiftEntry>();
-builder = builder.WithAnyRW<global::KindGame.LocomotionEntry>();
-builder = builder.WithAnyRW<global::KindGame.StatChangeEntry>();
 var query = state.GetEntityQuery(builder);
 builder.Dispose();
 var job = new MovementChunkJob { View = view, Index = index, Forward = forward, PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true)
