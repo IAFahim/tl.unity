@@ -51,12 +51,28 @@ namespace Tl.Unity
                     chunk.SetComponentEnabled(ref PlayingHandle, row, true);
                 }
             }
-            for (var row = 0; row < count; row++)
+            // Chunk-level Playing gate + tzcnt row iteration: snapshot the enable
+            // bits once (after requests, which enable rows above), skip idle
+            // chunks outright, and visit only enabled rows low to high. Stale
+            // lanes past Count sort above every live row under tzcnt, so the
+            // row >= count break keeps them from ticking.
+            var playing = chunk.GetEnableableBits(ref PlayingHandle);
+            if (playing.ULong0 != 0 || (count > 64 && playing.ULong1 != 0))
             {
-                if (!chunk.IsComponentEnabled(ref PlayingHandle, row)) continue;
-                var slots = playbacks[row];
-                if (!ctx.TickEntity(row, ref slots, StepDir))
-                    chunk.SetComponentEnabled(ref PlayingHandle, row, false);
+                for (var kw = 0; kw < 2; kw++)
+                {
+                    if (kw == 1 && count <= 64) break;
+                    var kb = kw == 0 ? playing.ULong0 : playing.ULong1;
+                    while (kb != 0)
+                    {
+                        var row = (kw << 6) + (int)global::Unity.Mathematics.math.tzcnt(kb);
+                        kb &= kb - 1;
+                        if (row >= count) break;
+                        var slots = playbacks[row];
+                        if (!ctx.TickEntity(row, ref slots, StepDir))
+                            chunk.SetComponentEnabled(ref PlayingHandle, row, false);
+                    }
+                }
             }
         }
     }

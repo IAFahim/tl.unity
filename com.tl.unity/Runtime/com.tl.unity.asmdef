@@ -5,7 +5,8 @@
     "Tl.Core",
     "Unity.Burst",
     "Unity.Collections",
-    "Unity.Entities"
+    "Unity.Entities",
+    "Unity.Mathematics"
   ],
   "allowUnsafeCode": true,
   "noEngineReferences": false
