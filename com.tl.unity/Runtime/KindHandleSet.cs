@@ -160,14 +160,14 @@ namespace Tl.Unity
             pointer->Mapped |= 1ul << kind;
         }
 
-        public static void Update(ref KindHandleSet set, SystemBase system, int kindCount)
+        public static void Update(ref KindHandleSet set, ref SystemState state, int kindCount)
         {
             var pointer = (KindHandleSet*)UnsafeUtility.AddressOf(ref set);
             for (var k = 0; k < kindCount; k++)
             {
                 if (!IsMapped(pointer, k)) continue;
-                Entry(pointer, k)->Update(system);
-                Active(pointer, k)->Update(system);
+                Entry(pointer, k)->Update(ref state);
+                Active(pointer, k)->Update(ref state);
             }
         }
     }

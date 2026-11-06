@@ -33,12 +33,12 @@ namespace Tl.Unity
 
     public static partial class TimelineJobs
     {
-        public static JobHandle ScheduleAdvance(ComponentSystemBase system, EntityQuery query, global::Tl.LibraryView view, JobHandle dependsOn)
+        public static JobHandle ScheduleAdvance(ref SystemState state, EntityQuery query, global::Tl.LibraryView view, JobHandle dependsOn)
         {
             var job = new TimelineAdvanceJob
             {
                 View = view,
-                PlaybackHandle = system.GetBufferTypeHandle<Playback>(false),
+                PlaybackHandle = state.GetBufferTypeHandle<Playback>(false),
             };
             return job.ScheduleParallel(query, dependsOn);
         }

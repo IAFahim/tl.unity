@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Collections;
+using Unity.Entities;
 
 namespace Tl.Unity
 {
@@ -23,6 +24,11 @@ namespace Tl.Unity
         public int WindowTotal;
         public int StepTableLength;
         public int PairCount;
+        public ComponentType* EntryTypes;
+        public ComponentType* ActiveTypes;
+        public ulong Bound;
+        public int* RegistryToLibrary;
+        public int RegistryCount;
 
         public bool IsCreated => Timelines != null || KindCount == 0 && Closure != null;
 
@@ -72,6 +78,27 @@ namespace Tl.Unity
             }
             if (have.ToString() != descriptor.Signature)
                 throw new InvalidOperationException("Kind '" + name + "' feeders in the loaded library differ from the compiled game; rebake the library with tlb.\nlibrary: " + have.ToString().Replace('\n', ' ') + "\ncode:    " + descriptor.Signature.Replace('\n', ' '));
+        }
+
+        public void Bind(KindRegistry registry)
+        {
+            EntryTypes = Zeroed<ComponentType>(Math.Max(1, KindCount));
+            ActiveTypes = Zeroed<ComponentType>(Math.Max(1, KindCount));
+            RegistryCount = registry.Count;
+            RegistryToLibrary = Zeroed<int>(Math.Max(1, registry.Count));
+            Bound = 0;
+            for (var r = 0; r < registry.Count; r++) RegistryToLibrary[r] = -1;
+            for (var k = 0; k < KindCount; k++)
+            {
+                var r = registry.IndexOf(Sec.NameOf(k));
+                if (r < 0) continue;
+                var d = registry[r];
+                Verify(k, in d);
+                RegistryToLibrary[r] = k;
+                EntryTypes[k] = ComponentType.ReadWrite(d.Entry);
+                ActiveTypes[k] = ComponentType.ReadWrite(d.Active);
+                Bound |= 1ul << k;
+            }
         }
 
         public static KindIndex Build(in global::Tl.LibraryView view, global::Tl.TimelineWorld world)
@@ -182,6 +209,9 @@ namespace Tl.Unity
             Free(StepStart);
             Free(StepTable);
             Free(MarkerValues);
+            Free(EntryTypes);
+            Free(ActiveTypes);
+            Free(RegistryToLibrary);
             this = default;
         }
 

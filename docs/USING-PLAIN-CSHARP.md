@@ -458,7 +458,7 @@ method.
 | Step | you call `Tick` and each `Run` | `TimelineSimulationGroup` systems |
 | Authoring | by hand in code and JSON | Timeline Player in a SubScene, bakers |
 | Burst, jobs | none, main thread | yes |
-| Library | `TextAsset` bytes (or any `byte[]`) | `TimelineLibraryBootstrap`, a singleton |
+| Library | `TextAsset` bytes (or any `byte[]`) | `TimelineLibraryBootstrap.Use`, then a `TimelineLibrary` singleton per world |
 | Hash of the 600-step script | `13943614770702343869` | `13943614770702343869` |
 | Allocation per warm step | 0 B (test above) | not measured in this repo for the ECS host |
 

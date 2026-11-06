@@ -53,11 +53,6 @@ namespace Tl.Unity
                     chunk.SetComponentEnabled(ref PlayingHandle, row, true);
                 }
             }
-            // Chunk-level Playing gate + tzcnt row iteration: snapshot the enable
-            // bits once (after requests, which enable rows above), skip idle
-            // chunks outright, and visit only enabled rows low to high. Stale
-            // lanes past Count sort above every live row under tzcnt, so the
-            // row >= count break keeps them from ticking.
             var playing = chunk.GetEnableableBits(ref PlayingHandle);
             if (playing.ULong0 != 0 || (count > 64 && playing.ULong1 != 0))
             {

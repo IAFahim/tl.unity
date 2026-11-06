@@ -84,7 +84,8 @@ namespace Tl.Unity
     {
         public NativeStream.Reader Reader;
         public int ForEachCount;
-        [ReadOnly] public NativeArray<int> RegistryToLibrary;
+        [NativeDisableUnsafePtrRestriction] public int* RegistryToLibrary;
+        public int RegistryCount;
         [ReadOnly] public EntityStorageInfoLookup Storage;
         [NativeDisableContainerSafetyRestriction] public KindHandleSet Handles;
         [NativeDisableUnsafePtrRestriction] public int* Counters;
@@ -105,7 +106,7 @@ namespace Tl.Unity
                     var bytes = Reader.Read<int>();
                     var target = Reader.Read<Entity>();
                     var value = Reader.ReadUnsafePtr(bytes);
-                    var kind = (uint)registry < (uint)RegistryToLibrary.Length ? RegistryToLibrary[registry] : -1;
+                    var kind = (uint)registry < (uint)RegistryCount ? RegistryToLibrary[registry] : -1;
                     if (kind < 0 || bytes != (int)Index.Sec.Kinds[kind].ValueBytes || !Storage.Exists(target))
                     {
                         Counters[KindCounter.DroppedPulses]++;

@@ -1,3 +1,4 @@
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -11,97 +12,106 @@ namespace Tl.Unity
     }
 
     [UpdateInGroup(typeof(InitializationSystemGroup))]
-    public partial class TimelineLibrarySystem : SystemBase
+    public partial struct TimelineLibrarySystem : ISystem
     {
-        protected override void OnCreate()
+        public void OnCreate(ref SystemState state)
         {
-            base.OnCreate();
             TlGeneratedBootstrap.InstallAll();
+            TimelineLibraryBootstrap.LoadSource(state.EntityManager);
         }
 
-        protected override void OnUpdate()
+        public void OnUpdate(ref SystemState state)
         {
+            var loaded = TimelineLibraryBootstrap.LoadSource(state.EntityManager);
 #if UNITY_EDITOR
-            if (TimelineLibraryBootstrap.TryPollReload())
-                TimelineLibraryBootstrap.Publish(EntityManager);
+            if (loaded)
+                TimelineLibraryBootstrap.PollReload(state.EntityManager);
+#else
+            if (loaded)
+                state.Enabled = false;
 #endif
+        }
+
+        public void OnDestroy(ref SystemState state)
+        {
+            TimelineLibraryBootstrap.Forget(state.EntityManager);
         }
     }
 
+    [BurstCompile]
     [UpdateInGroup(typeof(TimelineSimulationGroup))]
-    public partial class TimelineRequestSystem : SystemBase
+    public partial struct TimelineRequestSystem : ISystem
     {
         EntityQuery _requestQuery;
         EntityQuery _closedQuery;
         int _sequence;
 
-        protected override void OnCreate()
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
         {
-            base.OnCreate();
-            _requestQuery = GetEntityQuery(new EntityQueryDesc { All = new[] { ComponentType.ReadOnly<TimelineRequest>(), ComponentType.ReadWrite<Playback>() }, Absent = new[] { ComponentType.ReadOnly<TimelinePlaying>() } });
-            _closedQuery = GetEntityQuery(ComponentType.ReadOnly<TimelineLibrary>());
-            RequireForUpdate<TimelineLibrary>();
+            _requestQuery = new EntityQueryBuilder(Allocator.Temp).WithAll<TimelineRequest>().WithAllRW<Playback>().WithAbsent<TimelinePlaying>().Build(ref state);
+            _closedQuery = new EntityQueryBuilder(Allocator.Temp).WithAll<TimelineLibrary>().WithAllRW<ClosedPlayback>().Build(ref state);
+            state.RequireForUpdate<TimelineLibrary>();
         }
 
-        protected override void OnUpdate()
+        [BurstCompile]
+        public unsafe void OnUpdate(ref SystemState state)
         {
             var view = SystemAPI.GetSingleton<TimelineLibrary>().View;
             if (!view.Kinds.IsEmpty)
                 return;
-            using (var entities = _requestQuery.ToEntityArray(Allocator.Temp))
+            var entities = _requestQuery.ToEntityArray(Allocator.Temp);
+            if (entities.Length == 0)
+                return;
+            var manager = state.EntityManager;
+            var gathered = new NativeList<RequestEntry>(entities.Length * 2, Allocator.Temp);
+            for (var e = 0; e < entities.Length; e++)
             {
-                if (entities.Length == 0)
-                    return;
-                var gathered = new NativeList<RequestEntry>(entities.Length * 2, Allocator.Temp);
-                for (var e = 0; e < entities.Length; e++)
+                var requests = manager.GetBuffer<TimelineRequest>(entities[e]);
+                for (var r = 0; r < requests.Length; r++)
                 {
-                    var requests = EntityManager.GetBuffer<TimelineRequest>(entities[e]);
-                    for (var r = 0; r < requests.Length; r++)
+                    gathered.Add(new RequestEntry
                     {
-                        gathered.Add(new RequestEntry
-                        {
-                            Entity = entities[e].Index,
-                            Slot = requests[r].Slot,
-                            Timeline = requests[r].Timeline,
-                            At = requests[r].At,
-                            Op = requests[r].Op,
-                            Sequence = _sequence++,
-                        });
-                    }
-                }
-                var sorted = new NativeArray<RequestEntry>(gathered.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-                sorted.CopyFrom(gathered.AsArray());
-                unsafe
-                {
-                    TimelineKernel.SortRequests((RequestEntry*)sorted.GetUnsafePtr(), sorted.Length);
-                }
-                using (var closed = new NativeList<ClosedPlayback>(gathered.Length, Allocator.Temp))
-                {
-                    var sink = closed;
-                    for (var i = 0; i < sorted.Length; i++)
-                    {
-                        var entry = sorted[i];
-                        var target = FindEntity(entities, entry.Entity);
-                        if (!target.HasValue)
-                            continue;
-                        var playbacks = EntityManager.GetBuffer<Playback>(target.Value);
-                        ApplyEntry(ref playbacks, entry, view, ref sink);
-                        EntityManager.GetBuffer<TimelineRequest>(target.Value).Clear();
-                    }
-                    PublishClosed(closed);
+                        Entity = entities[e].Index,
+                        Slot = requests[r].Slot,
+                        Timeline = requests[r].Timeline,
+                        At = requests[r].At,
+                        Op = requests[r].Op,
+                        Sequence = _sequence++,
+                    });
                 }
             }
+            TimelineKernel.SortRequests((RequestEntry*)gathered.GetUnsafePtr(), gathered.Length);
+            var closed = new NativeList<ClosedPlayback>(gathered.Length, Allocator.Temp);
+            for (var i = 0; i < gathered.Length; i++)
+            {
+                var entry = gathered[i];
+                var target = FindEntity(entities, entry.Entity);
+                if (target == Entity.Null)
+                    continue;
+                var playbacks = manager.GetBuffer<Playback>(target);
+                ApplyEntry(ref playbacks, entry, in view, ref closed);
+                manager.GetBuffer<TimelineRequest>(target).Clear();
+            }
+            if (closed.Length == 0)
+                return;
+            var holders = _closedQuery.ToEntityArray(Allocator.Temp);
+            if (holders.Length == 0)
+                return;
+            var sink = manager.GetBuffer<ClosedPlayback>(holders[0]);
+            for (var i = 0; i < closed.Length; i++)
+                sink.Add(closed[i]);
         }
 
-        static Entity? FindEntity(NativeArray<Entity> entities, int index)
+        static Entity FindEntity(NativeArray<Entity> entities, int index)
         {
             for (var i = 0; i < entities.Length; i++)
                 if (entities[i].Index == index)
                     return entities[i];
-            return null;
+            return Entity.Null;
         }
 
-        static unsafe void ApplyEntry(ref DynamicBuffer<Playback> playbacks, RequestEntry entry, global::Tl.LibraryView view, ref NativeList<ClosedPlayback> closed)
+        static void ApplyEntry(ref DynamicBuffer<Playback> playbacks, RequestEntry entry, in global::Tl.LibraryView view, ref NativeList<ClosedPlayback> closed)
         {
             var entity = entry.Entity;
             switch (entry.Op)
@@ -120,61 +130,52 @@ namespace Tl.Unity
                     break;
             }
         }
-
-        void PublishClosed(NativeList<ClosedPlayback> closed)
-        {
-            using (var holders = _closedQuery.ToEntityArray(Allocator.Temp))
-            {
-                if (holders.Length == 0 || closed.Length == 0)
-                    return;
-                var sink = EntityManager.GetBuffer<ClosedPlayback>(holders[0]);
-                for (var i = 0; i < closed.Length; i++)
-                    sink.Add(closed[i]);
-            }
-        }
     }
 
+    [BurstCompile]
     [UpdateInGroup(typeof(TimelineSimulationGroup))]
     [UpdateAfter(typeof(TimelineRequestSystem))]
-    public partial class TimelineAdvanceSystem : SystemBase
+    public partial struct TimelineAdvanceSystem : ISystem
     {
         EntityQuery _playbackQuery;
 
-        protected override void OnCreate()
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
         {
-            base.OnCreate();
-            _playbackQuery = GetEntityQuery(new EntityQueryDesc { All = new[] { ComponentType.ReadWrite<Playback>() }, Absent = new[] { ComponentType.ReadOnly<TimelinePlaying>() } });
-            RequireForUpdate<TimelineLibrary>();
+            _playbackQuery = new EntityQueryBuilder(Allocator.Temp).WithAllRW<Playback>().WithAbsent<TimelinePlaying>().Build(ref state);
+            state.RequireForUpdate<TimelineLibrary>();
         }
 
-        protected override void OnUpdate()
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
         {
             var view = SystemAPI.GetSingleton<TimelineLibrary>().View;
             if (!view.Kinds.IsEmpty)
                 return;
-            Dependency = TimelineJobs.ScheduleAdvance(this, _playbackQuery, view, Dependency);
+            state.Dependency = TimelineJobs.ScheduleAdvance(ref state, _playbackQuery, view, state.Dependency);
         }
     }
 
+    [BurstCompile]
     [UpdateInGroup(typeof(TimelineSimulationGroup))]
     [UpdateAfter(typeof(TimelineAdvanceSystem))]
-    public partial class TimelineEventSystem : SystemBase
+    public partial struct TimelineEventSystem : ISystem
     {
         EntityQuery _closedQuery;
 
-        protected override void OnCreate()
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
         {
-            base.OnCreate();
-            _closedQuery = GetEntityQuery(ComponentType.ReadWrite<ClosedPlayback>());
+            _closedQuery = new EntityQueryBuilder(Allocator.Temp).WithAllRW<ClosedPlayback>().Build(ref state);
         }
 
-        protected override void OnUpdate()
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
         {
-            using (var holders = _closedQuery.ToEntityArray(Allocator.Temp))
-            {
-                for (var i = 0; i < holders.Length; i++)
-                    EntityManager.GetBuffer<ClosedPlayback>(holders[i]).Clear();
-            }
+            var holders = _closedQuery.ToEntityArray(Allocator.Temp);
+            var manager = state.EntityManager;
+            for (var i = 0; i < holders.Length; i++)
+                manager.GetBuffer<ClosedPlayback>(holders[i]).Clear();
         }
     }
 }

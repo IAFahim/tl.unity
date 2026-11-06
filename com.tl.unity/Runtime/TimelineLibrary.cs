@@ -9,6 +9,13 @@ namespace Tl.Unity
     public struct TimelineLibrary : IComponentData
     {
         public global::Tl.LibraryView View;
+        public KindIndex Kinds;
+        public uint Generation;
+    }
+
+    public struct TimelineStep : IComponentData
+    {
+        public bool Forward;
     }
 
     public sealed class TimelineLibraryOwner : IDisposable
@@ -27,9 +34,21 @@ namespace Tl.Unity
                 throw new ArgumentException("Timeline library bytes are empty.", nameof(tlib));
             _path = path;
             _world = new global::Tl.TimelineWorld(tlib);
-            _kinds = KindIndex.Build(_world.View, _world);
+            try
+            {
+                _kinds = BuildKinds(_world);
+            }
+            catch
+            {
+                _world.Dispose();
+                throw;
+            }
             _writeTicks = Stamp(path);
         }
+
+        public Entity Entity { get; internal set; }
+
+        public uint Generation { get; private set; } = 1;
 
         public KindIndex Kinds
         {
@@ -51,17 +70,19 @@ namespace Tl.Unity
             }
         }
 
+        public TimelineLibrary Component => new TimelineLibrary { View = View, Kinds = Kinds, Generation = Generation };
+
+        public bool IsStale => !_disposed && Stamp(_path) != _writeTicks;
+
         public bool PollReload()
         {
-            if (_disposed)
-                return false;
-            var stamp = Stamp(_path);
-            if (stamp == _writeTicks)
+            if (!IsStale)
                 return false;
             _world.Reload(File.ReadAllBytes(_path));
             _kinds.Dispose();
-            _kinds = KindIndex.Build(_world.View, _world);
+            _kinds = BuildKinds(_world);
             _writeTicks = Stamp(_path);
+            Generation++;
             return true;
         }
 
@@ -73,6 +94,21 @@ namespace Tl.Unity
             _kinds.Dispose();
             _world.Dispose();
             GC.SuppressFinalize(this);
+        }
+
+        static KindIndex BuildKinds(global::Tl.TimelineWorld world)
+        {
+            var kinds = KindIndex.Build(world.View, world);
+            try
+            {
+                kinds.Bind(KindRegistry.Discover());
+            }
+            catch
+            {
+                kinds.Dispose();
+                throw;
+            }
+            return kinds;
         }
 
         static long Stamp(string path)
@@ -168,62 +204,97 @@ namespace Tl.Unity
 #endif
     public static class TimelineLibraryBootstrap
     {
-        static TimelineLibraryOwner Owner;
-        static Entity OwnerEntity;
-        static bool HasOwnerEntity;
-        static uint Version;
+        static readonly Dictionary<ulong, TimelineLibraryOwner> Owners = new Dictionary<ulong, TimelineLibraryOwner>();
+        static string SourcePath;
+        static byte[] SourceBytes;
 
         [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ForgetPreviousPlay()
         {
-            if (Owner != null)
-                Owner.Dispose();
-            Owner = null;
-            OwnerEntity = Entity.Null;
-            HasOwnerEntity = false;
+            foreach (var owner in Owners.Values)
+                owner.Dispose();
+            Owners.Clear();
+            SourcePath = null;
+            SourceBytes = null;
         }
 
-        public static KindIndex Kinds => Owner != null ? Owner.Kinds : default;
+        public static bool HasSource => SourceBytes != null;
 
-        public static uint Generation => Version;
+        public static void Use(string path, byte[] tlib)
+        {
+            if (path == null)
+                throw new ArgumentNullException(nameof(path));
+            if (tlib == null || tlib.Length == 0)
+                throw new ArgumentException("Timeline library bytes are empty.", nameof(tlib));
+            SourcePath = path;
+            SourceBytes = tlib;
+        }
+
+        public static void Release()
+        {
+            SourcePath = null;
+            SourceBytes = null;
+        }
 
         public static TimelineLibraryOwner Ensure(EntityManager entities, string path, byte[] tlib)
         {
-            if (Owner != null)
-                return Owner;
-            Owner = new TimelineLibraryOwner(path, tlib);
-            OwnerEntity = entities.CreateEntity(typeof(TimelineLibrary), typeof(ClosedPlayback));
-            entities.SetComponentData(OwnerEntity, new TimelineLibrary { View = Owner.View });
-            HasOwnerEntity = true;
-            Version++;
-            return Owner;
+            var key = entities.WorldUnmanaged.SequenceNumber;
+            if (Owners.TryGetValue(key, out var existing))
+                return existing;
+            TlGeneratedBootstrap.InstallDiscoveredModules();
+            var owner = new TimelineLibraryOwner(path, tlib);
+            var entity = entities.CreateEntity(typeof(TimelineLibrary), typeof(TimelineStep), typeof(ClosedPlayback));
+            entities.SetComponentData(entity, owner.Component);
+            entities.SetComponentData(entity, new TimelineStep { Forward = true });
+            owner.Entity = entity;
+            Owners.Add(key, owner);
+            return owner;
         }
 
-        public static void Publish(EntityManager entities)
+        public static TimelineLibraryOwner Find(EntityManager entities)
         {
-            if (Owner == null || !HasOwnerEntity)
+            return Owners.TryGetValue(entities.WorldUnmanaged.SequenceNumber, out var owner) ? owner : null;
+        }
+
+        internal static bool LoadSource(EntityManager entities)
+        {
+            if (Find(entities) != null)
+                return true;
+            if (SourceBytes == null)
+                return false;
+            Ensure(entities, SourcePath, SourceBytes);
+            return true;
+        }
+
+        internal static void PollReload(EntityManager entities)
+        {
+            var owner = Find(entities);
+            if (owner == null || !owner.IsStale)
                 return;
-            entities.SetComponentData(OwnerEntity, new TimelineLibrary { View = Owner.View });
-            Version++;
+            entities.CompleteAllTrackedJobs();
+            if (owner.PollReload() && entities.Exists(owner.Entity))
+                entities.SetComponentData(owner.Entity, owner.Component);
         }
 
-        public static bool TryPollReload()
+        internal static void Forget(EntityManager entities)
         {
-            return Owner != null && Owner.PollReload();
+            var key = entities.WorldUnmanaged.SequenceNumber;
+            if (!Owners.TryGetValue(key, out var owner))
+                return;
+            entities.CompleteAllTrackedJobs();
+            owner.Dispose();
+            Owners.Remove(key);
         }
 
         public static void Shutdown(EntityManager entities)
         {
-            if (HasOwnerEntity)
-            {
-                entities.DestroyEntity(OwnerEntity);
-                HasOwnerEntity = false;
-            }
-            if (Owner != null)
-            {
-                Owner.Dispose();
-                Owner = null;
-            }
+            var owner = Find(entities);
+            if (owner == null)
+                return;
+            entities.CompleteAllTrackedJobs();
+            if (entities.Exists(owner.Entity))
+                entities.DestroyEntity(owner.Entity);
+            Forget(entities);
         }
     }
 }

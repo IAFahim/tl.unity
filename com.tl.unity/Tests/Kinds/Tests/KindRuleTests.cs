@@ -232,10 +232,10 @@ namespace KindGame
             var inline = DamageKind.InlineCapacity;
             for (var i = 0; i < inline + 4; i++)
                 _game.Damage(0, 1);
-            _game.Tick.Update();
+            _game.TickHandle.Update(_game.World.Unmanaged);
             _game.Entities.CompleteAllTrackedJobs();
             Assert.Greater(_game.Entities.GetBuffer<DamageEntry>(_game.Rows[0]).Capacity, inline);
-            _game.Vitals.Update();
+            _game.VitalsHandle.Update(_game.World.Unmanaged);
             _game.Entities.CompleteAllTrackedJobs();
             Assert.AreEqual(inline, _game.Entities.GetBuffer<DamageEntry>(_game.Rows[0]).Capacity);
             Assert.AreEqual(1000 - (inline + 4), _game.Health(0));

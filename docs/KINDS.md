@@ -42,12 +42,35 @@ system (`Movement` runs Locomotion, Lift, StatChange; `Vitals` runs Damage):
    nothing but keep their entries.
 3. `Apply`: each kind writes its owner's data (`Motion`, `Health`, `Stamina`).
 
-Your kind systems run after the Tick:
+Every Tl system on the step path (`TimelineRequestSystem`,
+`TimelineAdvanceSystem`, `TimelineKindTickSystem`, `TimelineEventSystem`) is a
+Burst `ISystem`. Everything a step needs is in unmanaged singletons:
+`TimelineLibrary` (`View`, the `KindIndex` in `Kinds`, and `Generation`, which
+changes on a hot reload) and `TimelineStep` (`Forward`, the step direction;
+set it with `SystemAPI.SetSingleton`). Your kind systems run after the Tick,
+also as Burst `ISystem`s:
 
 ```csharp
+[BurstCompile]
 [UpdateInGroup(typeof(TimelineSimulationGroup))]
 [UpdateAfter(typeof(TimelineKindTickSystem))]
-public partial class MovementSystem : SystemBase
+public partial struct VitalsSystem : ISystem
+{
+    [BurstCompile]
+    public void OnCreate(ref SystemState state)
+    {
+        state.RequireForUpdate<TimelineLibrary>();
+        state.RequireForUpdate<TimelineStep>();
+    }
+
+    [BurstCompile]
+    public void OnUpdate(ref SystemState state)
+    {
+        var library = SystemAPI.GetSingleton<TimelineLibrary>();
+        var step = SystemAPI.GetSingleton<TimelineStep>();
+        state.Dependency = TimelineJobs.Vitals(ref state, library.View, library.Kinds, step.Forward, state.Dependency);
+    }
+}
 ```
 
 `Tests/Kinds/Harness/KindWorld.cs` has the full `Movement` and `Vitals` pair.
@@ -57,10 +80,13 @@ An entity that carries `TimelinePlaying` belongs to the kind Tick.
 Player bake adds `TimelinePlaying` (disabled) to every player; the Tick
 enables it when it applies a request.
 
-Send game pulses before the step (`Damage(t, v)` then `Step()`); they merge
-during that step's Tick. Pulses to an entity without the kind are counted in
-`Tick.DroppedPulses` and dropped, as are starts for unreachable timelines
-(`Tick.DroppedStarts`). Both are public on `TimelineKindTickSystem`. A count
+Send game pulses before the step; they merge during that step's Tick. Take
+the `TimelineKindTick` singleton (`SystemAPI.GetSingleton<TimelineKindTick>()`,
+it lives on the Tick system's entity), call `BeginPulses(n)`, write with
+`DamageKind.Pulses(sender.Writer).To(target, value)` (from Burst code or a
+job; pass the job's handle to `AddPulseWriter`). Pulses to an entity without
+the kind are counted in `DroppedPulses` and dropped, as are starts for
+unreachable timelines (`DroppedStarts`), both on `TimelineKindTick`. A count
 above zero usually means a missing `[RequiresKinds]`, Kinds list entry or May
 Start name (see Authoring).
 
@@ -223,17 +249,29 @@ baker on that GameObject.
 
 ### Step 6: load the library at runtime
 
-The world needs the library before the first step:
+The world needs the library before the first step. Hand the bytes over once,
+at startup:
 
 ```csharp
-TlGeneratedBootstrap.InstallDiscoveredModules();
-TimelineLibraryBootstrap.Ensure(World.DefaultGameObjectInjectionWorld.EntityManager, "game.tlib", bytes);
+TimelineLibraryBootstrap.Use("game.tlib", bytes);
 ```
 
-`bytes` is the content of `game.tlib`. Call
-`TimelineLibraryBootstrap.Shutdown(entityManager)` when it goes away.
-`Tests/Kinds/Game/KindLibraryBootstrap.cs` does both from a MonoBehaviour
-next to the SubScene; the test game embeds the bytes in a generated class.
+`bytes` is the content of `game.tlib`. `TimelineLibrarySystem`
+(`InitializationSystemGroup`) then loads it into every world it runs in and
+creates that world's `TimelineLibrary` and `TimelineStep` singletons; the
+library is freed with the world. Loading is the only managed step; no system
+of yours calls managed code per world or per step. `Release()` forgets the
+bytes. A world built by hand without `TimelineLibrarySystem` can load directly
+with `TimelineLibraryBootstrap.Ensure(entityManager, "game.tlib", bytes)` and
+`Shutdown(entityManager)`. `Tests/Kinds/Game/KindLibraryBootstrap.cs` calls
+`Use` from a MonoBehaviour next to the SubScene; the test game embeds the
+bytes in a generated class.
+
+Kind names must be unique across assemblies. Two assemblies that both declare
+a `Damage` kind fail at load with `Kind 'Damage' is registered twice: by
+assembly 'A' and by assembly 'B'.` The package's own test game
+(`Tests/Kinds`, assembly `Tl.Unity.Kinds`) compiles only when the package is
+listed in `testables`, so it never collides with your kinds.
 
 ## Sizing
 
@@ -357,7 +395,9 @@ rows, `KindReport.Warnings(rows)` the warning strings, and
 
 Both samples live in `com.tl.unity/Samples~`, run headless (`-batchmode`
 quits 0 on match, 3 on mismatch), and print `hash expected match backend`
-receipts.
+receipts. They run the package's test game, so they compile only with
+`"testables": ["com.tl.unity"]` in `Packages/manifest.json`, and their build
+scripts pass `BuildOptions.IncludeTestAssemblies`.
 
 - `KindsIL2CPP` (`KindsSample`): the Runner on kinds. A speed boost overrides
   the normal walk by priority (X 2 then 7, two entries, 102 over 19 steps,

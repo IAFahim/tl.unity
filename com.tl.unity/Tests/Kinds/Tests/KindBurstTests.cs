@@ -4,29 +4,22 @@ using Unity.Burst;
 
 namespace KindGame
 {
-    // K3 Burst-compile receipts: every game-code path the generated Burst chunk
-    // jobs call must compile under Burst. Each shim is forced through the Burst
-    // backend synchronously by CompileFunctionPointer; a compile failure fails
-    // the test. Shims with pure inputs are also invoked and their values
-    // asserted. Walk.Evaluate is compile-only: its AnchorLookup context wraps a
-    // ComponentLookup that has no storage on defaults, and invoking it would
-    // dereference a null lookup instead of testing compilation.
     [TestFixture]
     [BurstCompile]
     public class KindBurstTests
     {
-        internal delegate float LiftFn(float first, float next);
-        internal delegate float LocomotionFn(float x, float first, byte firstPriority, float next, byte nextPriority);
-        internal delegate int DamageFn(int health, int first, int next);
-        internal delegate int StatChangeFn(int stamina, int first, int next);
-        internal delegate float JumpFn(float scale, float velocity, float power);
-        internal delegate int HitFn(int amount, bool reverse);
-        internal delegate int StatPulseFn(int delta, bool reverse);
-        internal delegate int MarkerFn(int delta);
-        internal delegate void WalkFn(in Frame<WalkTrack, WalkClip> frame, in WalkStat stat, in Target target, in AnchorLookup anchors, out Speed speed);
+        public delegate float LiftFn(float first, float next);
+        public delegate float LocomotionFn(float x, float first, byte firstPriority, float next, byte nextPriority);
+        public delegate int DamageFn(int health, int first, int next);
+        public delegate int StatChangeFn(int stamina, int first, int next);
+        public delegate float JumpFn(float scale, float velocity, float power);
+        public delegate int HitFn(int amount, bool reverse);
+        public delegate int StatPulseFn(int delta, bool reverse);
+        public delegate int MarkerFn(int delta);
+        public delegate void WalkFn(in Frame<WalkTrack, WalkClip> frame, in WalkStat stat, in Target target, in AnchorLookup anchors, out Speed speed);
 
         [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
-        static float LiftBurst(float first, float next)
+        public static float LiftBurst(float first, float next)
         {
             var total = first;
             Lift.Combine(ref total, in next);
@@ -36,7 +29,7 @@ namespace KindGame
         }
 
         [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
-        static float LocomotionBurst(float x, float first, byte firstPriority, float next, byte nextPriority)
+        public static float LocomotionBurst(float x, float first, byte firstPriority, float next, byte nextPriority)
         {
             var total = new Speed { Value = first, Priority = firstPriority };
             var other = new Speed { Value = next, Priority = nextPriority };
@@ -47,7 +40,7 @@ namespace KindGame
         }
 
         [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
-        static int DamageBurst(int health, int first, int next)
+        public static int DamageBurst(int health, int first, int next)
         {
             var total = first;
             Damage.Combine(ref total, in next);
@@ -57,7 +50,7 @@ namespace KindGame
         }
 
         [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
-        static int StatChangeBurst(int stamina, int first, int next)
+        public static int StatChangeBurst(int stamina, int first, int next)
         {
             var body = new Stamina { Value = stamina };
             StatChange.Apply(in first, ref body);
@@ -66,7 +59,7 @@ namespace KindGame
         }
 
         [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
-        static float JumpBurst(float scale, float velocity, float power)
+        public static float JumpBurst(float scale, float velocity, float power)
         {
             var track = new ArcTrack { Scale = scale };
             var clip = new ArcClip { Velocity = velocity };
@@ -77,7 +70,7 @@ namespace KindGame
         }
 
         [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
-        static int HitBurst(int amount, bool reverse)
+        public static int HitBurst(int amount, bool reverse)
         {
             var track = new HitTrack { Scale = 1f };
             var clip = new HitClip { Amount = amount };
@@ -87,7 +80,7 @@ namespace KindGame
         }
 
         [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
-        static int StatPulseBurst(int delta, bool reverse)
+        public static int StatPulseBurst(int delta, bool reverse)
         {
             var track = new StatTrack { Scale = 1f };
             var clip = new StatClip { Delta = delta };
@@ -97,7 +90,7 @@ namespace KindGame
         }
 
         [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
-        static int MarkerBurst(int delta)
+        public static int MarkerBurst(int delta)
         {
             var marker = new StepMarker { Delta = delta };
             var frame = new global::Tl.MarkerFrame<StepMarker>(in marker, 6, 0, global::Tl.FrameFlags.None);
@@ -105,7 +98,7 @@ namespace KindGame
         }
 
         [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
-        static void WalkBurst(in Frame<WalkTrack, WalkClip> frame, in WalkStat stat, in Target target, in AnchorLookup anchors, out Speed speed)
+        public static void WalkBurst(in Frame<WalkTrack, WalkClip> frame, in WalkStat stat, in Target target, in AnchorLookup anchors, out Speed speed)
         {
             speed = Walk.Evaluate(in frame, in stat, in target, in anchors);
         }

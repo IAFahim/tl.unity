@@ -1,44 +1,55 @@
 using System;
 using Tl.Unity;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 
 namespace KindGame
 {
+    [BurstCompile]
     [UpdateInGroup(typeof(TimelineSimulationGroup))]
     [UpdateAfter(typeof(TimelineKindTickSystem))]
-    public partial class MovementSystem : SystemBase
+    public partial struct MovementSystem : ISystem
     {
-        public bool Forward = true;
+        ComponentLookup<Anchor> _anchors;
 
-        protected override void OnCreate()
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
         {
-            RequireForUpdate<TimelineLibrary>();
+            state.RequireForUpdate<TimelineLibrary>();
+            state.RequireForUpdate<TimelineStep>();
+            _anchors = state.GetComponentLookup<Anchor>(true);
         }
 
-        protected override void OnUpdate()
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
         {
-            var view = SystemAPI.GetSingleton<TimelineLibrary>().View;
-            var anchors = new AnchorLookup { Anchors = GetComponentLookup<Anchor>(true) };
-            Dependency = TimelineJobs.Movement(ref CheckedStateRef, view, TimelineLibraryBootstrap.Kinds, Forward, anchors, Dependency);
+            var library = SystemAPI.GetSingleton<TimelineLibrary>();
+            var step = SystemAPI.GetSingleton<TimelineStep>();
+            _anchors.Update(ref state);
+            var anchors = new AnchorLookup { Anchors = _anchors };
+            state.Dependency = TimelineJobs.Movement(ref state, library.View, library.Kinds, step.Forward, anchors, state.Dependency);
         }
     }
 
+    [BurstCompile]
     [UpdateInGroup(typeof(TimelineSimulationGroup))]
     [UpdateAfter(typeof(TimelineKindTickSystem))]
-    public partial class VitalsSystem : SystemBase
+    public partial struct VitalsSystem : ISystem
     {
-        public bool Forward = true;
-
-        protected override void OnCreate()
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
         {
-            RequireForUpdate<TimelineLibrary>();
+            state.RequireForUpdate<TimelineLibrary>();
+            state.RequireForUpdate<TimelineStep>();
         }
 
-        protected override void OnUpdate()
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
         {
-            var view = SystemAPI.GetSingleton<TimelineLibrary>().View;
-            Dependency = TimelineJobs.Vitals(ref CheckedStateRef, view, TimelineLibraryBootstrap.Kinds, Forward, Dependency);
+            var library = SystemAPI.GetSingleton<TimelineLibrary>();
+            var step = SystemAPI.GetSingleton<TimelineStep>();
+            state.Dependency = TimelineJobs.Vitals(ref state, library.View, library.Kinds, step.Forward, state.Dependency);
         }
     }
 
@@ -48,24 +59,31 @@ namespace KindGame
 
         public readonly World World;
         public readonly EntityManager Entities;
-        public readonly TimelineKindTickSystem Tick;
-        public readonly MovementSystem Movement;
-        public readonly VitalsSystem Vitals;
+        public readonly SystemHandle LibraryHandle;
+        public readonly SystemHandle TickHandle;
+        public readonly SystemHandle MovementHandle;
+        public readonly SystemHandle VitalsHandle;
         public readonly Entity[] Rows;
+        readonly EntityQuery _step;
+        bool _forward = true;
 
         public KindWorld(int count)
         {
-            TlGeneratedBootstrap.InstallDiscoveredModules();
             World = new World("TlKinds");
             Entities = World.EntityManager;
-            TimelineLibraryBootstrap.Ensure(Entities, "kinds.tlib", KindLibraryBytes.Bytes());
-            Tick = World.CreateSystemManaged<TimelineKindTickSystem>();
-            Movement = World.CreateSystemManaged<MovementSystem>();
-            Vitals = World.CreateSystemManaged<VitalsSystem>();
+            TimelineLibraryBootstrap.Use("kinds.tlib", KindLibraryBytes.Bytes());
+            LibraryHandle = World.CreateSystem<TimelineLibrarySystem>();
+            LibraryHandle.Update(World.Unmanaged);
+            TickHandle = World.CreateSystem<TimelineKindTickSystem>();
+            MovementHandle = World.CreateSystem<MovementSystem>();
+            VitalsHandle = World.CreateSystem<VitalsSystem>();
+            _step = Entities.CreateEntityQuery(typeof(TimelineStep));
             Rows = new Entity[count];
             for (var i = 0; i < count; i++)
                 Rows[i] = Spawn();
         }
+
+        public TimelineKindTick Tick => Entities.GetComponentData<TimelineKindTick>(TickHandle);
 
         Entity Spawn()
         {
@@ -119,12 +137,14 @@ namespace KindGame
 
         public void Step(bool forward = true)
         {
-            Tick.Forward = forward;
-            Movement.Forward = forward;
-            Vitals.Forward = forward;
-            Tick.Update();
-            Movement.Update();
-            Vitals.Update();
+            if (forward != _forward)
+            {
+                _step.SetSingleton(new TimelineStep { Forward = forward });
+                _forward = forward;
+            }
+            TickHandle.Update(World.Unmanaged);
+            MovementHandle.Update(World.Unmanaged);
+            VitalsHandle.Update(World.Unmanaged);
         }
 
         public void Damage(int target, int amount)
@@ -179,7 +199,7 @@ namespace KindGame
         public void Dispose()
         {
             Entities.CompleteAllTrackedJobs();
-            TimelineLibraryBootstrap.Shutdown(Entities);
+            TimelineLibraryBootstrap.Release();
             if (World.IsCreated)
                 World.Dispose();
         }
