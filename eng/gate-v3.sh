@@ -17,8 +17,10 @@ dotnet pack samples/Game.Domain -c Release -o artifacts/packages
 dotnet tool restore
 python3 eng/restore-v3.py
 if [ "$stage" = unity ]; then
+  editor="$(python3 eng/unity_editor.py editor)"
+  echo "Unity editor: $editor"
   for mode in EditMode PlayMode; do
-    DISPLAY=:0 unity test "$root/tests/Tl.V3.Project" --mode "$mode" --output "$root/artifacts/tests/v3-$mode.xml" --timeout 600 -- -logFile "$root/artifacts/v3-$mode.log"
+    DISPLAY=:0 unity test "$root/tests/Tl.V3.Project" --editor-path "$editor" --mode "$mode" --output "$root/artifacts/tests/v3-$mode.xml" --timeout 600 -- -logFile "$root/artifacts/v3-$mode.log"
     python3 - "$root/artifacts/tests/v3-$mode.xml" <<'PY'
 import sys,xml.etree.ElementTree as E
 r=E.parse(sys.argv[1]).getroot()
