@@ -29,6 +29,13 @@ public struct WalkTrack : IBlend<WalkClip>
     public void Blend(in WalkClip first, in WalkClip second, float factor, out WalkClip result) => result = first;
 }
 
+public struct LegacyWalkClip { public float Speed; }
+public struct LegacyWalkTrack : IBlend<LegacyWalkClip>
+{
+    public float Scale;
+    public void Blend(in LegacyWalkClip first, in LegacyWalkClip second, float factor, out LegacyWalkClip result) => result = first;
+}
+
 public struct ArcClip { public float Velocity; }
 public struct ArcTrack : IBlend<ArcClip>
 {
