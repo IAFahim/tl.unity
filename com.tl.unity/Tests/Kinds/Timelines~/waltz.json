@@ -1,0 +1,27 @@
+{
+  "name": "waltz",
+  "duration": 3,
+  "channel": "locomotion",
+  "hold": true,
+  "tracks": [
+    {
+      "namespace": "KindGame",
+      "type": "WalkTrack",
+      "data": {
+        "Scale": 1
+      },
+      "clips": [
+        {
+          "namespace": "KindGame",
+          "type": "WalkClip",
+          "start": 0,
+          "end": 3,
+          "data": {
+            "Speed": 7,
+            "Priority": 0
+          }
+        }
+      ]
+    }
+  ]
+}

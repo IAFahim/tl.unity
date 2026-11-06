@@ -253,5 +253,38 @@ namespace KindGame
             Assert.AreEqual(4f, _game.Motion(0).X);
             Assert.AreEqual(12f, _game.Motion(1).X);
         }
+
+        [Test]
+        public void ANextChainEntersTheNamedTimelineAtTickZero()
+        {
+            _game.Start(0, KindWorld.Vault);
+            Steps(5);
+            var slots = _game.Slots(0);
+            Assert.AreEqual(KindWorld.Waltz, slots[0].Timeline);
+            Assert.AreEqual(0, slots[0].Tick);
+            Assert.AreEqual(43f, _game.Motion(0).X);
+            Steps(3);
+            slots = _game.Slots(0);
+            Assert.AreEqual(KindWorld.Waltz, slots[0].Timeline);
+            Assert.AreEqual(2, slots[0].Tick);
+        }
+
+        [Test]
+        public void AHoldTimelineKeepsItsLastTickAndEndsQuietly()
+        {
+            _game.Start(0, KindWorld.Waltz);
+            Steps(3);
+            Assert.AreEqual(2, _game.Slots(0)[0].Tick);
+            _game.Step();
+            var slots = _game.Slots(0);
+            Assert.AreEqual(KindWorld.Waltz, slots[0].Timeline);
+            Assert.AreEqual(2, slots[0].Tick);
+            Assert.AreNotEqual(0, (int)(slots[0].Flags & global::Tl.PlaybackFlags.Ended));
+            Assert.AreEqual(0, _game.Entries<LocomotionEntry>(0));
+            Assert.AreEqual(21f, _game.Motion(0).X);
+            _game.Step();
+            Assert.AreEqual(2, _game.Slots(0)[0].Tick);
+            Assert.AreEqual(21f, _game.Motion(0).X);
+        }
     }
 }

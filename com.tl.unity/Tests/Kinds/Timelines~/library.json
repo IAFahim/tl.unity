@@ -10,7 +10,9 @@
     "speed_boost.json",
     "jump.json",
     "potion_hop.json",
-    "stomp.json"
+    "stomp.json",
+    "vault.json",
+    "waltz.json"
   ],
   "kinds": {
     "Damage": { "gamePulses": 8, "maxInlineBytes": 132 }

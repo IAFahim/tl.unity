@@ -30,7 +30,7 @@ namespace KindGame
 
     public sealed class KindWorld : IDisposable
     {
-        public const ushort Jump = 1, PotionHop = 2, Run = 3, RunLegacy = 4, SpeedBoost = 5, Stomp = 6;
+        public const ushort Jump = 1, PotionHop = 2, Run = 3, RunLegacy = 4, SpeedBoost = 5, Stomp = 6, Vault = 7, Waltz = 8;
 
         public readonly World World;
         public readonly EntityManager Entities;
