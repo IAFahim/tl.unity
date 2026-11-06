@@ -2,7 +2,12 @@
   "name": "Tl.Unity.Editor",
   "rootNamespace": "Tl.Unity.Editor",
   "references": [
-    "Tl.Unity"
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Unity.Authoring",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Entities.Hybrid"
   ],
   "includePlatforms": [
     "Editor"

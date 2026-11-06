@@ -1,97 +1,187 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 namespace Tl.Unity.Editor
 {
     public static class KindCapacityBake
     {
-        public static string FindTlb()
+        [Serializable]
+        public sealed class KindRow
         {
-            var configured = Environment.GetEnvironmentVariable("TL_TLB_PATH");
-            return string.IsNullOrEmpty(configured) ? "tlb" : configured;
+            public string name;
+            public int worst;
+            public int capacity;
+            public int entryBytes;
+            public int inlineBytes;
+            public string setBy;
         }
 
-        public static string BuildArguments(string libraryPath, string gameNamespace)
+        [Serializable]
+        public sealed class Result
         {
-            return "kinds --library \"" + libraryPath + "\" --namespace " + gameNamespace;
-        }
+            public int timelines;
+            public KindRow[] kinds = Array.Empty<KindRow>();
+            public string kindsFile;
+            public bool kindsWritten;
 
-        [MenuItem("Tools/Tl/Bake Kind Capacities (tlb)")]
-        public static void BakeFromMenu()
-        {
-            var guids = AssetDatabase.FindAssets("t:TimelineKindLibraryAsset");
-            var baked = 0;
-            foreach (var guid in guids)
+            public string Report()
             {
-                var asset = AssetDatabase.LoadAssetAtPath<TimelineKindLibraryAsset>(AssetDatabase.GUIDToAssetPath(guid));
-                if (asset == null)
+                var text = new StringBuilder();
+                foreach (var kind in kinds)
+                    text.Append("  ").Append(kind.name).Append(": capacity ").Append(kind.capacity).Append(" (worst ").Append(kind.worst)
+                        .Append(", set by ").Append(kind.setBy).Append("), ").Append(kind.inlineBytes).Append(" B inline\n");
+                return text.ToString();
+            }
+        }
+
+        public static string StageDirectory => Path.GetFullPath("Temp/TlKindBake");
+
+        [MenuItem("Tools/Tl/Bake Kind Capacities")]
+        public static void BakeAll()
+        {
+            foreach (var guid in AssetDatabase.FindAssets("t:" + nameof(TimelineLibraryAsset)))
+            {
+                var library = AssetDatabase.LoadAssetAtPath<TimelineLibraryAsset>(AssetDatabase.GUIDToAssetPath(guid));
+                if (library == null || string.IsNullOrEmpty(library.KindsFile))
                     continue;
                 try
                 {
-                    if (Bake(asset.LibraryJsonPath, asset.KindsGcsPath, asset.GameNamespace))
-                        baked++;
+                    Bake(library);
                 }
                 catch (Exception error)
                 {
-                    UnityEngine.Debug.LogError("Tl Kind Capacities: bake failed for '" + asset.name + "': " + error.Message);
+                    Debug.LogError("Tl kind capacities: library '" + library.name + "': " + error.Message, library);
                 }
             }
-            UnityEngine.Debug.Log("Tl Kind Capacities: baked " + baked + " of " + guids.Length + " libraries.");
         }
 
-        public static bool Bake(string libraryPath, string outputPath, string gameNamespace)
+        public static Result Bake(TimelineLibraryAsset library)
         {
-            if (string.IsNullOrEmpty(libraryPath))
-                throw new InvalidOperationException("Tl Kind Capacities: library path is empty.");
-            if (string.IsNullOrEmpty(outputPath))
-                throw new InvalidOperationException("Tl Kind Capacities: output path is empty.");
-            var text = RunTlb(FindTlb(), BuildArguments(libraryPath, gameNamespace));
-            if (!WriteOnlyOnChange(outputPath, text))
+            var output = TimelineKindSets.PhysicalPath(library.KindsFile);
+            var result = Run(library.Tlb, TimelineKindSets.PhysicalPath(library.Folder), library.Namespace, output, Stage(library.GameAssembly));
+            if (result.kindsWritten)
             {
-                UnityEngine.Debug.Log("Tl Kind Capacities: '" + outputPath + "' unchanged.");
-                return false;
+                AssetDatabase.Refresh();
+                Debug.Log("Tl kind capacities: library '" + library.name + "' wrote " + library.KindsFile + "; scripts recompile.\n" + result.Report(), library);
             }
-            AssetDatabase.Refresh();
-            UnityEngine.Debug.Log("Tl Kind Capacities: wrote '" + outputPath + "'.");
-            return true;
+            else
+                Debug.Log("Tl kind capacities: library '" + library.name + "' unchanged, no recompile.\n" + result.Report(), library);
+            return result;
         }
 
-        public static string RunTlb(string command, string arguments)
+        public static string Stage(string gameAssembly)
         {
-            var start = new ProcessStartInfo(command, arguments);
-            start.RedirectStandardOutput = true;
-            start.RedirectStandardError = true;
-            start.UseShellExecute = false;
-            start.CreateNoWindow = true;
-            using (var process = Process.Start(start))
+            if (string.IsNullOrEmpty(gameAssembly))
+                throw new InvalidOperationException("Game Assembly is empty.");
+            var stage = StageDirectory;
+            Directory.CreateDirectory(stage);
+            Mirror(Path.GetFullPath("Library/ScriptAssemblies"), stage);
+            Mirror(Path.Combine(EditorApplication.applicationContentsPath, "Managed", "UnityEngine"), stage);
+            var game = Path.Combine(stage, gameAssembly + ".dll");
+            if (!File.Exists(game))
+                throw new FileNotFoundException("Script assembly '" + gameAssembly + "' is not compiled yet.", game);
+            return game;
+        }
+
+        static void Mirror(string source, string stage)
+        {
+            if (!Directory.Exists(source))
+                return;
+            foreach (var file in Directory.GetFiles(source, "*.dll"))
             {
-                var stdout = process.StandardOutput.ReadToEnd();
-                var stderr = process.StandardError.ReadToEnd();
+                var target = Path.Combine(stage, Path.GetFileName(file));
+                var from = new FileInfo(file);
+                var to = new FileInfo(target);
+                if (to.Exists && to.Length == from.Length && to.LastWriteTimeUtc == from.LastWriteTimeUtc)
+                    continue;
+                File.Copy(file, target, true);
+                File.SetLastWriteTimeUtc(target, from.LastWriteTimeUtc);
+            }
+        }
+
+        public static Result Run(string tlb, string folder, string ns, string output, string assembly)
+        {
+            if (string.IsNullOrEmpty(output))
+                throw new InvalidOperationException("Kinds File is empty.");
+            var arguments = "kinds --library " + Quote(folder) + " --namespace " + ns + " --out " + Quote(output) + " --assembly " + Quote(assembly) + " --diagnostics json";
+            var command = string.IsNullOrEmpty(tlb) ? "tlb" : tlb;
+            if (command.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            {
+                arguments = Quote(command) + " " + arguments;
+                command = "dotnet";
+            }
+            var start = new ProcessStartInfo(command, arguments)
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            string stdout, stderr;
+            int exit;
+            try
+            {
+                using var process = Process.Start(start);
+                stdout = process.StandardOutput.ReadToEnd();
+                stderr = process.StandardError.ReadToEnd();
                 process.WaitForExit();
-                if (process.ExitCode != 0)
-                    throw new InvalidOperationException("'" + command + " " + arguments + "' exited " + process.ExitCode + ": " + stderr);
-                return Normalize(stdout);
+                exit = process.ExitCode;
+            }
+            catch (Exception error)
+            {
+                throw new InvalidOperationException("could not run '" + command + "' (" + error.Message + "). Set Tlb on the library asset to the tlb command or to Tl.Bake.dll.");
+            }
+            if (exit != 0)
+                throw new InvalidOperationException("tlb exited " + exit + ": " + (stderr.Length > 0 ? stderr : stdout).Trim());
+            return JsonUtility.FromJson<Result>(stdout.Trim());
+        }
+
+        static string Quote(string path) => "\"" + path + "\"";
+    }
+
+    sealed class KindCapacityPostprocessor : AssetPostprocessor
+    {
+        static void OnPostprocessAllAssets(string[] imported, string[] deleted, string[] moved, string[] movedFrom)
+        {
+            foreach (var guid in AssetDatabase.FindAssets("t:" + nameof(TimelineLibraryAsset)))
+            {
+                var library = AssetDatabase.LoadAssetAtPath<TimelineLibraryAsset>(AssetDatabase.GUIDToAssetPath(guid));
+                if (library == null || string.IsNullOrEmpty(library.Folder) || string.IsNullOrEmpty(library.KindsFile))
+                    continue;
+                var folder = TimelineKindSets.PhysicalPath(library.Folder) + Path.DirectorySeparatorChar;
+                if (!Touches(folder, imported) && !Touches(folder, deleted) && !Touches(folder, moved) && !Touches(folder, movedFrom))
+                    continue;
+                try
+                {
+                    KindCapacityBake.Bake(library);
+                }
+                catch (Exception error)
+                {
+                    Debug.LogError("Tl kind capacities: library '" + library.name + "': " + error.Message, library);
+                }
             }
         }
 
-        public static bool WriteOnlyOnChange(string path, string text)
+        static bool Touches(string folder, string[] paths)
         {
-            var normalized = Normalize(text);
-            if (File.Exists(path) && Normalize(File.ReadAllText(path)) == normalized)
-                return false;
-            var directory = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(directory))
-                Directory.CreateDirectory(directory);
-            File.WriteAllText(path, normalized);
-            return true;
+            foreach (var path in paths)
+                if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) && TimelineKindSets.PhysicalPath(path).StartsWith(folder, StringComparison.Ordinal))
+                    return true;
+            return false;
         }
+    }
 
-        static string Normalize(string text)
+    [InitializeOnLoad]
+    static class KindCapacityAfterCompile
+    {
+        static KindCapacityAfterCompile()
         {
-            return (text ?? string.Empty).Replace("\r\n", "\n");
+            AssemblyReloadEvents.afterAssemblyReload += KindCapacityBake.BakeAll;
         }
     }
 }
