@@ -24,6 +24,7 @@ namespace Tl.Unity
         public KindHandleSet Handles;
         [NativeDisableUnsafePtrRestriction] public int* Counters;
         public int StepDir;
+        public uint LastSystemVersion;
 
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
         {
@@ -37,7 +38,7 @@ namespace Tl.Unity
                 buffers[k] = chunk.GetUntypedBufferAccessor(ref *KindHandleSet.Entry(ctx.Handles, k));
                 ctx.Reach |= 1ul << k;
             }
-            if (chunk.Has(ref RequestHandle))
+            if (chunk.Has(ref RequestHandle) && chunk.DidChange(ref RequestHandle, LastSystemVersion))
             {
                 var requests = chunk.GetBufferAccessor(ref RequestHandle);
                 for (var row = 0; row < count; row++)

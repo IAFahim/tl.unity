@@ -122,6 +122,7 @@ namespace Tl.Unity
                 Handles = handles,
                 Counters = counters,
                 StepDir = Forward ? 1 : -1,
+                LastSystemVersion = LastSystemVersion,
             };
             dependency = tick.ScheduleParallel(_query, dependency);
             if (_senders.Count != 0)
