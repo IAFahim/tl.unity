@@ -70,6 +70,11 @@ A GameObject runs kinds when a Timeline Player is baked onto it. The baker
 gives the entity the playback buffers and exactly the kinds it can reach.
 Baking only runs for GameObjects in a SubScene.
 
+To draw timelines in Unity's Timeline window instead of writing their json,
+and to start them from a `PlayableDirector`, see
+[TIMELINE-BRIDGE.md](TIMELINE-BRIDGE.md). It writes the same library files
+and fills the same Timeline Player.
+
 Before you start you need:
 
 - A game assembly that declares the kinds, feeders and pulses. Its asmdef
