@@ -373,8 +373,10 @@ Plan-1 `ExecuteActive` consumers keep plan 1's order inside one implicit
 legacy kind that runs first in its system unless `Order` says otherwise.
 Mixing legacy consumers and kinds that write the same field changes the order
 between those two groups. On Unity, legacy consumers are not dispatched yet
-(`TLUNITY9105`: feed a kind instead). Whether the legacy implicit kind and
-`ExecuteActive` stay is the owner's K5 decision on IAFahim/tl#558.
+(`TLUNITY9105`: feed a kind instead). The legacy implicit kind and
+`ExecuteActive` stay (K5 decision, IAFahim/tl#558). They go only after the
+Runner sample and the bench domains move to kinds, a migration tool exists,
+and K-E still passes without the legacy loop.
 
 ## Not covered
 
