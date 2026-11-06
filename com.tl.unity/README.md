@@ -1,60 +1,58 @@
-# Tl Unity Playback (`com.tl.unity`)
+# Tl for Unity (`com.tl.unity`)
 
-Tl 4 playback-model runtime for Unity ECS with Burst: playback buffers,
-library singleton, simulation systems, and generated system jobs. Compiles
-against Tl.Core netstandard2.1.
+Timelines for Unity ECS with Burst: clips on tracks, several timelines playing
+on one entity, exact rewind. Designers author json (or draw in Unity's
+Timeline window); a baker packs it into one `game.tlib`; a Burst `ISystem`
+step plays it on unmanaged data.
+
+Tested on the newest Unity 7 editor (tested on 7000.0.0a16).
 
 ## Install
 
-Add to `Packages/manifest.json`:
+`Packages/manifest.json`:
 
 ```json
 "com.tl.unity": "https://github.com/IAFahim/tl.unity.git?path=/com.tl.unity#main"
 ```
 
-Verified on Unity 7000.0.0a16 (fresh project, compiles with 0 errors).
+You also need `tlb` with the `kinds` command, built from IAFahim/tl `main`:
+`dotnet build tools/Tl.Bake -c Release`. Set the Tlb field of the Timeline
+Library asset to the `Tl.Bake.dll` it produces.
 
-Baking kinds needs a `tlb` with the `kinds` command. Build it from IAFahim/tl
-`main` (`dotnet build tools/Tl.Bake -c Release`) and point `TL_TLB` at it.
+## Start here
 
-## Kinds
+| I want to | Read |
+|---|---|
+| Go from an empty project to a running demo on ECS | [docs/USING-ECS.md](../docs/USING-ECS.md) |
+| Play timelines from a plain `MonoBehaviour`, no ECS | [docs/USING-PLAIN-CSHARP.md](../docs/USING-PLAIN-CSHARP.md) |
+| Draw timelines in the Unity Timeline window | [docs/TIMELINE-BRIDGE.md](../docs/TIMELINE-BRIDGE.md) |
+| Compare Tl with the BovineLabs timeline | [docs/COMPARISON.md](../docs/COMPARISON.md) |
+| Look up the kind model, sizing, capacity bake and Kind Report | [docs/KINDS.md](../docs/KINDS.md) |
 
-Game-defined per-step work (value type + combine + apply) fed by clips or
-pulsed by clips, markers, and game code. Full model, step order, sizing, and
-reports: [docs/KINDS.md](../../docs/KINDS.md).
+## What is in the package
 
-Samples (`Samples~`, importable from the Package Manager):
+- `Tl.Unity` (runtime): playback buffers, the library and step singletons,
+  the Burst `ISystem` step (`TimelineRequestSystem`, `TimelineAdvanceSystem`,
+  `TimelineKindTickSystem`, `TimelineEventSystem`), pulses, the Kind Report
+  logic.
+- `Tl.Unity.Authoring` (runtime): Timeline Player, Timeline Library, Kind
+  Profile and `[RequiresKinds]`. Reference it from your game asmdef.
+- `Tl.Unity.Editor`: the baker, `Tools > Tl > Kind Report` and
+  `Tools > Tl > Bake Kind Capacities`.
+- `Tl.Core`: the shared timeline core, copied from IAFahim/tl.
 
-- **Kinds IL2CPP player**: Runner on kinds (priority-override boost, summed
-  lifts, stat pulses) plus the 600-step script; hash `13943614770702343869`
-  equals the .NET run.
-- **Bullets IL2CPP player**: game-code Damage pulses + timeline hit pulses in
-  one Health write; hash `3081412629212866412` equals the .NET run.
+## Known gaps
 
-## Authoring in the Editor
+The generated entity code is not produced by Unity yet, and `Events<T>` is not
+dispatched on Unity. See "Known gaps" in
+[docs/USING-ECS.md](../docs/USING-ECS.md#10-known-gaps): issues
+[#11](https://github.com/IAFahim/tl.unity/issues/11),
+[#12](https://github.com/IAFahim/tl.unity/issues/12) and
+[#13](https://github.com/IAFahim/tl.unity/issues/13).
 
-Assemblies: `Tl.Unity` (runtime), `Tl.Unity.Authoring` (runtime assembly with
-the authoring types; reference it from your game asmdef) and `Tl.Unity.Editor`.
+## Samples
 
-Steps, each in [docs/KINDS.md](../../docs/KINDS.md):
-
-1. `Assets > Create > Tl > Timeline Library`: point it at the folder with
-   `library.json`, the timeline files and `game.tlib`, and name the ids class
-   and the game assembly.
-2. Add the Timeline Player component (`TimelinePlayerAuthoring`) to
-   GameObjects in a SubScene. Fill Start With, May Start, Kinds and Profile by
-   name. The bake gives each entity exactly the kinds it can reach.
-3. Put `[RequiresKinds(typeof(Damage))]` on a component of the same
-   GameObject when only game code pulses that kind.
-4. Optional: `Assets > Create > Tl > Kind Profile`, and set Kind Sets on the
-   library to `Union Per Profile`, so several kinds of GameObject share one
-   archetype.
-5. `Tools > Tl > Kind Report` logs each kind archetype per world with its
-   entities, chunks, chunk capacity and kind bytes per entity, and warns about
-   more than 32 kinds, more than 1 KB of kind storage, and fewer than 16
-   entities per chunk.
-6. `Tools > Tl > Bake Kind Capacities` runs `tlb kinds` for each library with a
-   Kinds File and rewrites `Kinds.g.cs` only when a capacity changes, so
-   nothing recompiles otherwise. It also runs after each script reload and when
-   a `.json` in the library folder is imported. It needs a `tlb` with the
-   `kinds` command; `tl.bake` 2.0.1 on NuGet is too old.
+`Samples~` has two headless IL2CPP receipts, Kinds and Bullets, each with a
+state hash that equals the .NET run. They run the package test game, so they
+need `"testables": ["com.tl.unity"]`. Details in
+[docs/KINDS.md](../docs/KINDS.md).
