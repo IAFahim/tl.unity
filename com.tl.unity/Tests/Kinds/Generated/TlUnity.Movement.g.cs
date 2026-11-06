@@ -34,15 +34,37 @@ public ComponentTypeHandle<global::KindGame.StatChangeActive> StatChangeActiveHa
 [ReadOnly] public ComponentTypeHandle<global::KindGame.StatChangeEnabled> StatChangeEnabledHandle;
 public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in global::Unity.Burst.Intrinsics.v128 chunkEnabledMask)
 {
+var __l0 = false;
+if (chunk.Has(ref LiftEntryHandle))
+{
+var __a0 = chunk.GetEnableableBits(ref LiftActiveHandle);
+var __e0 = chunk.GetEnableableBits(ref LiftEnabledHandle);
+__l0 = ((__a0.ULong0 & __e0.ULong0) | (__a0.ULong1 & __e0.ULong1)) != 0;
+}
+var __l1 = false;
+if (chunk.Has(ref LocomotionEntryHandle))
+{
+var __a1 = chunk.GetEnableableBits(ref LocomotionActiveHandle);
+var __e1 = chunk.GetEnableableBits(ref LocomotionEnabledHandle);
+__l1 = ((__a1.ULong0 & __e1.ULong0) | (__a1.ULong1 & __e1.ULong1)) != 0;
+}
+var __l2 = false;
+if (chunk.Has(ref StatChangeEntryHandle))
+{
+var __a2 = chunk.GetEnableableBits(ref StatChangeActiveHandle);
+var __e2 = chunk.GetEnableableBits(ref StatChangeEnabledHandle);
+__l2 = ((__a2.ULong0 & __e2.ULong0) | (__a2.ULong1 & __e2.ULong1)) != 0;
+}
+if (!__l0 && !__l1 && !__l2) return;
 var __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
 var __c0 = (global::KindGame.Motion*)chunk.GetRequiredComponentDataPtrRW(ref MotionHandle);
 var __c1 = (global::KindGame.WalkStat*)chunk.GetRequiredComponentDataPtrRO(ref WalkStatHandle);
 var __c2 = (global::KindGame.JumpPower*)chunk.GetRequiredComponentDataPtrRO(ref JumpPowerHandle);
 var __c3 = (global::KindGame.Target*)chunk.GetRequiredComponentDataPtrRO(ref TargetHandle);
 var __c4 = (global::KindGame.Stamina*)chunk.GetRequiredComponentDataPtrRW(ref StaminaHandle);
-Kind_0(chunk, __playbacks, __c0, __c1, __c2, __c3, __c4);
-Kind_1(chunk, __playbacks, __c0, __c1, __c2, __c3, __c4);
-Kind_2(chunk, __playbacks, __c0, __c1, __c2, __c3, __c4);
+if (__l0) Kind_0(chunk, __playbacks, __c0, __c1, __c2, __c3, __c4);
+if (__l1) Kind_1(chunk, __playbacks, __c0, __c1, __c2, __c3, __c4);
+if (__l2) Kind_2(chunk, __playbacks, __c0, __c1, __c2, __c3, __c4);
 }
 void Kind_0(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Motion* __c0, global::KindGame.WalkStat* __c1, global::KindGame.JumpPower* __c2, global::KindGame.Target* __c3, global::KindGame.Stamina* __c4)
 {
