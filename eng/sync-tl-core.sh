@@ -36,8 +36,8 @@ Copied from [IAFahim/tl@${commit:0:12}](https://github.com/IAFahim/tl/tree/${com
 Do not edit here: change tl, move the \`external/tl-kinds\` submodule, and run the script again.
 MD
 if [ "${1:-}" = "--check" ]; then
-  if diff -r -q -x '*.meta' "$stage" "$dst" >/dev/null 2>&1; then echo "com.tl.unity/Core matches tl@${commit:0:12}"; exit 0; fi
-  diff -r -q -x '*.meta' "$stage" "$dst" >&2 || true
+  if diff -r -q --strip-trailing-cr -x '*.meta' "$stage" "$dst" >/dev/null 2>&1; then echo "com.tl.unity/Core matches tl@${commit:0:12}"; exit 0; fi
+  diff -r -q --strip-trailing-cr -x '*.meta' "$stage" "$dst" >&2 || true
   echo "com.tl.unity/Core is stale against tl@${commit:0:12}: run eng/sync-tl-core.sh" >&2
   exit 1
 fi
