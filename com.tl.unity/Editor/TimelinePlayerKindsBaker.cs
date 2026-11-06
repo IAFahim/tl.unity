@@ -29,23 +29,6 @@ namespace Tl.Unity.Editor
             }
             return reachable;
         }
-
-        public static HashSet<int> CollectKinds(
-            ICollection<int> reachableTimelines,
-            IDictionary<int, int[]> fedKinds,
-            ICollection<int> declaredGamePulses)
-        {
-            var kinds = new HashSet<int>();
-            if (reachableTimelines != null && fedKinds != null)
-                foreach (var timeline in reachableTimelines)
-                    if (fedKinds.TryGetValue(timeline, out var fed) && fed != null)
-                        foreach (var kind in fed)
-                            kinds.Add(kind);
-            if (declaredGamePulses != null)
-                foreach (var kind in declaredGamePulses)
-                    kinds.Add(kind);
-            return kinds;
-        }
     }
 
 // SCAFFOLD (tl#557)
@@ -69,14 +52,14 @@ namespace Tl.Unity.Editor
         public struct FedBinding
         {
             public int Timeline;
-            public int[] Kinds;
+            public string[] Kinds;
         }
 
         public int[] StartWith = Array.Empty<int>();
         public SlotBinding[] Slots = Array.Empty<SlotBinding>();
         public NextBinding[] Next = Array.Empty<NextBinding>();
         public FedBinding[] FedKinds = Array.Empty<FedBinding>();
-        public int[] DeclaredGamePulses = Array.Empty<int>();
+        public string[] RequiredKinds = Array.Empty<string>();
 
         public Dictionary<int, int[]> SlotMap()
         {
@@ -107,21 +90,21 @@ namespace Tl.Unity.Editor
             return map;
         }
 
-        public Dictionary<int, int[]> FedMap()
+        public Dictionary<int, string[]> FedMap()
         {
-            var map = new Dictionary<int, List<int>>();
+            var map = new Dictionary<int, List<string>>();
             if (FedKinds != null)
                 for (var i = 0; i < FedKinds.Length; i++)
                 {
                     if (!map.TryGetValue(FedKinds[i].Timeline, out var kinds))
                     {
-                        kinds = new List<int>();
+                        kinds = new List<string>();
                         map[FedKinds[i].Timeline] = kinds;
                     }
                     if (FedKinds[i].Kinds != null)
                         kinds.AddRange(FedKinds[i].Kinds);
                 }
-            var frozen = new Dictionary<int, int[]>();
+            var frozen = new Dictionary<int, string[]>();
             foreach (var pair in map)
                 frozen[pair.Key] = pair.Value.ToArray();
             return frozen;
@@ -135,9 +118,10 @@ namespace Tl.Unity.Editor
             var registry = KindRegistry.Discover();
             var fed = authoring.FedMap();
             var timelines = TimelineKindReachability.CollectTimelines(authoring.StartWith, authoring.SlotMap(), authoring.NextMap());
-            var kinds = TimelineKindReachability.CollectKinds(timelines, fed, authoring.DeclaredGamePulses);
-            ThrowOnMissingFedColumn(authoring.gameObject, fed, timelines, registry);
-            ThrowOnMissingDeclaredColumn(authoring.gameObject, authoring.DeclaredGamePulses, registry);
+            var kinds = new HashSet<int>();
+            CollectFedKinds(authoring.gameObject, fed, timelines, registry, kinds);
+            CollectRequiredKinds(authoring.gameObject, authoring.RequiredKinds, registry, kinds);
+            CollectAttributedKinds(authoring, registry, kinds);
             var entity = GetEntity(TransformUsageFlags.None);
             for (var i = 0; i < registry.Count; i++)
             {
@@ -150,25 +134,78 @@ namespace Tl.Unity.Editor
             }
         }
 
-        static void ThrowOnMissingFedColumn(GameObject gameObject, IDictionary<int, int[]> fed, HashSet<int> timelines, KindRegistry registry)
+        static void CollectFedKinds(GameObject gameObject, IDictionary<int, string[]> fed, HashSet<int> timelines, KindRegistry registry, HashSet<int> kinds)
         {
             foreach (var timeline in timelines)
             {
-                if (!fed.TryGetValue(timeline, out var ids) || ids == null)
+                if (!fed.TryGetValue(timeline, out var names) || names == null)
                     continue;
-                foreach (var id in ids)
-                    if (id < 0 || id >= registry.Count)
-                        throw new InvalidOperationException("GameObject '" + gameObject.name + "' timeline " + timeline + " feeds kind " + id + " with no registered column.");
+                foreach (var name in names)
+                    kinds.Add(ResolveKind(gameObject, name, "timeline " + timeline, registry));
             }
         }
 
-        static void ThrowOnMissingDeclaredColumn(GameObject gameObject, int[] declared, KindRegistry registry)
+        static void CollectRequiredKinds(GameObject gameObject, string[] required, KindRegistry registry, HashSet<int> kinds)
         {
-            if (declared == null)
+            if (required == null)
                 return;
-            foreach (var id in declared)
-                if (id < 0 || id >= registry.Count)
-                    throw new InvalidOperationException("GameObject '" + gameObject.name + "' declares kind " + id + " with no registered column.");
+            foreach (var name in required)
+                kinds.Add(ResolveKind(gameObject, name, "required kinds", registry));
+        }
+
+        static void CollectAttributedKinds(TimelinePlayerKindsAuthoring authoring, KindRegistry registry, HashSet<int> kinds)
+        {
+            var components = authoring.GetComponents<Component>();
+            if (components == null)
+                return;
+            foreach (var component in components)
+            {
+                if (component == null)
+                    continue;
+                var attribute = Attribute.GetCustomAttribute(component.GetType(), typeof(RequiresKindsAttribute), true) as RequiresKindsAttribute;
+                if (attribute == null || attribute.Kinds == null)
+                    continue;
+                foreach (var kind in attribute.Kinds)
+                {
+                    if (kind == null)
+                        continue;
+                    var index = registry.IndexOf(kind.Name);
+                    if (index < 0)
+                        throw new InvalidOperationException("GameObject '" + authoring.gameObject.name + "' component '" + component.GetType().Name + "' requires kind '" + kind.FullName + "' with no registered column.");
+                    kinds.Add(index);
+                }
+            }
+        }
+
+        static int ResolveKind(GameObject gameObject, string name, string context, KindRegistry registry)
+        {
+            var index = string.IsNullOrEmpty(name) ? -1 : registry.IndexOf(ResolveKindName(name));
+            if (index < 0)
+                throw new InvalidOperationException("GameObject '" + gameObject.name + "' " + context + " names kind '" + name + "' with no registered column.");
+            return index;
+        }
+
+        static string ResolveKindName(string name)
+        {
+            var direct = Type.GetType(name, false);
+            if (direct != null)
+                return direct.Name;
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                Type[] types;
+                try
+                {
+                    types = assembly.GetTypes();
+                }
+                catch
+                {
+                    continue;
+                }
+                foreach (var candidate in types)
+                    if (candidate.Name == name || candidate.FullName == name)
+                        return candidate.Name;
+            }
+            return name ?? string.Empty;
         }
     }
 }
