@@ -1,0 +1,6 @@
+{
+  "name": "Tl.Unity.Generate",
+  "rootNamespace": "Tl.Unity.Generate",
+  "autoReferenced": false,
+  "noEngineReferences": true
+}

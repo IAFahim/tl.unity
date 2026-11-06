@@ -8,7 +8,7 @@ namespace Tl.Gen.Unity
 {
     internal static class UnitySystemReader
     {
-        internal static UnitySystemModel Read(SemanticModel model, StructDeclarationSyntax syntax, CancellationToken cancel)
+        internal static UnitySystemModel? Read(SemanticModel model, StructDeclarationSyntax syntax, CancellationToken cancel)
         {
             if (model.GetDeclaredSymbol(syntax, cancel) is not INamedTypeSymbol symbol)
                 return null;
@@ -58,7 +58,7 @@ namespace Tl.Gen.Unity
                 readOnly = named.MetadataName != "Span`1";
                 return true;
             }
-            element = null;
+            element = null!;
             readOnly = false;
             return false;
         }

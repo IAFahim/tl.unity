@@ -13,9 +13,7 @@ namespace PlainGame.Tests
             "PlainRunner.cs",
             "PlainScript.cs",
             "csc.rsp",
-            "game.bytes",
             "Generated/Timelines.g.cs",
-            "Generated/TlSystemsPlainSample.g.cs",
         };
 
         static string Root() => PackageInfo.FindForAssembly(typeof(PlainSampleSyncTests).Assembly).resolvedPath;
@@ -48,7 +46,10 @@ namespace PlainGame.Tests
         {
             var json = File.ReadAllText(Path.Combine(Root(), "package.json"));
             StringAssert.Contains("\"path\": \"Samples~/PlainCSharp\"", json);
-            Assert.IsTrue(File.Exists(Path.Combine(Root(), "Samples~", "PlainCSharp", "Tl.Unity.PlainCSharp.asmdef")));
+            var asmdef = Path.Combine(Root(), "Samples~", "PlainCSharp", "Tl.Unity.PlainCSharp.asmdef");
+            Assert.IsTrue(File.Exists(asmdef));
+            StringAssert.Contains("\"Tl.Unity.Generate.Plain\"", File.ReadAllText(asmdef));
+            Assert.IsFalse(Directory.Exists(Path.Combine(Root(), "Samples~", "PlainCSharp", "Tools~")));
         }
     }
 }

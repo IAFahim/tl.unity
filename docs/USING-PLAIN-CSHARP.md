@@ -23,17 +23,18 @@ alone. Your assembly also needs generated game code (below).
 |---|---|
 | `Tl.Core` (`TimelineWorld`, `PlaybackTable`, `KindStore`, `Events<T>`) | the `com.tl.unity` package |
 | Game types: tracks, clips, kinds, consumers, systems | your code |
-| `TlSystems<Id>.g.cs` with `Run` for each `[TimelineSystem]` | generated, then checked in |
+| `Run` for each `[TimelineSystem]` | the package's plain source generator, at compile time |
 | `Timelines.g.cs` (ids) and `game.tlib` (the baked library) | `tlb library` |
 | A driver `MonoBehaviour` | your code (the sample has one) |
 
 The package still lists `com.unity.entities` as a dependency. The plain host
 does not use it.
 
-The generated `Run` code comes from the system emitter in `Tl.Gen.CSharp`.
-That emitter is internal and no CLI or analyzer calls it today. The sample ships
-a small tool that calls it by reflection (see Step 4). Unity does not run it for
-you: you regenerate and check in the file when your game types change.
+The `Run` code comes from `Tl.Gen.Plain`, a Roslyn source generator that
+ships prebuilt in the package (`Generators/Plain/Tl.Gen.Plain.dll`). It wraps
+the system emitter of `Tl.Gen.CSharp`. Unity runs it on every compile of an
+assembly whose asmdef references `Tl.Unity.Generate.Plain` (Step 4). Nothing
+is checked in and no tool is run by hand.
 
 ## Step 1: install and import the sample
 
@@ -45,7 +46,7 @@ you: you regenerate and check in the file when your game types change.
 
 Package Manager, `Tl Unity Playback`, Samples, import `Plain C# host`. It
 lands in `Assets/Samples/...`. The sample assembly is `Tl.Unity.PlainCSharp`
-and it references only `Tl.Core`.
+and it references `Tl.Core` and `Tl.Unity.Generate.Plain`.
 
 Files in the sample:
 
@@ -55,10 +56,9 @@ Files in the sample:
 | `PlainHost.cs` | owns all native memory; `Step`, `Start`, `Stop`, events |
 | `PlainRunner.cs` | the `MonoBehaviour` |
 | `PlainScript.cs` | the 600-step script and its hash |
-| `Generated/` | ids and generated systems |
+| `Generated/` | timeline ids (`Timelines.g.cs`) |
 | `game.bytes` | the baked library (`game.tlib` renamed) |
 | `Timelines~/` | timeline JSON sources (hidden from Unity) |
-| `Tools~/GenPlain/` | the generator tool |
 
 Unity imports a `.bytes` file as a `TextAsset`. It does not import `.tlib`.
 Rename `game.tlib` to `game.bytes`, or read the file yourself from
@@ -174,17 +174,34 @@ Release`, then `dotnet Tl.Bake.dll library ...`). Use a build with the
 
 ## Step 4: generate the systems
 
-```sh
-dotnet build external/tl-kinds/src/Tl.Gen.CSharp -c Release
-dotnet run --project Samples~/PlainCSharp/Tools~/GenPlain -c Release -- <Tl.Gen.CSharp.dll> com.tl.unity/Core <game folder> Tl.Unity.PlainCSharp PlainSample <out folder>
+Add `Tl.Unity.Generate.Plain` to the references of your game asmdef:
+
+```json
+"references": [
+  "Tl.Core",
+  "Tl.Unity.Generate.Plain"
+]
 ```
 
-The arguments are the generator dll, the `Tl.Core` sources, the folder with
-your game `.cs` files, the assembly name, an id for the module class, and the
-output folder. The tool writes `TlSystemsPlainSample.g.cs`. Put it in your
-assembly. Run it again whenever a track, clip, kind, consumer or system
-changes, then rebake the library. A library baked against other types fails on
-load with a rebake hint.
+That reference opts the assembly in. The generator in the same package
+folder as `Tl.Unity.Generate.Plain` runs only for assemblies that reference
+it, so other assemblies (the package's own, your other game assemblies) are
+not touched. On each compile it writes two sources into the assembly:
+
+- `TlSystems<Assembly>.g.cs`: `Run` for each `[TimelineSystem]` and the module
+  class `TlSystems.TlModule_<Assembly>` (`<Assembly>` is the assembly name with
+  every character that is not a letter or digit replaced by `_`).
+- `TlSystems.Module.g.cs`: `TlSystems.TlModule.Install()`, which installs that
+  module.
+
+Errors in the declarations (`TLGEN...`) appear in the Console like any
+compile error. Rebake the library whenever a track, clip, kind, consumer or
+system changes: the pair keys hash the type names and the assembly name, and
+a library baked against other types fails on load with a rebake hint.
+
+Do not also reference `Tl.Unity.Generate` (the ECS generator) from the same
+assembly: the plain host and the ECS host generate different code for the
+same `[TimelineSystem]`.
 
 Unity does not define `NET` for netstandard assemblies, so the generated
 `ModuleInitializer` is off. The host installs the module itself (next step).
@@ -235,7 +252,7 @@ static void InstallGeneratedCode()
     foreach (var module in TlGenerated.Modules)
         if (module.GetType().Assembly == mine)
             return;
-    TlSystems.TlModule_PlainSample.Install();
+    TlSystems.TlModule.Install();
 }
 ```
 
@@ -454,7 +471,7 @@ method.
 | Playbacks | `PlaybackTable`, native, owned by `PlainHost` | `Playback` buffer on each entity |
 | Your data | managed arrays or `Span` columns | components |
 | Kinds | `KindStore` tables, one row per entity index | per-entity entry buffers, `Active` and `Enabled` bits, archetype per kind set |
-| Run code | `Run` from `Tl.Gen.CSharp` systems emitter, checked in | Burst jobs from `Tl.Gen.Unity` |
+| Run code | `Run` from `Tl.Gen.Plain` (opt in: `Tl.Unity.Generate.Plain`) | Burst jobs from `Tl.Gen.Unity` (opt in: `Tl.Unity.Generate`) |
 | Step | you call `Tick` and each `Run` | `TimelineSimulationGroup` systems |
 | Authoring | by hand in code and JSON | Timeline Player in a SubScene, bakers |
 | Burst, jobs | none, main thread | yes |
@@ -494,8 +511,12 @@ The generated code, the host and the data columns differ.
 ## Tests
 
 `Tests/Plain/` holds a copy of the sample that the tests compile (Unity does
-not compile `Samples~`). `PlainSampleSyncTests` fails if the two copies
-differ. PlayMode tests:
+not compile `Samples~`). `PlainSampleSyncTests` fails if the two copies'
+sources differ. The copy compiles as `Tl.Unity.Plain`, so the generator keys
+its pairs with that assembly name, and its `game.bytes` is baked from the same
+`Timelines~` against `Tl.Unity.Plain.dll`.
+
+PlayMode tests:
 
 | Test | Checks |
 |---|---|
@@ -511,11 +532,7 @@ Run them with `eng/test-com-tl-unity.sh`.
 
 ## Limits
 
-- The generated systems file and the library are made by hand-run tools. No
-  Unity importer runs them.
-- No `Tl.Gen.CSharp` source generator runs inside Unity. The emitter that
-  writes `Run` is internal; `GenPlain` reaches it by reflection and can break
-  when the generator changes.
+- The library is baked by hand with `tlb`. No Unity importer runs it.
 - The sample is main-thread, single-world.
 - Player builds were checked on Windows (CoreCLR and IL2CPP) with a scratch
   scene only.

@@ -2,7 +2,8 @@
   "name": "Tl.Unity.PlainCSharp",
   "rootNamespace": "PlainGame",
   "references": [
-    "Tl.Core"
+    "Tl.Core",
+    "Tl.Unity.Generate.Plain"
   ],
   "allowUnsafeCode": true,
   "autoReferenced": true

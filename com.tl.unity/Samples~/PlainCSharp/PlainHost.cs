@@ -51,7 +51,7 @@ namespace PlainGame
             foreach (var module in TlGenerated.Modules)
                 if (module.GetType().Assembly == mine)
                     return;
-            TlSystems.TlModule_PlainSample.Install();
+            TlSystems.TlModule.Install();
         }
 
         public bool IsDisposed => _disposed;

@@ -106,7 +106,18 @@ Before you start you need:
 - A game assembly that declares the kinds, feeders and pulses. Its asmdef
   references `Tl.Unity` and `Tl.Unity.Authoring` (the attribute, the
   components and the assets live in `Tl.Unity.Authoring`, a runtime
-  assembly). `Tests/Kinds/Tl.Unity.Kinds.asmdef` lists the full references.
+  assembly), plus `Tl.Unity.Generate`. `Tests/Kinds/Tl.Unity.Kinds.asmdef`
+  lists the other references.
+- The kind code is generated at compile time by `Tl.Gen.Unity`, a Roslyn
+  source generator that ships prebuilt in the package
+  (`Generators/Ecs/Tl.Gen.Unity.dll`, imported as a `RoslynAnalyzer` for no
+  platform). Unity runs it only for assemblies whose asmdef references the
+  marker assembly `Tl.Unity.Generate`, so the package's own assemblies and
+  your other assemblies are never touched. The package's test game checks in
+  its generated files instead and does not reference the marker.
+  `eng/build-generators.sh` rebuilds both shipped generators (this one and
+  the plain host's `Tl.Gen.Plain`) from the pinned `external/tl-kinds`
+  sources; `--check` fails when a shipped dll is stale.
 - A folder with `library.json`, the timeline `.json` files and the baked
   `game.tlib`, plus the generated ids class (one `ushort` constant per
   timeline, named in PascalCase: `potion_hop.json` gives `PotionHop`).
