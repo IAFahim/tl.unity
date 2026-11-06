@@ -9,6 +9,16 @@ timer entity per director, no extra systems. An entity carries its
 Runs on the newest Unity 7 editor (tested on 7000.0.0a16) with
 `com.unity.timeline` 6.7.0, which `com.tl.unity` now depends on.
 
+Status, from an empty project that has the demo of
+[USING-ECS.md](USING-ECS.md): steps 1 to 4 below work. A Timeline built in
+code and a bridge asset baked `sprint.json` and `game.tlib`, and the ids class
+got `Timelines.Sprint`. Step 5 (the director on an entity in a SubScene) was
+set up by script. Playing it does not work yet: the generated components are
+`Unknown Type` at run time ([IAFahim/tl.unity#18](https://github.com/IAFahim/tl.unity/issues/18)).
+The Timeline window itself was not driven (the check was headless); the same
+assets were built in code. Read the ECS demo first: the bridge needs its Timeline Library asset, its
+`Kinds.cs` types and its compiled game assembly.
+
 ## How it works
 
 ```
@@ -58,6 +68,10 @@ public sealed class WalkClipAsset : Tl.Unity.TlClip<WalkClip> { }
 public sealed class StepMarkerAsset : Tl.Unity.TlMarker<StepMarker> { }
 ```
 
+The game assembly's asmdef needs `Tl.Unity.Timeline` and `Unity.Timeline` in
+its references (next to the Tl references of the ECS guide). The data structs
+(`WalkTrack`, `WalkClip`) and these classes may live in the same assembly.
+
 Your data structs need no `[Serializable]` and no change. The bridge stores
 each public field as text and its inspector draws a typed field (number,
 bool, enum popup) for each one. In code, `asset.Data` reads and writes the
@@ -75,15 +89,35 @@ struct.
 5. For a timeline longer than its last clip, set Duration Mode to Fixed
    Length and type the duration.
 
+The same in code (no window needed). `CreateTrack` and `CreateClip` add the
+track and clip assets to the saved Timeline asset themselves; do not call
+`AddObjectToAsset` for them (it fails with "Adding asset to object ... failed"):
+
+```csharp
+var timeline = ScriptableObject.CreateInstance<TimelineAsset>();
+timeline.editorSettings.frameRate = 60;
+AssetDatabase.CreateAsset(timeline, "Assets/Demo/sprint.playable");
+var walk = timeline.CreateTrack<WalkTrackAsset>(null, "Walk");
+walk.Data = new WalkTrack { Scale = 1 };
+var clip = walk.CreateClip<WalkClipAsset>();
+clip.start = 0;
+clip.duration = 30.0 / 60.0;
+((WalkClipAsset)clip.asset).Data = new WalkClip { Speed = 3, Priority = 5 };
+timeline.durationMode = TimelineAsset.DurationMode.FixedLength;
+timeline.fixedDuration = 30.0 / 60.0;
+EditorUtility.SetDirty(timeline);
+AssetDatabase.SaveAssets();
+```
+
 ### 3. Create the Timeline Bridge asset
 
 `Assets > Create > Tl > Timeline Bridge`, one per library.
 
 | Field | Enter |
 |---|---|
-| Library | The Timeline Library asset (see KINDS.md Step 1). Its Folder, Game Assembly, Namespace, Kinds File and Tlb are used. |
+| Library | The Timeline Library asset ([USING-ECS.md](USING-ECS.md) step 4, `DemoLibrary`). Its Folder, Game Assembly, Namespace, Kinds File and Tlb are used. |
 | Output | `Json In Library Folder` (path 1) or `Staged Json` (path 2). |
-| Ids File | Project path for the timeline ids class (`Timelines.g.cs`). Empty keeps the `tlb` default. |
+| Ids File | Project path for the timeline ids class (`Timelines.g.cs`). Empty keeps the `tlb` default: `Timelines.g.cs` next to `game.tlib` in the library Folder. |
 | Bake On Save | Bake again when a listed `.playable` is saved. |
 | Timelines | One row per Timeline asset: Timeline, Name (empty uses the asset name), End (`Remove`, `Loop`, `Hold`, `Next`), Next (a listed Timeline asset), Channel (a `library.json` channel name, empty stacks). |
 
@@ -112,6 +146,13 @@ The Console shows one line per bake, the warnings, and the kind capacities.
 Errors start with `Tl timeline bridge '<bridge>':` and name the timeline,
 track, clip and time.
 
+The bake writes `game.tlib`, not `game.bytes`. If your game loads the library
+from a `game.bytes` TextAsset (the ECS demo does), copy `game.tlib` over it
+after each bake. Also check that no second `Kinds.g.cs` appeared in the library
+Folder: the bake can write one, and then the project fails with `CS0101`
+([IAFahim/tl.unity#19](https://github.com/IAFahim/tl.unity/issues/19)). Setting
+the library's Kinds File to `<Folder>/Kinds.g.cs` avoids it.
+
 ### 5. Put it on an entity
 
 On a GameObject in a SubScene:
@@ -125,7 +166,9 @@ On a GameObject in a SubScene:
    only game code pulses.
 
 The Timeline Director fills the Timeline Player's Library, Start With and May
-Start from the director and the bridge whenever you edit it. The existing
+Start from the director and the bridge whenever you edit it in the Inspector.
+A script that builds the components must call `Sync()` on the Timeline Director
+itself. The existing
 Timeline Player baker then bakes the `Playback` buffer, the start request and
 exactly the reachable kinds. If the director changes afterwards and the
 names no longer match, baking logs `Tl baking: GameObject '<name>' Timeline

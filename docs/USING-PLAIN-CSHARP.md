@@ -7,11 +7,20 @@ The .NET host of Tl runs inside Unity as it is.
 
 It works. Tested on the newest Unity 7 editor (tested on 7000.0.0a16):
 
+- From an empty project: package from the git URL, import the sample, 0
+  `error CS`, `tlb library` gives `game.bytes` byte for byte equal to the shipped
+  one, a scene with `PlainRunner` moves a Transform in Play mode, and the
+  600-step script hashes to the pinned value (about 10 minutes).
+
 - Editor PlayMode: the 600-step kind script hashes to `13943614770702343869`,
   the same hash as the ECS host and the .NET `KindUnityHashTests`.
 - A Windows CoreCLR player and a Windows IL2CPP player (scratch builds, not
   committed) print the same hash and step a Transform from `FixedUpdate`.
 - Not verified: other platforms, and Burst (the plain host does not use it).
+
+The fastest start is the sample (step 1). It is the complete working code. The
+code blocks in steps 2 to 6 are excerpts of its files, not a full program: for
+your own game, copy the sample files and change them.
 
 What ships in `com.tl.unity` is enough for the runtime: the `Tl.Core`
 assembly (`Core/`, netstandard2.1, no Unity dependency). It is not enough
@@ -45,8 +54,11 @@ is checked in and no tool is run by hand.
 ```
 
 Package Manager, `Tl Unity Playback`, Samples, import `Plain C# host`. It
-lands in `Assets/Samples/...`. The sample assembly is `Tl.Unity.PlainCSharp`
-and it references `Tl.Core` and `Tl.Unity.Generate.Plain`.
+lands in `Assets/Samples/Tl Unity Playback/<version>/Plain C# host`. The sample
+assembly is `Tl.Unity.PlainCSharp` and it references `Tl.Core` and
+`Tl.Unity.Generate.Plain`. Unity compiles it at once (0 errors). The sample
+already contains a baked `game.bytes`, so you can go to step 6 and press Play
+before you bake anything.
 
 Files in the sample:
 
@@ -149,28 +161,36 @@ The full model of kinds (combine rules, pulses, step order) is in
 ## Step 3: author and bake the library
 
 One JSON file per timeline, one `library.json`. `Timelines~/run.json` in the
-sample is a looping walk. Build the assembly, then bake against it.
+sample is a looping walk. Bake against the compiled assembly. The assembly must
+already compile with the reference from step 4.
 
-Unity compiles your game assembly to `Library/ScriptAssemblies/`. Copy the
-game dll and `Tl.Core.dll` into one scratch folder and bake from there:
+Unity compiles your game assembly to `Library/ScriptAssemblies/`. Copy
+`Tl.Unity.PlainCSharp.dll` and `Tl.Core.dll` into one scratch folder outside
+`Assets` and bake from the project folder. `<sample>` is the folder from step 1:
 
 ```sh
-tlb library Samples~/PlainCSharp/Timelines~ --assembly <scratch>/Tl.Unity.PlainCSharp.dll --out game.tlib --ids Generated/Timelines.g.cs --namespace PlainGame
+dotnet <tl>/tools/Tl.Bake/bin/Release/net10.0/Tl.Bake.dll library "<sample>/Timelines~" --assembly <scratch>/Tl.Unity.PlainCSharp.dll --out <scratch>/game.tlib --ids <scratch>/Timelines.g.cs --namespace PlainGame
 ```
 
-`tlb` also writes `Kinds.g.cs`. That file is for the ECS host. Delete it.
+Build `tlb` first (see the last paragraph of this step). `tlb` also writes
+`Kinds.g.cs` next to `--out`. That file is for the ECS host. Delete it, or keep
+`--out` outside `Assets` as above.
 
-Rename the result to `game.bytes`. Baking is deterministic for one assembly
-name. The library stores the assembly name, so the bytes change if you rename
+Copy `game.tlib` over `<sample>/game.bytes`, and `Timelines.g.cs` over
+`<sample>/Generated/Timelines.g.cs` if you added or renamed timelines.
+
+Baking is deterministic for one assembly name. The library stores the assembly name, so the bytes change if you rename
 the asmdef.
 
 Bake against the compiled game assembly, not against the generated code. A
 brand new game has a chicken-and-egg step: compile the types first (leave
 `PlainHost` out), bake, then add the rest.
 
-`tlb` is the `Tl.Bake` tool from IAFahim/tl (`dotnet build tools/Tl.Bake -c
-Release`, then `dotnet Tl.Bake.dll library ...`). Use a build with the
-`kinds` command.
+`tlb` is the `Tl.Bake` tool from IAFahim/tl. You need the .NET 10 SDK:
+`git clone --depth 1 https://github.com/IAFahim/tl.git`, then `dotnet build
+tools/Tl.Bake -c Release` in the clone. Use a build from `main` (the
+`tl.bake` 2.0.1 package on NuGet has no `kinds` command). It is
+`tools/Tl.Bake/bin/Release/net10.0/Tl.Bake.dll`.
 
 ## Step 4: generate the systems
 
@@ -325,7 +345,9 @@ public sealed class PlainRunner : MonoBehaviour
 ```
 
 To use it: make a GameObject with `PlainRunner`, drag `game.bytes` into
-`Library`, add one Transform to `Targets`, press Play. Keys (legacy input
+`Library`, add one Transform to `Targets` (for example a cube), press Play. The
+Transform moves along X (3 units after 150 steps at the default 100 units per
+meter). Keys (legacy input
 manager): R run, J jump, B speed boost, P potion hop, S stomp, W whistle,
 X stop all, Space pause or resume run, Backspace (held) rewind.
 

@@ -8,6 +8,12 @@ unmanaged data.
 Tested on the newest Unity 7 editor (tested on 7000.0.0a16). Other editors
 and player builds are not covered here.
 
+Status: from an empty project, steps 1 to 9 work (install, `tlb`, library,
+kinds, systems, bakers, scene and SubScene compile, capacity bake and library
+bake, 0 `error CS`). Pressing Play does not work yet: the generated components
+are `Unknown Type` at run time ([IAFahim/tl.unity#18](https://github.com/IAFahim/tl.unity/issues/18),
+section 10).
+
 Other ways in:
 
 - Plain `MonoBehaviour`, no ECS: [USING-PLAIN-CSHARP.md](USING-PLAIN-CSHARP.md).
@@ -72,10 +78,11 @@ it.
 
 ### Tools outside Unity
 
-You need the .NET SDK and two clones. Neither is a Unity project.
+You need the .NET 10 SDK and one clone. It is not a Unity project. The repo is
+about 220 MB, so the first clone takes minutes (`--depth 1` is enough).
 
 ```sh
-git clone https://github.com/IAFahim/tl.git
+git clone --depth 1 https://github.com/IAFahim/tl.git
 cd tl && dotnet build tools/Tl.Bake -c Release
 ```
 
@@ -83,12 +90,8 @@ This builds `tlb` as `tools/Tl.Bake/bin/Release/net10.0/Tl.Bake.dll`. Run it
 as `dotnet Tl.Bake.dll <command>`. It needs the `kinds` command, which the
 `tl.bake` 2.0.1 package on NuGet does not have, so build from `main`.
 
-```sh
-git clone --recurse-submodules https://github.com/IAFahim/tl.unity.git
-```
-
-This gives you the generator tool in
-`com.tl.unity/Tools~/Tl.Gen.Unity.Snapshot` (see section 3, step 5).
+The entity glue code (buffers, tags, `TimelineJobs`) comes from the generator
+that ships in the package. You run nothing for it (step 1 and step 5).
 
 `TL_TLB` is read only by the package's own EditMode test. In your project you
 point the Timeline Library asset's `Tlb` field at `Tl.Bake.dll` (or at a `tlb`
@@ -116,7 +119,11 @@ Timelines/   library.json, run.json, dash.json, stomp.json
 ### Step 1: the assembly
 
 Authoring components, kinds and systems go in one game assembly. It must
-allow unsafe code and reference the Tl assemblies.
+allow unsafe code and reference the Tl assemblies. The reference to
+`Tl.Unity.Generate` opts the assembly in to the package's source generator: on
+each compile it writes the glue code for your kinds and `[TimelineSystem]`
+structs into the assembly. Without that reference nothing is generated and
+`TimelineJobs`, `LocomotionEntry` and the other generated names do not exist.
 
 File: `Assets/Demo/Demo.asmdef`
 
@@ -128,6 +135,7 @@ File: `Assets/Demo/Demo.asmdef`
     "Tl.Core",
     "Tl.Unity",
     "Tl.Unity.Authoring",
+    "Tl.Unity.Generate",
     "Unity.Burst",
     "Unity.Collections",
     "Unity.Entities",
@@ -356,59 +364,45 @@ To draw these in the Timeline window instead of writing json, see
 | Tlb | the full path of `Tl.Bake.dll` |
 | Kind Sets | `Exact` |
 
-Wait for Unity to compile `Kinds.cs`. At this point only `Kinds.cs` and the
-asmdef exist, so nothing refers to generated code.
+Wait for Unity to compile. The generator runs now and writes the glue code
+for `Kinds.cs`. The Console shows three `TLUNITY9103` warnings (`KindCapacity.Cue`,
+`Damage` and `Locomotion` do not exist yet). That is expected: step 5 writes
+them. There must be 0 `error CS`.
 
-### Step 5: bake capacities, bake the library, generate the glue
+### Step 5: bake capacities and bake the library
 
-Three commands. Run the first in Unity, the others in a shell.
+Two commands. Run the first in Unity, the second in a shell.
 
 1. `Tools > Tl > Bake Kind Capacities`. It copies the compiled script
    assemblies and the engine assemblies into `Temp/TlKindBake` and runs
    `tlb kinds`. It writes `Assets/Demo/Kinds.g.cs` (the `KindCapacity`
-   constants) and logs each kind's capacity. `Temp/TlKindBake` lives while the
-   Editor is open.
+   constants) and logs each kind's capacity. This also runs by itself after
+   each script reload and when a `.json` in the library folder is imported, so
+   the file may already exist. `Temp/TlKindBake` lives while the Editor is
+   open. After `Kinds.g.cs` appears the scripts recompile and the
+   `TLUNITY9103` warnings go away.
 
-2. From the project folder, bake the library. This writes `game.tlib` and the
-   ids class `Timelines.g.cs`:
+2. With the Editor still open, from the project folder, bake the library. This
+   writes `game.tlib` and the ids class `Timelines.g.cs`:
 
    ```sh
-   dotnet <tl>/tools/Tl.Bake/bin/Release/net10.0/Tl.Bake.dll library Assets/Demo/Timelines \
-     --assembly Temp/TlKindBake/Demo.dll \
-     --out Assets/Demo/Timelines/game.tlib \
-     --ids Assets/Demo/Timelines/Timelines.g.cs \
-     --kinds Assets/Demo/Kinds.g.cs \
-     --namespace Demo
+   dotnet <tl>/tools/Tl.Bake/bin/Release/net10.0/Tl.Bake.dll library Assets/Demo/Timelines      --assembly Temp/TlKindBake/Demo.dll      --out Assets/Demo/Timelines/game.tlib      --ids Assets/Demo/Timelines/Timelines.g.cs      --kinds Assets/Demo/Kinds.g.cs      --namespace Demo
    cp Assets/Demo/Timelines/game.tlib Assets/Demo/Timelines/game.bytes
    ```
 
+   On Windows use `copy` for the last line. Pass `--kinds`: without it `tlb`
+   writes a second `Kinds.g.cs` next to `game.tlib` and the project stops
+   compiling (`CS0101`, duplicate `KindCapacity`).
+
    `game.bytes` is the same file under a name Unity imports as a `TextAsset`.
-   The runtime loads the library from that asset (step 8). The baker reads
+   The runtime loads the library from that asset (step 7). The baker reads
    `game.tlib`, so keep both and copy after every bake.
 
-3. Generate the entity glue. Unity does not run the generator for you; you run
-   it and check in what it writes (see Known gaps):
-
-   ```sh
-   dotnet run -c Release --project <tl.unity>/com.tl.unity/Tools~/Tl.Gen.Unity.Snapshot -- \
-     <tl.unity>/com.tl.unity/Core Assets/Demo Assets/Demo/Generated Demo
-   ```
-
-   The arguments are the `Tl.Core` sources, your game folder, the output
-   folder (skipped when scanning) and the assembly name. It writes
-   `TlUnity.Kinds.g.cs`, `TlUnity.Movement.g.cs` and `TlUnity.Vitals.g.cs`:
-   the `LocomotionEntry` and `DamageEntry` buffers, the `*Active` and
-   `*Enabled` tags, `LocomotionKind` and `DamageKind`, the `Movement_*Data`
-   components, and `TimelineJobs.Movement` and `TimelineJobs.Vitals`.
-   Add `--check` as a fifth argument to fail when the files are out of date.
-
-   Run it again whenever you change a kind, a column or a `[TimelineSystem]`,
-   and after a capacity changes in `Kinds.g.cs`.
-
-   The generator output must be real source files in the project. Unity's
-   Entities source generators do not see types that another generator emits,
-   so a generator DLL loaded as an analyzer produces code that compiles but
-   whose components are `Unknown Type` at run time.
+There is no third command. The glue code (`LocomotionEntry`, `DamageEntry`,
+the `*Active` and `*Enabled` tags, `LocomotionKind`, `DamageKind`, the
+`Movement_*Data` and `Vitals_*Data` components, `TimelineJobs.Movement` and
+`TimelineJobs.Vitals`) is rewritten by the generator on every compile of `Demo`.
+Change a kind, a column or a `[TimelineSystem]` and recompile: the glue follows.
 
 ### Step 6: the systems
 
@@ -698,7 +692,7 @@ Why it is written this way:
 ### Step 10: run it
 
 Press Play on `Demo.unity`. The SubScene streams in, the library loads, and
-the director runs its script. To look at the entities, open `Window > Entities
+the director runs its script. Today this throws `Unknown Type` (section 10). To look at the entities, open `Window > Entities
 > Hierarchy` and select `Walker` in the runtime world (not checked in this
 guide).
 
@@ -786,15 +780,39 @@ public partial struct MovementSystem : ISystem
 ```
 
 The baker adds the new column: `AddComponent<Movement_TargetData>(entity);`.
-Run the generator again after changing a system.
+The generated entry point changes with the system when Unity recompiles.
 
 ## 5. Presentation events
 
-`Events<T>` (the .NET host's event writer) is not dispatched on Unity: a
-consumer method that takes it is skipped with the warning `TLUNITY9105`, and
-nothing reaches your game. This is a known gap (section 10).
+Two ways to tell the presentation layer that something happened.
 
-Use a pulse kind in `Each` mode that writes a cue column. It is in the demo:
+Events with `Events<T>`. A consumer method raises an event. On Unity the
+generated job runs it in Burst and writes the events into a
+`DynamicBuffer<TimelineEvent<T>>` on the entity that owns the timeline:
+
+```csharp
+public struct Whistle : ITrack<CueTrack, CueClip>
+{
+    public static void OnClipStart(in Frame<CueTrack, CueClip> f, ref Events<Cue> cues)
+    {
+        if (f.Direction > 0)
+            cues.Raise(new Cue { Voice = f.Clip.Voice });
+    }
+}
+```
+
+The `[TimelineSystem]` struct that the method belongs to declares a field
+`public Events<Cue> Cues;`. The Timeline Player bake adds the buffer to every
+entity for each event type the game declares. Each step clears the buffer and
+refills it with the events raised in that step, ordered by playback slot, then
+by raise order. `Record.Value` is your struct; `Record.Slot` and
+`Record.Sequence` give the order. Read the buffer in a system that runs after
+`TimelineSimulationGroup`. The rules for when `OnClipStart`, `OnClipEnd` and
+`ExecuteActive` fire are in [KINDS.md](KINDS.md), "Presentation events". The
+demo in this guide does not use `Events<T>`, so this walkthrough did not run it.
+
+Cues through a kind. The demo uses a pulse kind in `Each` mode that writes a
+cue column. It needs no extra buffer:
 
 ```csharp
 [TimelineKind(Accepts = KindEntries.Pulses, Mode = KindMode.Each)]
@@ -1011,8 +1029,9 @@ plumbing only. A comparison with another design is in
 |---|---|
 | Old behaviour after a code change | One compile error anywhere keeps the old assemblies loaded. Check the log for `error CS` before trusting a run. The Console can be empty while `Editor.log` has the errors. |
 | SubScene serves old data after you rebuilt `game.tlib` or changed a baker | Stale bake. Reimport the SubScene (right-click the SubScene asset, `Reimport`), then check one baked component exists in the live world. The baker depends on the Library asset, the Profile and `game.tlib`, not on your baker code. |
-| `Unknown Type: Demo.LocomotionEntry` (or `Movement_MotionData`) | The generated code is not in the project as source. Run the generator (step 5.3) and keep its output under `Assets`. Loading the generator DLL as an analyzer does not work. |
-| `error CS0103` for `Movement_MotionData`, `TimelineJobs`, `LocomotionEntry` | The generated files are missing or out of date. Run the generator again. |
+| `Unknown Type: Demo.LocomotionEntry` (or `Movement_MotionData`) at run time, with 0 `error CS` | Open bug: [IAFahim/tl.unity#18](https://github.com/IAFahim/tl.unity/issues/18). See section 10. |
+| `error CS0103` for `Movement_MotionData`, `TimelineJobs`, `LocomotionEntry` | The generator did not run. Check that the game asmdef references `Tl.Unity.Generate`, and fix any other `error CS` first: the generated code is not refreshed while the assembly fails to compile. |
+| `error CS0101` or `CS0229` for `KindCapacity` | Two `Kinds.g.cs` files. Bake the library with `--kinds` (step 5) and delete the one next to `game.tlib`. The Timeline Bridge can write that second file: [IAFahim/tl.unity#19](https://github.com/IAFahim/tl.unity/issues/19). |
 | `SGQC001: WithAll<LocomotionEntry>() is not supported` | `SystemAPI.Query` cannot name generated types. Build the query with `EntityQueryBuilder` in `OnCreate`. |
 | `BC1028: Creating a managed array ComponentType[]` | `GetEntityQuery(params ...)` is not Burst compatible. Use `EntityQueryBuilder` with one generic call per type. |
 | `BC1042` and a managed static | Something on the step path reads a managed static. Read `TimelineLibrary`, `TimelineStep` and `TimelineKindTick` from singletons instead. |
@@ -1028,7 +1047,7 @@ plumbing only. A comparison with another design is in
 | `Referenced assembly file not found` from `tlb library` | Run `Bake Kind Capacities` first in the open Editor so `Temp/TlKindBake` exists. It is removed when the Editor closes. |
 | `UnityEngine.ManagedKernelModule` could not be loaded from `tlb library` | You pointed `--assembly` at `Library/ScriptAssemblies`. Use `Temp/TlKindBake`, which also has the engine assemblies. |
 | `TLUNITY9103` warning | `KindCapacity.<Kind>` does not exist yet. Run `Bake Kind Capacities`; until then capacity falls back to 0. |
-| `TLUNITY9105` warning | A consumer declares a legacy method (`ExecuteActive`, `OnClipStart`, a marker handler, `Events<T>`). Only feeders and folds are dispatched on Unity. Feed a kind instead. |
+| `TLUNITY9105` warning | A consumer declares a legacy method that Unity does not dispatch (a marker handler, or `OnClipStart`, `OnClipEnd` or `ExecuteActive` with parameters other than `Events<T>`). Feed a kind instead. |
 | Strange state after leaving Play mode with Domain Reload off | Statics survive between sessions. `TimelineLibraryBootstrap` resets its own at `SubsystemRegistration` and forgets the bytes, so call `Use` in every session (`LibraryAuthoring.Awake` does). Reset your own statics the same way and mark the type `[NoAutoStaticsCleanup]` under `#if UNITY_7000_0_OR_NEWER`. |
 | `Unity.Entities` binds to your namespace | A namespace segment named `Unity` or `Tl` in your code captures `Unity.X`. Write `global::Unity.Entities...` or rename the namespace. |
 | A system throws every frame | `GetSingleton<T>()` without `RequireForUpdate<T>()` in `OnCreate`. |
@@ -1039,21 +1058,23 @@ plumbing only. A comparison with another design is in
 
 ## 10. Known gaps
 
-- `Events<T>` is not dispatched on Unity:
-  [IAFahim/tl.unity#11](https://github.com/IAFahim/tl.unity/issues/11).
-  Use the cue kind in section 5.
-- No generator ships in the package, and it works only as source you generate
-  and check in: [IAFahim/tl.unity#12](https://github.com/IAFahim/tl.unity/issues/12).
-  Workaround: the Snapshot tool in step 5.3. Placing the generator DLL as an
-  analyzer next to the asmdef compiles, but the generated components are not
-  registered with the TypeManager, so they are `Unknown Type` at run time.
-- The plain C# host needs a supported generator for its system code:
-  [IAFahim/tl.unity#13](https://github.com/IAFahim/tl.unity/issues/13).
-  See [USING-PLAIN-CSHARP.md](USING-PLAIN-CSHARP.md).
+- Generated components are `Unknown Type` at run time, so the demo does not
+  run yet. The generator output compiles (0 `error CS`), but the Entities
+  TypeManager does not know the emitted types, and Play mode and the SubScene
+  bake throw `Unknown Type: Demo.LocomotionEntry`. Steps 1 to 9 are verified up
+  to compile, capacity bake and library bake; step 10 and the PlayMode test in
+  section 7 are not: [IAFahim/tl.unity#18](https://github.com/IAFahim/tl.unity/issues/18).
+- The Timeline Bridge bake can write a second `Kinds.g.cs` into the library
+  folder: [IAFahim/tl.unity#19](https://github.com/IAFahim/tl.unity/issues/19).
+  Until it is fixed, set Kinds File to `Assets/Demo/Timelines/Kinds.g.cs` (and
+  `--kinds` to the same path in step 5) if you use the bridge.
 - `tlb library` needs `Temp/TlKindBake`, which exists only while the Editor is
   open after a capacity bake. There is no menu command for `tlb library`; the
   Timeline Bridge ([TIMELINE-BRIDGE.md](TIMELINE-BRIDGE.md)) runs it for you.
-- Not verified: player builds of this demo (the package's IL2CPP samples are),
+- The Unity CI jobs do not run on Linux until a runner is started:
+  [IAFahim/tl.unity#17](https://github.com/IAFahim/tl.unity/issues/17).
+- Not verified: the `GameObject > New Sub Scene` menu (a script built the
+  scenes), player builds of this demo (the package's IL2CPP samples are),
   other platforms, and other Unity versions.
 
 ## 11. Cheat sheet
@@ -1062,9 +1083,9 @@ Order of work, first time:
 
 1. Manifest: `"com.tl.unity": "https://github.com/IAFahim/tl.unity.git?path=/com.tl.unity#main"`.
 2. Build `tlb` (`dotnet build tools/Tl.Bake -c Release` in the `tl` repo).
-   Clone `tl.unity` with submodules for the generator tool.
 3. Write `Kinds.cs`: columns, kinds, track and clip structs, feeders,
-   `[TimelineSystem]` structs. Asmdef: unsafe on, Tl assemblies referenced.
+   `[TimelineSystem]` structs. Asmdef: unsafe on, Tl assemblies and
+   `Tl.Unity.Generate` referenced.
 4. Write `library.json` and the timeline json files.
 5. `Create > Tl > Timeline Library`; fill Folder, Timeline Ids, Game Assembly,
    Namespace, Kinds File, Tlb.
@@ -1072,18 +1093,17 @@ Order of work, first time:
 7. `tlb library <folder> --assembly Temp/TlKindBake/<Game>.dll --out game.tlib
    --ids Timelines.g.cs --kinds Kinds.g.cs --namespace <Ns>`; copy
    `game.tlib` to `game.bytes`.
-8. `Tl.Gen.Unity.Snapshot -- <Core> <game folder> <Generated> <assembly>`.
-9. Write the `ISystem`s, bakers and `LibraryAuthoring`.
-10. SubScene + Timeline Player (drag the Library asset) + `LibraryAuthoring`
-    (drag `game.bytes`). Play.
+8. Write the `ISystem`s, bakers and `LibraryAuthoring`.
+9. SubScene + Timeline Player (drag the Library asset) + `LibraryAuthoring`
+   (drag `game.bytes`). Play.
 
 Every change after that:
 
 | You changed | Do |
 |---|---|
-| A kind, column, feeder signature or `[TimelineSystem]` | Run the generator; compile. |
+| A kind, column, feeder signature or `[TimelineSystem]` | Compile. The generator rewrites the glue. |
 | A timeline json | Reimport; `tlb library`; copy `game.bytes`. Capacity bake runs by itself. |
-| `library.json` kinds section | Bake Kind Capacities; run the generator if a capacity changed. |
+| `library.json` kinds section | Bake Kind Capacities. |
 | A clip or track struct field | `tlb library` again (layout fingerprint check), copy `game.bytes`. |
 
 API on one page:
@@ -1097,7 +1117,7 @@ API on one page:
 | Rewind | `SystemAPI.SetSingleton(new TimelineStep { Forward = false })` |
 | Schedule a system | `TimelineJobs.Movement(ref state, library.View, library.Kinds, step.Forward, state.Dependency)` |
 | Read other entities | `ComponentLookup` in a context struct on the `[TimelineSystem]`, passed to the job |
-| Presentation event | an `Each`-mode pulse kind that writes a cue column |
+| Presentation event | `Events<T>` read from `DynamicBuffer<TimelineEvent<T>>` after the group, or an `Each`-mode pulse kind that writes a cue column |
 | Dropped counts | `TimelineKindTick.DroppedPulses`, `DroppedStarts` |
 | Memory report | `Tools > Tl > Kind Report` |
 | Run the suite | `bash eng/test-com-tl-unity.sh` with `TL_TLB` set |

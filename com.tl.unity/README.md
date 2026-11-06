@@ -15,9 +15,15 @@ Tested on the newest Unity 7 editor (tested on 7000.0.0a16).
 "com.tl.unity": "https://github.com/IAFahim/tl.unity.git?path=/com.tl.unity#main"
 ```
 
-You also need `tlb` with the `kinds` command, built from IAFahim/tl `main`:
-`dotnet build tools/Tl.Bake -c Release`. Set the Tlb field of the Timeline
-Library asset to the `Tl.Bake.dll` it produces.
+You also need `tlb` with the `kinds` command, built from IAFahim/tl `main`
+with the .NET 10 SDK (`git clone --depth 1 https://github.com/IAFahim/tl.git`,
+then `dotnet build tools/Tl.Bake -c Release`). Set the Tlb field of the
+Timeline Library asset to the `Tl.Bake.dll` it produces.
+
+The generators ship in the package (`Generators/Ecs`, `Generators/Plain`).
+Add `Tl.Unity.Generate` (ECS) or `Tl.Unity.Generate.Plain` (plain C#) to the
+references of your game asmdef. Unity then generates the glue code on every
+compile; you run no tool for it.
 
 ## Start here
 
@@ -43,12 +49,14 @@ Library asset to the `Tl.Bake.dll` it produces.
 
 ## Known gaps
 
-The generated entity code is not produced by Unity yet, and `Events<T>` is not
-dispatched on Unity. See "Known gaps" in
-[docs/USING-ECS.md](../docs/USING-ECS.md#10-known-gaps): issues
-[#11](https://github.com/IAFahim/tl.unity/issues/11),
-[#12](https://github.com/IAFahim/tl.unity/issues/12) and
-[#13](https://github.com/IAFahim/tl.unity/issues/13).
+- Generated entity components are `Unknown Type` at run time, so the ECS demo
+  does not run yet: [#18](https://github.com/IAFahim/tl.unity/issues/18).
+- The Timeline Bridge bake can write a second `Kinds.g.cs`:
+  [#19](https://github.com/IAFahim/tl.unity/issues/19).
+- The Linux CI runner is not started:
+  [#17](https://github.com/IAFahim/tl.unity/issues/17).
+
+See "Known gaps" in [docs/USING-ECS.md](../docs/USING-ECS.md#10-known-gaps).
 
 ## Samples
 
