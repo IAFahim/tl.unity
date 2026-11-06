@@ -176,7 +176,8 @@ public unsafe class NativeV3Tests
                 for(var i=0;i<32;i++)Timeline<RecoilTrack,RecoilClip>.Apply<ushort,ushort>(indices,positions,true,in columns);
                 var before=GC.GetAllocatedBytesForCurrentThread();
                 for(var i=0;i<1024;i++)Timeline<RecoilTrack,RecoilClip>.Apply<ushort,ushort>(indices,positions,true,in columns);
-                Assert.AreEqual(0,GC.GetAllocatedBytesForCurrentThread()-before);
+                var allocated=GC.GetAllocatedBytesForCurrentThread()-before;
+                Assert.AreEqual(0,allocated);
             }
         }
     }
