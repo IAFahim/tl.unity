@@ -16,6 +16,8 @@ End-to-end walkthrough (JSON bake to Unity ECS typed queries): [END-TO-END.md](E
 
 License: to be decided by the repository owner.
 
+> **Kinds (`com.tl.unity`).** Kind model, step order, sizing, and reports: [docs/KINDS.md](docs/KINDS.md). Samples: Runner on kinds and Bullets, each with a cross-host hash.
+
 ## Snapshot notes
 
 - `com.iafahim.tl/Runtime/Data.cs`, `Hooks.cs`, and `Playback.cs` were symlinks
