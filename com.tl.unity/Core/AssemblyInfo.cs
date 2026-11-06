@@ -15,3 +15,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("SystemsCompare")]
 [assembly: InternalsVisibleTo("SystemsCompare21")]
 [assembly: InternalsVisibleTo("KindSystems")]
+[assembly: InternalsVisibleTo("Kinds")]

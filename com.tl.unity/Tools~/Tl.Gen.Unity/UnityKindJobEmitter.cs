@@ -154,6 +154,10 @@ namespace Tl.Gen.Unity
                 W(writer, (column.ReadOnly ? "[ReadOnly] " : "") + "public ComponentTypeHandle<" + ComponentName(model, column) + "> " + column.Name + "Handle;");
             foreach (var context in model.Contexts)
                 W(writer, "public " + context.TypeName + " " + context.Name + ";");
+            var eventConsumers = EventConsumers(assignment);
+            var events = eventConsumers.Count == 0 ? new List<UnityContext>() : new List<UnityContext>(model.Events);
+            foreach (var evented in events)
+                W(writer, "public BufferTypeHandle<global::Tl.Unity.TimelineEvent<" + evented.TypeName + ">> " + evented.Name + "EventHandle;");
             foreach (var kind in kinds)
             {
                 W(writer, "public BufferTypeHandle<" + kind.Entry + "> " + kind.Name + "EntryHandle;");
@@ -175,9 +179,19 @@ namespace Tl.Gen.Unity
                 W(writer, "}");
                 live.Append(k == 0 ? "" : " && ").Append("!__l" + k);
             }
-            if (kinds.Count != 0)
+            if (events.Count != 0)
+            {
+                var any = new StringBuilder();
+                for (var e = 0; e < events.Count; e++)
+                    any.Append(e == 0 ? "" : " || ").Append("chunk.Has(ref " + events[e].Name + "EventHandle)");
+                W(writer, "var __x = " + any + ";");
+                live.Append(kinds.Count == 0 ? "!__x" : " && !__x");
+            }
+            if (live.Length != 0)
                 W(writer, "if (" + live + ") return;");
             W(writer, "var __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);");
+            if (events.Count != 0)
+                W(writer, "if (__x) Events(chunk, __playbacks);");
             for (var i = 0; i < shape.Columns.Count; i++)
             {
                 if (!shape.UsedColumns[i])
@@ -190,6 +204,8 @@ namespace Tl.Gen.Unity
             W(writer, "}");
             for (var k = 0; k < kinds.Count; k++)
                 EmitKind(writer, shape, assignment, assignmentIndex, kinds[k], k);
+            if (events.Count != 0)
+                EmitEvents(writer, events, eventConsumers, assignmentIndex);
             W(writer, "}");
             W(writer, "public static partial class TimelineJobs");
             W(writer, "{");
@@ -210,6 +226,8 @@ namespace Tl.Gen.Unity
                 W(writer, ", " + column.Name + "Handle = state.GetComponentTypeHandle<" + ComponentName(model, column) + ">(" + (column.ReadOnly ? "true" : "false") + ")");
             foreach (var context in model.Contexts)
                 W(writer, ", " + context.Name + " = " + context.Name);
+            foreach (var evented in events)
+                W(writer, ", " + evented.Name + "EventHandle = state.GetBufferTypeHandle<global::Tl.Unity.TimelineEvent<" + evented.TypeName + ">>(false)");
             foreach (var kind in kinds)
             {
                 W(writer, ", " + kind.Name + "EntryHandle = state.GetBufferTypeHandle<" + kind.Entry + ">(false)");
@@ -355,6 +373,170 @@ namespace Tl.Gen.Unity
             W(writer, "__buf.ResizeUninitialized(__kept);");
             W(writer, "}");
             W(writer, "if (__buf.Capacity > " + info.Capacity + " && __buf.Length <= " + info.Capacity + ") __buf.TrimExcess();");
+            W(writer, "}");
+            W(writer, "}");
+            W(writer, "}");
+        }
+
+        static List<(int index, SystemConsumer consumer)> EventConsumers(SystemAssignment assignment)
+        {
+            var list = new List<(int, SystemConsumer)>();
+            for (var c = 0; c < assignment.Consumers.Count; c++)
+            {
+                var consumer = assignment.Consumers[c];
+                if (consumer.IsMarker)
+                    continue;
+                foreach (var method in consumer.Methods)
+                    if (UnityKindPlan.IsEventMethod(method))
+                    {
+                        list.Add((c, consumer));
+                        break;
+                    }
+            }
+            return list;
+        }
+
+        static ConsumerMethod? EventMethod(SystemConsumer consumer, ConsumerMethodKind kind)
+        {
+            foreach (var method in consumer.Methods)
+                if (method.Kind == kind && UnityKindPlan.IsEventMethod(method))
+                    return method;
+            return null;
+        }
+
+        static string EventArgs(IReadOnlyList<UnityContext> events, ConsumerMethod method, int index)
+        {
+            var args = new StringBuilder("in __f" + index);
+            for (var p = 1; p < method.Params.Count; p++)
+            {
+                var element = UnityKindPlan.EventElement(method.Params[p].TypeName);
+                var at = -1;
+                for (var e = 0; e < events.Count; e++)
+                    if (events[e].TypeName == element)
+                        at = e;
+                args.Append(", ref __eb" + at);
+            }
+            return args.ToString();
+        }
+
+        static void EmitEventSteps(StringBuilder writer, IReadOnlyList<UnityContext> events, List<(int index, SystemConsumer consumer)> consumers, int assignment, bool closing)
+        {
+            W(writer, "for (var __i = 0; __i < __stage->StepCount; __i++)");
+            W(writer, "{");
+            W(writer, "var __def = __stage->Steps + __i;");
+            W(writer, "if (__tick < __def->WindowStart || __tick >= __def->WindowEnd) continue;");
+            foreach (var (index, consumer) in consumers)
+            {
+                var active = EventMethod(consumer, ConsumerMethodKind.ExecuteActive);
+                var start = EventMethod(consumer, ConsumerMethodKind.OnClipStart);
+                var end = EventMethod(consumer, ConsumerMethodKind.OnClipEnd);
+                if (closing && end == null)
+                    continue;
+                W(writer, "if (__def->PairKey == " + consumer.PairKey + "UL)");
+                W(writer, "{");
+                EmitMaterialize(writer, consumer, assignment, index);
+                if (closing)
+                    W(writer, consumer.ConsumerTypeName + ".OnClipEnd(" + EventArgs(events, end!, index) + ");");
+                else
+                {
+                    if (active != null)
+                        W(writer, consumer.ConsumerTypeName + ".ExecuteActive(" + EventArgs(events, active, index) + ");");
+                    if (start != null)
+                        W(writer, "if (__tick == __def->WindowStart) " + consumer.ConsumerTypeName + ".OnClipStart(" + EventArgs(events, start, index) + ");");
+                    if (end != null)
+                        W(writer, "if (__tick == __def->WindowEnd - 1) " + consumer.ConsumerTypeName + ".OnClipEnd(" + EventArgs(events, end, index) + ");");
+                }
+                W(writer, "}");
+            }
+            W(writer, "}");
+        }
+
+        static void EmitSlotHeader(StringBuilder writer, IReadOnlyList<UnityContext> events, bool closing)
+        {
+            W(writer, "for (var __s = 0; __s < __n; __s++)");
+            W(writer, "{");
+            W(writer, "var __pb = __pbs + __s;");
+            if (closing)
+                W(writer, "if (__pb->Timeline == 0 || (__pb->Flags & global::Tl.PlaybackFlags.Stopping) == 0) continue;");
+            else
+                W(writer, "if (__pb->Timeline == 0 || (__pb->Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Stopping)) != 0) continue;");
+            W(writer, "var __tl = global::Tl.LibraryViewReader.GetTimeline(in View, new global::Tl.TimelineId(__pb->Timeline));");
+            W(writer, "if (__tl == null || __tl->Duration == 0) continue;");
+            if (closing)
+                W(writer, "var __tick = __pb->Tick < __tl->Duration ? __pb->Tick : (ushort)(__tl->Duration - 1);");
+            else
+                W(writer, "var __tick = __pb->Tick;");
+            W(writer, "var __stage = global::Tl.LibraryViewReader.StageAt(__tl, __tick);");
+            W(writer, "if (__stage == null) continue;");
+            W(writer, "var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;");
+            if (closing)
+                W(writer, "var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None) | global::Tl.FrameFlags.Interrupted;");
+            else
+            {
+                W(writer, "var __kflags = __backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None;");
+                W(writer, "if ((__pb->Flags & global::Tl.PlaybackFlags.StartPending) != 0 && __tick > 0) __kflags |= global::Tl.FrameFlags.Synthetic;");
+            }
+            W(writer, "if (__tick == 0) __kflags |= global::Tl.FrameFlags.TimelineStart;");
+            W(writer, "if (__tick == (ushort)(__tl->Duration - 1)) __kflags |= global::Tl.FrameFlags.TimelineEnd;");
+            for (var e = 0; e < events.Count; e++)
+                W(writer, "__eb" + e + ".Bind(0, __s);");
+        }
+
+        static void EmitEvents(StringBuilder writer, IReadOnlyList<UnityContext> events, List<(int index, SystemConsumer consumer)> consumers, int assignment)
+        {
+            var closes = false;
+            foreach (var (_, consumer) in consumers)
+                closes |= EventMethod(consumer, ConsumerMethodKind.OnClipEnd) != null;
+            W(writer, "void Events(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks)");
+            W(writer, "{");
+            for (var e = 0; e < events.Count; e++)
+            {
+                var type = events[e].TypeName;
+                W(writer, "byte* __h" + e + " = stackalloc byte[global::Tl.Events<" + type + ">.HeaderBytes];");
+                W(writer, "var __has" + e + " = chunk.Has(ref " + events[e].Name + "EventHandle);");
+                W(writer, "var __acc" + e + " = __has" + e + " ? chunk.GetBufferAccessor(ref " + events[e].Name + "EventHandle) : default;");
+            }
+            W(writer, "for (var __row = 0; __row < chunk.Count; __row++)");
+            W(writer, "{");
+            W(writer, "var __slots = __playbacks[__row];");
+            W(writer, "var __pbs = (global::Tl.Playback*)__slots.GetUnsafeReadOnlyPtr();");
+            W(writer, "var __n = __slots.Length;");
+            for (var e = 0; e < events.Count; e++)
+            {
+                var type = events[e].TypeName;
+                W(writer, "var __o" + e + " = default(DynamicBuffer<global::Tl.Unity.TimelineEvent<" + type + ">>);");
+                W(writer, "var __cap" + e + " = 0;");
+                W(writer, "if (__has" + e + ") { __o" + e + " = __acc" + e + "[__row]; __o" + e + ".Clear(); __cap" + e + " = __o" + e + ".Capacity < 8 ? 8 : __o" + e + ".Capacity; }");
+            }
+            W(writer, "if (__n == 0) continue;");
+            W(writer, "while (true)");
+            W(writer, "{");
+            for (var e = 0; e < events.Count; e++)
+            {
+                var type = events[e].TypeName;
+                W(writer, "global::Tl.Events<" + type + "> __eb" + e + ";");
+                W(writer, "if (__has" + e + ") { __o" + e + ".EnsureCapacity(__cap" + e + "); __eb" + e + " = new global::Tl.Events<" + type + ">(__h" + e + ", (global::Tl.EventRecord<" + type + ">*)__o" + e + ".GetUnsafePtr(), __o" + e + ".Capacity); }");
+                W(writer, "else __eb" + e + " = new global::Tl.Events<" + type + ">(__h" + e + ", null, 0);");
+            }
+            if (closes)
+            {
+                EmitSlotHeader(writer, events, true);
+                EmitEventSteps(writer, events, consumers, assignment, true);
+                W(writer, "}");
+            }
+            EmitSlotHeader(writer, events, false);
+            EmitEventSteps(writer, events, consumers, assignment, false);
+            W(writer, "}");
+            var retry = new StringBuilder();
+            for (var e = 0; e < events.Count; e++)
+            {
+                W(writer, "if (__has" + e + " && __eb" + e + ".Dropped != 0) __cap" + e + " = __o" + e + ".Capacity * 2;");
+                retry.Append(e == 0 ? "" : " || ").Append("(__has" + e + " && __eb" + e + ".Dropped != 0)");
+            }
+            W(writer, "if (" + retry + ") continue;");
+            for (var e = 0; e < events.Count; e++)
+                W(writer, "if (__has" + e + ") { var __count" + e + " = __eb" + e + ".Count; __eb" + e + ".Drain(); __o" + e + ".ResizeUninitialized(__count" + e + "); }");
+            W(writer, "break;");
             W(writer, "}");
             W(writer, "}");
             W(writer, "}");

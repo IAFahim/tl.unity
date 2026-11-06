@@ -27,6 +27,8 @@ unsafe struct EventsHeader<T>
     public int Count;
     public int Capacity;
     public int Sequence;
+    public int Dropped;
+    public int Fixed;
 }
 
 public unsafe struct Events<T> : IDisposable
@@ -50,8 +52,23 @@ public unsafe struct Events<T> : IDisposable
         _slot = -1;
     }
 
+    public Events(void* header, EventRecord<T>* items, int capacity)
+    {
+        var fixedHeader = (EventsHeader<T>*)header;
+        *fixedHeader = default;
+        fixedHeader->Items = items;
+        fixedHeader->Capacity = capacity;
+        fixedHeader->Fixed = 1;
+        _header = fixedHeader;
+        _entity = -1;
+        _slot = -1;
+    }
+
+    public static int HeaderBytes => sizeof(EventsHeader<T>);
+
     public Events<T> Writer => this;
     public int Count => _header->Count;
+    public int Dropped => _header->Dropped;
     public ref readonly EventRecord<T> Item(int index) => ref _header->Items[index];
 
     public void Bind(int entity, int slot)
@@ -63,7 +80,15 @@ public unsafe struct Events<T> : IDisposable
     public void Raise(in T value)
     {
         var header = _header;
-        if (header->Count == header->Capacity) Grow(header, header->Capacity == 0 ? 16 : header->Capacity * 2);
+        if (header->Count == header->Capacity)
+        {
+            if (header->Fixed == 0) Grow(header, header->Capacity == 0 ? 16 : header->Capacity * 2);
+            if (header->Count == header->Capacity)
+            {
+                header->Dropped++;
+                return;
+            }
+        }
         header->Items[header->Count++] = new EventRecord<T>(new EntityRef(_entity, 0), _slot, header->Sequence++, value);
     }
 
@@ -92,11 +117,17 @@ public unsafe struct Events<T> : IDisposable
     public void Dispose()
     {
         if (_header == null) return;
+        if (_header->Fixed != 0)
+        {
+            _header = null;
+            return;
+        }
         if (_header->Items != null) NativeMemory.AlignedFree(_header->Items);
         NativeMemory.AlignedFree(_header);
         _header = null;
     }
 
+    [Unity.Burst.BurstDiscard]
     static void Grow(EventsHeader<T>* header, int next)
     {
         var block = (EventRecord<T>*)NativeMemory.AlignedAlloc((nuint)next * (nuint)sizeof(EventRecord<T>), 8u);

@@ -37,6 +37,13 @@ namespace PlainGame.Tests
         }
 
         [Test]
+        public void EventScriptRaisesTheSameCuesAsTheEcsHost()
+        {
+            using (var host = NewHost())
+                Assert.AreEqual(PlainScript.EventsPinned, PlainScript.PlayEvents(host, PlainScript.Steps));
+        }
+
+        [Test]
         public void TwoSessionsInOneDomainGiveTheSameHashAndInstallTheModuleOnce()
         {
             PlainHost first;

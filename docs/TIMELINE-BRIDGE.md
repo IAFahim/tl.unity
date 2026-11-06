@@ -215,10 +215,9 @@ the library and an entity's playbacks:
   thread (it uses reflection, so not inside Burst). The key hashes the type
   names and their assembly name, as `tlb` does, so `game.tlib` must be packed
   against the assembly that declares the types in Unity (the bridge does
-  this). The kinds test fixture `Tests/Kinds/Timelines~/game.tlib` is packed
-  against the .NET test assembly, so its pair keys do not match the Unity
-  types; the job tests use `Tests/TimelineBridge/Library~/game.tlib`, packed
-  from the same json against `Tl.Unity.Kinds`;
+  this). The kinds test fixture `Tests/Kinds/Timelines~/game.tlib`, which
+  the job tests load, is packed against `Tl.Unity.Kinds` by
+  `eng/pack-kinds-fixture.sh`;
 - kind entries: the generated `<Kind>Entry` buffers (`LocomotionEntry`, ...)
   and `<Kind>Active`/`<Kind>Enabled` are ordinary components, readable with
   `BufferLookup`, `BufferTypeHandle` or `DynamicBuffer` parameters.

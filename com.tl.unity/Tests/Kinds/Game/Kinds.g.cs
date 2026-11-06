@@ -3,10 +3,7 @@ namespace KindGame
 {
     public static class KindCapacity
     {
-        public const int Burn = 0;
-        public const int Chill = 0;
         public const int Damage = 11;
-        public const int Effects = 0;
         public const int Lift = 2;
         public const int Locomotion = 2;
         public const int StatChange = 3;

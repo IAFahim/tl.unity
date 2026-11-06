@@ -53,6 +53,7 @@ namespace Tl.Unity
     {
         readonly List<KindDescriptor> _kinds = new List<KindDescriptor>();
         readonly List<string> _sources = new List<string>();
+        readonly List<Type> _events = new List<Type>();
         string _source = "unknown";
 
         public int Count => _kinds.Count;
@@ -60,6 +61,16 @@ namespace Tl.Unity
         public KindDescriptor this[int index] => _kinds[index];
 
         public string SourceOf(int index) => _sources[index];
+
+        public IReadOnlyList<Type> EventBuffers => _events;
+
+        public void AddEvents(Type buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+            if (!_events.Contains(buffer))
+                _events.Add(buffer);
+        }
 
         public void Add(KindDescriptor descriptor)
         {

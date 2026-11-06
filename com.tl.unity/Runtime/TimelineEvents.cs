@@ -3,6 +3,13 @@ using Unity.Entities;
 
 namespace Tl.Unity
 {
+    [InternalBufferCapacity(0)]
+    public struct TimelineEvent<T> : IBufferElementData
+        where T : unmanaged
+    {
+        public global::Tl.EventRecord<T> Record;
+    }
+
     public struct TimelineEventSink<T> : System.IDisposable
         where T : unmanaged
     {

@@ -122,6 +122,23 @@ public struct Steps : IMarker<StepMarker>
     public static int OnStep(in MarkerFrame<StepMarker> m) => m.Marker.Delta;
 }
 
+public struct Cue { public int Voice; }
+public struct CueClip { public int Voice; }
+public struct CueTrack : IBlend<CueClip>
+{
+    public float Scale;
+    public void Blend(in CueClip first, in CueClip second, float factor, out CueClip result) => result = first;
+}
+
+public struct Whistle : ITrack<CueTrack, CueClip>
+{
+    public static void OnClipStart(in Frame<CueTrack, CueClip> f, ref Events<Cue> cues)
+    {
+        if (f.Direction > 0)
+            cues.Raise(new Cue { Voice = f.Clip.Voice });
+    }
+}
+
 [TimelineSystem]
 public ref partial struct Movement
 {
@@ -131,6 +148,7 @@ public ref partial struct Movement
     public ReadOnlySpan<Target> Target;
     public AnchorLookup Anchors;
     public Span<Stamina> Stamina;
+    public Events<Cue> Cues;
 }
 
 [TimelineSystem]

@@ -304,7 +304,7 @@ namespace KindGame.Bridge
             var gameDll = KindCapacityBake.Stage("Tl.Unity.Kinds");
             TimelineBridgeBake.Tlb(tlb, new[] { "library", handwritten, "--out", Path.Combine(handwritten, "game.tlib"), "--assembly", gameDll, "--namespace", "KindGame", "--diagnostics", "json" });
             var expected = File.ReadAllBytes(Path.Combine(handwritten, "game.tlib"));
-            CollectionAssert.AreEqual(expected, File.ReadAllBytes(TimelineKindSets.PhysicalPath(BridgeLibraryWorld.LibraryFile)), "The job tests' library fixture is stale; rebuild it with tlb library from Tl.Unity.Kinds.");
+            CollectionAssert.AreEqual(expected, File.ReadAllBytes(TimelineKindSets.PhysicalPath(BridgeLibraryWorld.LibraryFile)), "The kinds library fixture is stale; run eng/pack-kinds-fixture.sh.");
             foreach (var (folder, output) in new[] { (inFolder, BridgeOutput.JsonInLibraryFolder), (staged, BridgeOutput.StagedJson) })
             {
                 var bridge = Bridge(Library(folder, tlb), output, (Run(), TimelineEnd.Loop, "locomotion"), (Jump(), TimelineEnd.Remove, "locomotion"), (SpeedBoost(), TimelineEnd.Remove, ""));

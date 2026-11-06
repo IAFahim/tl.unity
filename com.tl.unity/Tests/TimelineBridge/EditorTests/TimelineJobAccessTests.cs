@@ -127,7 +127,7 @@ namespace KindGame.Bridge
 
     public sealed class BridgeLibraryWorld : System.IDisposable
     {
-        public const string LibraryFile = "Packages/com.tl.unity/Tests/TimelineBridge/Library~/game.tlib";
+        public const string LibraryFile = "Packages/com.tl.unity/Tests/Kinds/Timelines~/game.tlib";
 
         public readonly World World;
         public readonly EntityManager Entities;

@@ -65,10 +65,12 @@ namespace KindGame
         public readonly SystemHandle VitalsHandle;
         public readonly Entity[] Rows;
         readonly EntityQuery _step;
+        readonly bool _events;
         bool _forward = true;
 
-        public KindWorld(int count)
+        public KindWorld(int count, bool events = false)
         {
+            _events = events;
             World = new World("TlKinds");
             Entities = World.EntityManager;
             TimelineLibraryBootstrap.Use("kinds.tlib", KindLibraryBytes.Bytes());
@@ -103,6 +105,8 @@ namespace KindGame
             types.AddRange(LiftKind.Types);
             types.AddRange(StatChangeKind.Types);
             types.AddRange(DamageKind.Types);
+            if (_events)
+                types.Add(typeof(TimelineEvent<Cue>));
             var entity = Entities.CreateEntity(types.ToArray());
             Entities.SetComponentEnabled<TimelinePlaying>(entity, false);
             LocomotionKind.Init(Entities, entity);
@@ -188,6 +192,12 @@ namespace KindGame
         public bool Active<T>(int row) where T : unmanaged, IComponentData, IEnableableComponent
         {
             return Entities.IsComponentEnabled<T>(Rows[row]);
+        }
+
+        public DynamicBuffer<TimelineEvent<Cue>> Cues(int row)
+        {
+            Entities.CompleteAllTrackedJobs();
+            return Entities.GetBuffer<TimelineEvent<Cue>>(Rows[row]);
         }
 
         public Motion Motion(int row) => Entities.GetComponentData<Movement_MotionData>(Rows[row]).Value;

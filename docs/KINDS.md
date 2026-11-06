@@ -24,6 +24,7 @@ shadows the walk until its clip ends). `Lift` shows stacking (jump plus two
 potion hops sum into one value per step). `Damage` shows game-code pulses
 summed with timeline hit pulses into one `Health` write per step. `StatChange`
 shows `Each` mode: every pulse applies exactly once, in a fixed merge order.
+`Whistle` raises a `Cue` presentation event (see Presentation events).
 
 A kind is named by its type name (`Damage`). That name is what the authoring
 fields, `[RequiresKinds]` and `library.json` use.
@@ -423,13 +424,63 @@ scripts pass `BuildOptions.IncludeTestAssemblies`.
   pulses). Step hash over all four rows' `Health`: `3081412629212866412`,
   reproduced from the .NET `KindRunTests` bullets script.
 
+## Presentation events (`Events<T>`)
+
+A consumer that raises presentation events declares `OnClipStart`,
+`OnClipEnd` or `ExecuteActive` with a Frame and `ref Events<T>` parameters
+only, and its system declares an `Events<T>` field (the test game's
+`Whistle` and `Movement.Cues`):
+
+```csharp
+public struct Whistle : ITrack<CueTrack, CueClip>
+{
+    public static void OnClipStart(in Frame<CueTrack, CueClip> f, ref Events<Cue> cues)
+    {
+        if (f.Direction > 0)
+            cues.Raise(new Cue { Voice = f.Clip.Voice });
+    }
+}
+```
+
+On Unity the generated kind job of that system dispatches these methods in
+Burst, with the same firing rules as the .NET host (`OnClipStart` on the
+clip's first tick, `OnClipEnd` on its last tick and when the timeline is
+stopped inside the clip, `ExecuteActive` on every tick inside it). Each
+owner entity gets a `DynamicBuffer<TimelineEvent<T>>` (`Tl.Unity`); the
+Timeline Player bake adds one for every event type the game declares. Every
+step clears the buffer and refills it with the events that entity raised in
+that step, ordered by playback slot, then by raise order (the order of the
+.NET host's `Events<T>.Drain`). `TimelineEvent<T>.Record` holds `Slot`,
+`Sequence` and `Value`; `Record.Entity` is not used on Unity. Read the buffer
+in a system that runs after `TimelineSimulationGroup`.
+
+The job writes the events straight into the owner's buffer: `Events<T>` is
+built over the buffer's memory (`Events<T>(header, items, capacity)`), and a
+step that raises more events than the buffer holds grows the buffer and runs
+that entity's dispatch again, so no event is lost and the result is the same.
+The system's dispatch only runs for chunks that carry the buffer.
+
+The test `EventScriptRaisesTheSameCuesAsThePlainHost` plays a 600-step
+script that starts and stops `whistle` among the other timelines and hashes
+every entity's cues per step: `6607956939547305625`, equal to the plain C#
+host (the .NET `Tl.Core` host) running the same script on the plain sample.
+That script exercises `OnClipStart`; the `OnClipEnd` and `ExecuteActive`
+paths follow the same rules but have no Unity test yet.
+
+The test fixture `Tests/Kinds/Timelines~/game.tlib` (and `Timelines.g.cs`,
+`Kinds.g.cs`, `KindLibraryBytes.g.cs` beside the game) is packed against the
+Unity test game assembly `Tl.Unity.Kinds`, so its pair keys match the
+generated code. Repack it after changing the game types or the json with
+`TL_TLB=<tlb> eng/pack-kinds-fixture.sh <project>/Library/ScriptAssemblies`
+(a project that compiled the package tests); `--check` fails when it is stale.
+
 ## Legacy mixing
 
 Plan-1 `ExecuteActive` consumers keep plan 1's order inside one implicit
 legacy kind that runs first in its system unless `Order` says otherwise.
 Mixing legacy consumers and kinds that write the same field changes the order
-between those two groups. On Unity, legacy consumers are not dispatched yet
-(`TLUNITY9105`: feed a kind instead). The legacy implicit kind and
+between those two groups. On Unity, legacy consumers other than the event
+raisers above are not dispatched (`TLUNITY9105`: feed a kind instead). The legacy implicit kind and
 `ExecuteActive` stay (K5 decision, IAFahim/tl#558). They go only after the
 Runner sample and the bench domains move to kinds, a migration tool exists,
 and K-E still passes without the legacy loop.

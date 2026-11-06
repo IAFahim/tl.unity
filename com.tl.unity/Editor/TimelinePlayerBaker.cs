@@ -65,6 +65,8 @@ namespace Tl.Unity.Editor
                 AddComponent(entity, new ComponentTypeSet(ComponentType.ReadWrite(descriptor.Entry), ComponentType.ReadWrite(descriptor.Active), ComponentType.ReadWrite(descriptor.Enabled)));
                 reached.Add(new TimelineKindBake { Kind = kind.Kind, Source = Fit(kind.Source) });
             }
+            foreach (var buffer in registry.EventBuffers)
+                AddComponent(entity, new ComponentTypeSet(ComponentType.ReadWrite(buffer)));
         }
 
         static FixedString128Bytes Fit(string text)

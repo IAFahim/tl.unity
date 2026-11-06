@@ -5,6 +5,25 @@ namespace Tl.Gen.Unity
 {
     internal static class UnityKindPlan
     {
+        internal static bool IsEventMethod(ConsumerMethod method)
+        {
+            if (method.Kind != ConsumerMethodKind.OnClipStart && method.Kind != ConsumerMethodKind.OnClipEnd && method.Kind != ConsumerMethodKind.ExecuteActive)
+                return false;
+            if (method.Params.Count < 2 || method.Params[0].Kind != ConsumerParamKind.Frame)
+                return false;
+            for (var p = 1; p < method.Params.Count; p++)
+                if (method.Params[p].Kind != ConsumerParamKind.Events)
+                    return false;
+            return true;
+        }
+
+        internal static string EventElement(string typeName)
+        {
+            var start = typeName.IndexOf('<');
+            var end = typeName.LastIndexOf('>');
+            return start >= 0 && end > start ? typeName.Substring(start + 1, end - start - 1) : typeName;
+        }
+
         internal static int AssignmentOf(IReadOnlyList<SystemAssignment> assignments, UnitySystemModel model)
         {
             var index = -1;
@@ -48,10 +67,10 @@ namespace Tl.Gen.Unity
                 }
                 foreach (var consumer in assignment.Consumers)
                     foreach (var method in consumer.Methods)
-                        if (method.Kind != ConsumerMethodKind.Feeder && method.Kind != ConsumerMethodKind.Fold)
+                        if (method.Kind != ConsumerMethodKind.Feeder && method.Kind != ConsumerMethodKind.Fold && !IsEventMethod(method))
                         {
                             context.ReportDiagnostic(Diagnostic.Create(
-                                new DiagnosticDescriptor("TLUNITY9105", "Legacy consumer method not dispatched", "Consumer '{0}' declares {1}; legacy consumers are not dispatched on Unity yet. Feed a kind instead.", "Tl.Unity", DiagnosticSeverity.Warning, true),
+                                new DiagnosticDescriptor("TLUNITY9105", "Legacy consumer method not dispatched", "Consumer '{0}' declares {1}, which Unity does not dispatch. Unity dispatches feeders, folds, and OnClipStart, OnClipEnd and ExecuteActive methods whose parameters after the Frame are all Events<T>. Feed a kind instead.", "Tl.Unity", DiagnosticSeverity.Warning, true),
                                 Location.None, consumer.ConsumerTypeName, method.Kind.ToString()));
                         }
             }

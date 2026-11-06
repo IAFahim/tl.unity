@@ -17,6 +17,7 @@ namespace Tl.Gen.Unity
                 : "global::Tl.Unity.Generated";
             var columns = new List<UnityColumn>();
             var contexts = new List<UnityContext>();
+            var events = new List<UnityContext>();
             var diagnostics = new List<UnityDiagnostic>();
             var errors = false;
             foreach (var member in symbol.GetMembers().OfType<IFieldSymbol>())
@@ -35,6 +36,11 @@ namespace Tl.Gen.Unity
                     columns.Add(new UnityColumn(member.Name, element.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), readOnly));
                     continue;
                 }
+                if (member.Type is INamedTypeSymbol eventType && eventType.IsGenericType && eventType.TypeArguments.Length == 1 && eventType.ConstructedFrom.ToDisplayString() == "Tl.Events<T>")
+                {
+                    events.Add(new UnityContext(member.Name, eventType.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+                    continue;
+                }
                 if (!member.Type.IsUnmanagedType)
                 {
                     diagnostics.Add(new UnityDiagnostic("TLUNITY9002", "Context '" + member.Name + "' must be unmanaged for Burst jobs.", true));
@@ -45,7 +51,7 @@ namespace Tl.Gen.Unity
             }
             if (columns.Count == 0)
                 diagnostics.Add(new UnityDiagnostic("TLUNITY9003", "System '" + symbol.Name + "' declares no Span<T> columns; the job advances playbacks only.", false));
-            return new UnitySystemModel(ns, symbol.Name, columns, contexts, diagnostics, errors);
+            return new UnitySystemModel(ns, symbol.Name, columns, contexts, events, diagnostics, errors);
         }
 
         static bool IsSpan(ITypeSymbol type, out ITypeSymbol element, out bool readOnly)

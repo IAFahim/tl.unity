@@ -2,6 +2,7 @@
 using Unity.Entities;
 using Unity.Burst;
 using Unity.Collections;
+[assembly: global::Unity.Entities.RegisterGenericComponentType(typeof(global::Tl.Unity.TimelineEvent<global::KindGame.Cue>))]
 namespace KindGame
 {
 [InternalBufferCapacity(global::KindGame.KindCapacity.Damage)]
@@ -113,6 +114,7 @@ default: return;
 }
 public void Register(global::Tl.Unity.KindRegistry registry)
 {
+registry.AddEvents(typeof(global::Tl.Unity.TimelineEvent<global::KindGame.Cue>));
 registry.Add(new global::Tl.Unity.KindDescriptor("Damage", typeof(global::KindGame.DamageEntry), typeof(global::KindGame.DamageActive), typeof(global::KindGame.DamageEnabled), 4, 12, "KindGame.Hit.Start:1", new global::System.Type[] { typeof(global::KindGame.Vitals_HealthData) }));
 registry.Add(new global::Tl.Unity.KindDescriptor("Lift", typeof(global::KindGame.LiftEntry), typeof(global::KindGame.LiftActive), typeof(global::KindGame.LiftEnabled), 4, 8, "KindGame.Jump.Evaluate:0", new global::System.Type[] { typeof(global::KindGame.Movement_JumpPowerData), typeof(global::KindGame.Movement_MotionData), typeof(global::KindGame.Movement_StaminaData), typeof(global::KindGame.Movement_TargetData), typeof(global::KindGame.Movement_WalkStatData) }));
 registry.Add(new global::Tl.Unity.KindDescriptor("Locomotion", typeof(global::KindGame.LocomotionEntry), typeof(global::KindGame.LocomotionActive), typeof(global::KindGame.LocomotionEnabled), 8, 8, "KindGame.Walk.Evaluate:0", new global::System.Type[] { typeof(global::KindGame.Movement_JumpPowerData), typeof(global::KindGame.Movement_MotionData), typeof(global::KindGame.Movement_StaminaData), typeof(global::KindGame.Movement_TargetData), typeof(global::KindGame.Movement_WalkStatData) }));
@@ -168,6 +170,22 @@ if (withinClip == (ushort)(windowLength - 1)) __flags |= global::Tl.FrameFlags.C
 if (tick == 0) __flags |= global::Tl.FrameFlags.TimelineStart;
 if (tick == (ushort)(duration - 1)) __flags |= global::Tl.FrameFlags.TimelineEnd;
 frame = new global::Tl.Frame<global::KindGame.WalkTrack, global::KindGame.WalkClip>(in track, in clip, tick, windowLength, withinClip, trackIndex, __flags);
+}
+public static void Frame_0_4(byte* trackPtr, byte* firstPtr, byte* secondPtr, float blend, ushort tick, ushort windowLength, ushort withinClip, ushort trackIndex, ushort duration, sbyte direction, global::Tl.FrameFlags extra, out global::KindGame.CueTrack track, out global::KindGame.CueClip clip, out global::Tl.Frame<global::KindGame.CueTrack, global::KindGame.CueClip> frame)
+{
+track = *(global::KindGame.CueTrack*)trackPtr;
+clip = *(global::KindGame.CueClip*)firstPtr;
+if (secondPtr != null)
+{
+global::KindGame.CueClip __second = *(global::KindGame.CueClip*)secondPtr;
+track.Blend(in clip, in __second, blend, out clip);
+}
+var __flags = (direction < 0 ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None) | extra;
+if (withinClip == 0) __flags |= global::Tl.FrameFlags.ClipStart;
+if (withinClip == (ushort)(windowLength - 1)) __flags |= global::Tl.FrameFlags.ClipEnd;
+if (tick == 0) __flags |= global::Tl.FrameFlags.TimelineStart;
+if (tick == (ushort)(duration - 1)) __flags |= global::Tl.FrameFlags.TimelineEnd;
+frame = new global::Tl.Frame<global::KindGame.CueTrack, global::KindGame.CueClip>(in track, in clip, tick, windowLength, withinClip, trackIndex, __flags);
 }
 public static void Frame_1_0(byte* trackPtr, byte* firstPtr, byte* secondPtr, float blend, ushort tick, ushort windowLength, ushort withinClip, ushort trackIndex, ushort duration, sbyte direction, global::Tl.FrameFlags extra, out global::KindGame.HitTrack track, out global::KindGame.HitClip clip, out global::Tl.Frame<global::KindGame.HitTrack, global::KindGame.HitClip> frame)
 {

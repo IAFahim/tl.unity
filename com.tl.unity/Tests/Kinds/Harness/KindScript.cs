@@ -7,6 +7,7 @@ namespace KindGame
         public const ulong Pinned = 13943614770702343869UL;
         public const int Rows = 4;
         public const int Steps = 600;
+        public const ulong EventsPinned = 6607956939547305625UL;
 
         static uint Next(ref uint state)
         {
@@ -63,6 +64,47 @@ namespace KindGame
                     h = Mix(h, motion.Y);
                     h = MixInt(h, game.Stamina(e));
                     h = MixInt(h, game.Health(e));
+                }
+            }
+            return h;
+        }
+
+        public static ulong PlayEvents(KindWorld game, int steps)
+        {
+            var ids = new ushort[] { Timelines.Jump, Timelines.PotionHop, Timelines.Run, Timelines.SpeedBoost, Timelines.Stomp, Timelines.Whistle };
+            var rng = 0x9E3779B9u;
+            var h = 14695981039346656037UL;
+            for (var step = 0; step < steps; step++)
+            {
+                var forward = !(step >= 200 && step < 240);
+                for (var e = 0; e < Rows; e++)
+                {
+                    var r = Next(ref rng);
+                    switch (r & 7)
+                    {
+                        case 0:
+                        case 1:
+                        case 2:
+                            game.Start(e, ids[(r >> 8) % 6]);
+                            break;
+                        case 3:
+                            game.Stop(e, ids[(r >> 8) % 6]);
+                            break;
+                        case 4:
+                            if (((r >> 8) & 7) == 0) game.StopAll(e);
+                            break;
+                    }
+                }
+                game.Step(forward);
+                for (var e = 0; e < Rows; e++)
+                {
+                    var cues = game.Cues(e);
+                    for (var i = 0; i < cues.Length; i++)
+                    {
+                        h = MixInt(h, e);
+                        h = MixInt(h, cues[i].Record.Slot);
+                        h = MixInt(h, cues[i].Record.Value.Voice);
+                    }
                 }
             }
             return h;

@@ -524,6 +524,7 @@ PlayMode tests:
 | `TwoSessionsInOneDomainGiveTheSameHashAndInstallTheModuleOnce` | two hosts in one domain |
 | `StartStopPauseAndRewindMoveOneRow` | start, pause, resume, rewind, stop |
 | `ATimelineCueIsReadOnceAfterTheStepThatRaisedIt` | events |
+| `EventScriptRaisesTheSameCuesAsTheEcsHost` | 600-step whistle script, cue hash `6607956939547305625`, equal to the ECS host |
 | `GamePulsesAndClipsWriteTheRowColumns` | clips and game pulses |
 | `AStepAfterWarmUpAllocatesNothing` | 0 B over 1000 steps |
 | `TheRunnerStepsInFixedUpdateMovesATransformAndDisposesOnDestroy` | the MonoBehaviour in real `FixedUpdate` |

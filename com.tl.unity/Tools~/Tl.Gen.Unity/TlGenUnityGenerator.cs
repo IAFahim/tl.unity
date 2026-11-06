@@ -48,10 +48,21 @@ namespace Tl.Gen.Unity
             if (failed)
                 return;
             var kinds = UnityKindPlan.Plan(compilation, assignments, models, context);
+            var events = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (var model in models)
+            {
+                if (model is null)
+                    continue;
+                var index = UnityKindPlan.AssignmentOf(assignments, model);
+                if (index < 0 || assignments[index].Kinds.Count == 0)
+                    continue;
+                foreach (var evented in model.Events)
+                    events.Add(evented.TypeName);
+            }
             if (kinds.Count != 0)
             {
                 var id = Sanitize(compilation.AssemblyName ?? "Game");
-                context.AddSource("TlUnity.Kinds.g.cs", SourceText.From(UnityKindEmitter.EmitKinds(assignments, kinds, id), System.Text.Encoding.UTF8));
+                context.AddSource("TlUnity.Kinds.g.cs", SourceText.From(UnityKindEmitter.EmitKinds(assignments, kinds, new List<string>(events), id), System.Text.Encoding.UTF8));
             }
             foreach (var model in models)
             {

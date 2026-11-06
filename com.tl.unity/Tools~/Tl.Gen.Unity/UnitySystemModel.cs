@@ -49,6 +49,7 @@ namespace Tl.Gen.Unity
             string systemTypeName,
             IReadOnlyList<UnityColumn> columns,
             IReadOnlyList<UnityContext> contexts,
+            IReadOnlyList<UnityContext> events,
             IReadOnlyList<UnityDiagnostic> diagnostics,
             bool hasErrors)
         {
@@ -56,6 +57,7 @@ namespace Tl.Gen.Unity
             SystemTypeName = systemTypeName;
             Columns = columns;
             Contexts = contexts;
+            Events = events;
             Diagnostics = diagnostics;
             HasErrors = hasErrors;
         }
@@ -64,6 +66,7 @@ namespace Tl.Gen.Unity
         public readonly string SystemTypeName;
         public readonly IReadOnlyList<UnityColumn> Columns;
         public readonly IReadOnlyList<UnityContext> Contexts;
+        public readonly IReadOnlyList<UnityContext> Events;
         public readonly IReadOnlyList<UnityDiagnostic> Diagnostics;
         public readonly bool HasErrors;
     }

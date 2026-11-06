@@ -23,6 +23,7 @@ public ComponentTypeHandle<Movement_MotionData> MotionHandle;
 [ReadOnly] public ComponentTypeHandle<Movement_TargetData> TargetHandle;
 public ComponentTypeHandle<Movement_StaminaData> StaminaHandle;
 public global::KindGame.AnchorLookup Anchors;
+public BufferTypeHandle<global::Tl.Unity.TimelineEvent<global::KindGame.Cue>> CuesEventHandle;
 public BufferTypeHandle<global::KindGame.LiftEntry> LiftEntryHandle;
 public ComponentTypeHandle<global::KindGame.LiftActive> LiftActiveHandle;
 [ReadOnly] public ComponentTypeHandle<global::KindGame.LiftEnabled> LiftEnabledHandle;
@@ -55,8 +56,10 @@ var __a2 = chunk.GetEnableableBits(ref StatChangeActiveHandle);
 var __e2 = chunk.GetEnableableBits(ref StatChangeEnabledHandle);
 __l2 = ((__a2.ULong0 & __e2.ULong0) | (__a2.ULong1 & __e2.ULong1)) != 0;
 }
-if (!__l0 && !__l1 && !__l2) return;
+var __x = chunk.Has(ref CuesEventHandle);
+if (!__l0 && !__l1 && !__l2 && !__x) return;
 var __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
+if (__x) Events(chunk, __playbacks);
 var __c0 = (global::KindGame.Motion*)chunk.GetRequiredComponentDataPtrRW(ref MotionHandle);
 var __c1 = (global::KindGame.WalkStat*)chunk.GetRequiredComponentDataPtrRO(ref WalkStatHandle);
 var __c2 = (global::KindGame.JumpPower*)chunk.GetRequiredComponentDataPtrRO(ref JumpPowerHandle);
@@ -361,6 +364,65 @@ if (__buf.Capacity > global::KindGame.KindCapacity.StatChange && __buf.Length <=
 }
 }
 }
+void Events(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks)
+{
+byte* __h0 = stackalloc byte[global::Tl.Events<global::KindGame.Cue>.HeaderBytes];
+var __has0 = chunk.Has(ref CuesEventHandle);
+var __acc0 = __has0 ? chunk.GetBufferAccessor(ref CuesEventHandle) : default;
+for (var __row = 0; __row < chunk.Count; __row++)
+{
+var __slots = __playbacks[__row];
+var __pbs = (global::Tl.Playback*)__slots.GetUnsafeReadOnlyPtr();
+var __n = __slots.Length;
+var __o0 = default(DynamicBuffer<global::Tl.Unity.TimelineEvent<global::KindGame.Cue>>);
+var __cap0 = 0;
+if (__has0) { __o0 = __acc0[__row]; __o0.Clear(); __cap0 = __o0.Capacity < 8 ? 8 : __o0.Capacity; }
+if (__n == 0) continue;
+while (true)
+{
+global::Tl.Events<global::KindGame.Cue> __eb0;
+if (__has0) { __o0.EnsureCapacity(__cap0); __eb0 = new global::Tl.Events<global::KindGame.Cue>(__h0, (global::Tl.EventRecord<global::KindGame.Cue>*)__o0.GetUnsafePtr(), __o0.Capacity); }
+else __eb0 = new global::Tl.Events<global::KindGame.Cue>(__h0, null, 0);
+for (var __s = 0; __s < __n; __s++)
+{
+var __pb = __pbs + __s;
+if (__pb->Timeline == 0 || (__pb->Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Stopping)) != 0) continue;
+var __tl = global::Tl.LibraryViewReader.GetTimeline(in View, new global::Tl.TimelineId(__pb->Timeline));
+if (__tl == null || __tl->Duration == 0) continue;
+var __tick = __pb->Tick;
+var __stage = global::Tl.LibraryViewReader.StageAt(__tl, __tick);
+if (__stage == null) continue;
+var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
+var __kflags = __backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None;
+if ((__pb->Flags & global::Tl.PlaybackFlags.StartPending) != 0 && __tick > 0) __kflags |= global::Tl.FrameFlags.Synthetic;
+if (__tick == 0) __kflags |= global::Tl.FrameFlags.TimelineStart;
+if (__tick == (ushort)(__tl->Duration - 1)) __kflags |= global::Tl.FrameFlags.TimelineEnd;
+__eb0.Bind(0, __s);
+for (var __i = 0; __i < __stage->StepCount; __i++)
+{
+var __def = __stage->Steps + __i;
+if (__tick < __def->WindowStart || __tick >= __def->WindowEnd) continue;
+if (__def->PairKey == 1713852806099589751UL)
+{
+byte* __row4 = (byte*)__def->FrameRow;
+byte* __first4 = __row4 + sizeof(global::KindGame.CueTrack);
+byte* __second4 = __def->FactorSpan == 0 ? null : __first4 + sizeof(global::KindGame.CueClip);
+float __blend4 = __def->FactorSpan == 0 ? 0f : (__def->FactorSpan <= 1 ? 0.5f : (__tick - __def->FactorStart) / (float)(__def->FactorSpan - 1));
+ushort __len4 = (ushort)(__def->WindowEnd - __def->WindowStart);
+ushort __within4 = (ushort)(__tick - __def->WindowStart);
+sbyte __dir4 = __backward ? (sbyte)-1 : (sbyte)1;
+global::TlUnityGenerated.TlUnityFrames.Frame_0_4(__row4, __first4, __second4, __blend4, __tick, __len4, __within4, (ushort)__def->TrackIndex, (ushort)__tl->Duration, __dir4, __kflags, out var __t4, out var __cc4, out var __f4);
+if (__tick == __def->WindowStart) global::KindGame.Whistle.OnClipStart(in __f4, ref __eb0);
+}
+}
+}
+if (__has0 && __eb0.Dropped != 0) __cap0 = __o0.Capacity * 2;
+if ((__has0 && __eb0.Dropped != 0)) continue;
+if (__has0) { var __count0 = __eb0.Count; __eb0.Drain(); __o0.ResizeUninitialized(__count0); }
+break;
+}
+}
+}
 }
 public static partial class TimelineJobs
 {
@@ -381,6 +443,7 @@ var job = new MovementChunkJob { View = view, Index = index, Forward = forward, 
 , TargetHandle = state.GetComponentTypeHandle<Movement_TargetData>(true)
 , StaminaHandle = state.GetComponentTypeHandle<Movement_StaminaData>(false)
 , Anchors = Anchors
+, CuesEventHandle = state.GetBufferTypeHandle<global::Tl.Unity.TimelineEvent<global::KindGame.Cue>>(false)
 , LiftEntryHandle = state.GetBufferTypeHandle<global::KindGame.LiftEntry>(false)
 , LiftActiveHandle = state.GetComponentTypeHandle<global::KindGame.LiftActive>(false)
 , LiftEnabledHandle = state.GetComponentTypeHandle<global::KindGame.LiftEnabled>(true)

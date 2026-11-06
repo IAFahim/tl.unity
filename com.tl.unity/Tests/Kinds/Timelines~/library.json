@@ -12,7 +12,8 @@
     "potion_hop.json",
     "stomp.json",
     "vault.json",
-    "waltz.json"
+    "waltz.json",
+    "whistle.json"
   ],
   "kinds": {
     "Damage": { "gamePulses": 8, "maxInlineBytes": 132 }
