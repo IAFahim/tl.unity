@@ -2,7 +2,7 @@
 
 **STATUS: OPEN — this task is waiting for an implementer.**
 
-Work ONLY in `/home/i/GitHub/tl.unity` (standalone LOCAL repository; no remote; local commits ARE the deliverable). NEVER write to other repos/worktrees. Unity CLI: `/home/i/Unity/Hub/Editor/6000.7.0a5/Editor/Unity`, batchmode EditMode (results to `tests/Tl.Unity.DataAuthored/test-results.editmode.xml`; ALWAYS grep the log for `error CS`; NEVER pass `-quit` together with `-runTests`).
+Work ONLY in `/home/i/GitHub/tl.unity` (standalone LOCAL repository; no remote; local commits ARE the deliverable). NEVER write to other repos/worktrees. Unity CLI: the newest installed Unity 7 editor (`python3 eng/unity_editor.py editor`), batchmode EditMode (results to `tests/Tl.Unity.DataAuthored/test-results.editmode.xml`; ALWAYS grep the log for `error CS`; NEVER pass `-quit` together with `-runTests`).
 
 ## Loop protocol (binding)
 - Read `/home/i/GitHub/tl.unity/README.md`, the R17c report (`git show 45679a1` body or `WORK-REPORT.md`), and `tests/Tl.Unity.DataAuthored/WIP/R17C-NOTES.txt` first, then this file. HEARTBEAT: `.tl-loop/heartbeat` (ISO timestamp + phase) every ~10 minutes. TIME-BOX: T+75 minutes — commit what is green, write `WORK-REPORT.md`, exit; PARTIAL beats idling.

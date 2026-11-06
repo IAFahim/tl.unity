@@ -1,7 +1,7 @@
 # tl end-to-end: from JSON baking to Unity ECS typed queries
 
 Everything in Part A of this walkthrough is verified green on this machine today
-(Unity 6000.7.0a5, Entities 6.7.0, tl.unity @ `6904a53`: `DirectQueryTests`,
+(newest Unity 7 editor, Entities 6.7.0, tl.unity @ `6904a53`: `DirectQueryTests`,
 23/23 EditMode). Part B is the standard-Entities integration shape and is
 clearly marked where it is not yet receipted on this editor alpha.
 
@@ -16,8 +16,7 @@ foreach (var frame in Timeline.Query<DamageTrack, DamageClip>(in core))
 
 ## 0. Prerequisites
 
-- Unity 6000.7.0a5 (this is the editor the receipts run on; other versions may
-  work, untested) with the Entities 6.7.0 package.
+- The newest Unity 7 editor (install it by name: `unity install 7`) with the Entities 6.7.0 package.
 - .NET 10 SDK (for baking).
 - Two local checkouts side by side:
 

@@ -46,7 +46,7 @@ var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Sp
     .Distinct(StringComparer.Ordinal)
     .Select(static path => MetadataReference.CreateFromFile(path));
 var compilation = CSharpCompilation.Create(
-    "Unity6000Receipt",
+    "UnityReceipt",
     [tree],
     references,
     new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
@@ -61,7 +61,7 @@ if (diagnostics.Any(static diagnostic => diagnostic.Severity == DiagnosticSeveri
     Console.Error.WriteLine($"generated sources: {generated.Length}: {string.Join(", ", generated.Select(static source => source.HintName))}");
     return 2;
 }
-Console.WriteLine($"Unity 6000 Roslyn {typeof(CSharpCompilation).Assembly.GetName().Version}: analyzer loaded; job and catalog sources generated");
+Console.WriteLine($"Unity Roslyn {typeof(CSharpCompilation).Assembly.GetName().Version}: analyzer loaded; job and catalog sources generated");
 return 0;
 
 sealed class Loader : IAnalyzerAssemblyLoader

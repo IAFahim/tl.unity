@@ -3,7 +3,7 @@
   "version": "0.2.0-preview.1",
   "displayName": "Tl Unity Playback",
   "description": "Tl 4 playback-model runtime for Unity ECS with Burst: playback buffers, library singleton, simulation systems, and generated system jobs. Compiles against Tl.Core netstandard2.1 (P3+). Editor authoring is P6.",
-  "unity": "6000.0",
+  "unity": "7000.0",
   "author": {
     "name": "IAFahim",
     "url": "https://github.com/IAFahim"
