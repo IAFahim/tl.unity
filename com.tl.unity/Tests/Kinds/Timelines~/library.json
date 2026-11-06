@@ -11,5 +11,8 @@
     "jump.json",
     "potion_hop.json",
     "stomp.json"
-  ]
+  ],
+  "kinds": {
+    "Damage": { "gamePulses": 8, "maxInlineBytes": 132 }
+  }
 }

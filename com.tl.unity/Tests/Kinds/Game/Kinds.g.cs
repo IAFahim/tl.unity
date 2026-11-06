@@ -5,7 +5,7 @@ namespace KindGame
     {
         public const int Burn = 0;
         public const int Chill = 0;
-        public const int Damage = 3;
+        public const int Damage = 11;
         public const int Effects = 0;
         public const int Lift = 2;
         public const int Locomotion = 2;

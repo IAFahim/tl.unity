@@ -9,7 +9,7 @@ namespace KindGame
         public const ushort RunLegacy = 4;
         public const ushort SpeedBoost = 5;
         public const ushort Stomp = 6;
-        public const string LibraryDigest = "1b182208554ee4dbb3e73a31b07ed3dcca2785aac00391af594e29c5d759dbf3";
+        public const string LibraryDigest = "e7ed9dc464aad1c5262b280453d5a2a9841887487b1d7301e9ed8f280bc560f4";
         public const uint TickRate = 60;
     }
 }
