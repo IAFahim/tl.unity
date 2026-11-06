@@ -1,27 +1,9 @@
 #!/usr/bin/env bash
-# usage: eng/test-com-tl-unity.sh [EditMode] [PlayMode]
-# Tests com.tl.unity the way a user installs it: a Unity project whose only Tl dependency is this package.
-# Runs on Linux and on Windows under Git Bash.
-# env: UNITY (editor binary; default: TL_UNITY_VERSION's editor, else the newest installed editor),
-#      TL_UNITY_VERSION (pick one installed editor), TL_UNITY_PROBE (reused project dir),
-#      TL_TLB (tlb or Tl.Bake.dll with the kinds command; the capacity bake test is skipped without it)
 set -uo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 case "$(uname -s)" in MINGW* | MSYS* | CYGWIN*) windows=1 ;; *) windows=0 ;; esac
 native() { if [ "$windows" = 1 ]; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
-if [ "$windows" = 1 ]; then
-  hub="${UNITY_HUB_EDITORS:-${PROGRAMFILES:-C:/Program Files}/Unity/Hub/Editor}"
-  exe="Editor/Unity.exe"
-else
-  hub="${UNITY_HUB_EDITORS:-$HOME/Unity/Hub/Editor}"
-  exe="Editor/Unity"
-fi
-unity="${UNITY:-}"
-if [ -z "$unity" ]; then
-  version="${TL_UNITY_VERSION:-$(ls -1 "$hub" 2>/dev/null | sort -V | tail -n 1)}"
-  [ -n "$version" ] || { echo "no Unity editor under $hub; set UNITY" >&2; exit 1; }
-  unity="$hub/$version/$exe"
-fi
+unity="${UNITY:-$(python3 "$root/eng/unity_editor.py" editor)}"
 [ -x "$unity" ] || { echo "no Unity editor at $unity; set UNITY" >&2; exit 1; }
 version="$(basename "$(dirname "$(dirname "$unity")")")"
 probe="${TL_UNITY_PROBE:-${XDG_CACHE_HOME:-$HOME/.cache}/tl-unity-probe-$version}"

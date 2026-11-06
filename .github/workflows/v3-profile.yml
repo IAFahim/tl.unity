@@ -21,6 +21,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {submodules: recursive}
+      - name: Newest Unity 7 editor, installed by name when missing
+        run: |
+          command -v unity >/dev/null || [ -x ~/.local/bin/unity ] || curl -fsSL https://unity.com/install.sh | bash
+          python3 eng/unity_editor.py editor
       - run: bash eng/gate-v3.sh unity
       - uses: actions/upload-artifact@v4
         if: always()

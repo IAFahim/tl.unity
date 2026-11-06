@@ -7,7 +7,7 @@ import unity_editor
 root = pathlib.Path(__file__).resolve().parent.parent
 mono = unity_editor.mono()
 if not mono:
-    raise SystemExit('Install a Unity editor under ~/Unity/Hub/Editor or set TL_MONO to the installed Unity Mono executable.')
+    raise SystemExit('No Unity Mono found. Set TL_MONO to the Unity Mono executable.')
 print('Mono: ' + mono)
 executable = root / 'tests/Cold.Mono/bin/Release/netstandard2.1/Cold.Mono.dll'
 fixture = root / 'artifacts/oracle/recoil.tlb'
