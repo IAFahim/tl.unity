@@ -43,9 +43,11 @@ namespace KindGame
         {
             using (var log = new StreamWriter(logPath, append: true))
             {
-                Row(log, "env unity=" + Application.unityVersion + " burst=" + BurstCompiler.IsEnabled + " entities=" + N);
+                Row(log, "env unity=" + Application.unityVersion + " burst=" + BurstCompiler.IsEnabled + " workers=" + Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerCount + " entities=" + N);
                 RowA(log);
                 RowB(log);
+                RowIdle(log);
+                RowEmpty(log);
                 RowC(log);
                 RowD(log);
                 RowF(log);
@@ -97,6 +99,26 @@ namespace KindGame
                 StepAll(game, Warmup);
                 var ms = StepAll(game, Measure);
                 Row(log, "B tenth-playing step=" + NsPerEntity(ms, N, Measure).ToString("F1") + "ns/entity");
+            }
+        }
+
+        static void RowIdle(StreamWriter log)
+        {
+            using (var game = new KindWorld(N))
+            {
+                StepAll(game, Warmup);
+                var ms = StepAll(game, Measure);
+                Row(log, "B0 none-playing step=" + NsPerEntity(ms, N, Measure).ToString("F1") + "ns/entity");
+            }
+        }
+
+        static void RowEmpty(StreamWriter log)
+        {
+            using (var game = new KindWorld(0))
+            {
+                StepAll(game, Warmup);
+                var ms = StepAll(game, Measure);
+                Row(log, "E empty-world step=" + (ms * 1000.0 / Measure).ToString("F1") + "us/step");
             }
         }
 

@@ -162,6 +162,21 @@ namespace Tl.Gen.Unity
             }
             W(writer, "public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in global::Unity.Burst.Intrinsics.v128 chunkEnabledMask)");
             W(writer, "{");
+            var live = new StringBuilder();
+            for (var k = 0; k < kinds.Count; k++)
+            {
+                var name = kinds[k].Name;
+                W(writer, "var __l" + k + " = false;");
+                W(writer, "if (chunk.Has(ref " + name + "EntryHandle))");
+                W(writer, "{");
+                W(writer, "var __a" + k + " = chunk.GetEnableableBits(ref " + name + "ActiveHandle);");
+                W(writer, "var __e" + k + " = chunk.GetEnableableBits(ref " + name + "EnabledHandle);");
+                W(writer, "__l" + k + " = ((__a" + k + ".ULong0 & __e" + k + ".ULong0) | (__a" + k + ".ULong1 & __e" + k + ".ULong1)) != 0;");
+                W(writer, "}");
+                live.Append(k == 0 ? "" : " && ").Append("!__l" + k);
+            }
+            if (kinds.Count != 0)
+                W(writer, "if (" + live + ") return;");
             W(writer, "var __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);");
             for (var i = 0; i < shape.Columns.Count; i++)
             {
@@ -171,7 +186,7 @@ namespace Tl.Gen.Unity
                 W(writer, "var __c" + i + " = (" + column.ElementTypeName + "*)chunk.GetRequiredComponentDataPtr" + (column.ReadOnly ? "RO" : "RW") + "(ref " + column.Name + "Handle);");
             }
             for (var k = 0; k < kinds.Count; k++)
-                W(writer, "Kind_" + k + "(chunk, __playbacks" + ColumnArgs(shape, false) + ");");
+                W(writer, "if (__l" + k + ") Kind_" + k + "(chunk, __playbacks" + ColumnArgs(shape, false) + ");");
             W(writer, "}");
             for (var k = 0; k < kinds.Count; k++)
                 EmitKind(writer, shape, assignment, assignmentIndex, kinds[k], k);

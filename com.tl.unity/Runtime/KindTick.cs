@@ -21,7 +21,7 @@ namespace Tl.Unity
         public BufferTypeHandle<Playback> PlaybackHandle;
         public BufferTypeHandle<TimelineRequest> RequestHandle;
         public ComponentTypeHandle<TimelinePlaying> PlayingHandle;
-        public KindHandleSet Handles;
+        [NativeDisableContainerSafetyRestriction] public KindHandleSet Handles;
         [NativeDisableUnsafePtrRestriction] public int* Counters;
         public int StepDir;
         public uint LastSystemVersion;
@@ -29,16 +29,17 @@ namespace Tl.Unity
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
         {
             var count = chunk.Count;
-            var playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
-            var buffers = stackalloc UnsafeUntypedBufferAccessor[64];
-            var ctx = new KindCursor { Index = Index, Chunk = chunk, Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers, Counters = Counters };
-            for (var k = 0; k < Index.KindCount; k++)
+            var requested = chunk.Has(ref RequestHandle) && chunk.DidChange(ref RequestHandle, LastSystemVersion);
+            if (!requested)
             {
-                if (!KindHandleSet.IsMapped(ctx.Handles, k) || !chunk.Has(ref *KindHandleSet.Entry(ctx.Handles, k))) continue;
-                buffers[k] = chunk.GetUntypedBufferAccessor(ref *KindHandleSet.Entry(ctx.Handles, k));
-                ctx.Reach |= 1ul << k;
+                var idle = chunk.GetEnableableBits(ref PlayingHandle);
+                if (idle.ULong0 == 0 && (count <= 64 || idle.ULong1 == 0)) return;
             }
-            if (chunk.Has(ref RequestHandle) && chunk.DidChange(ref RequestHandle, LastSystemVersion))
+            var playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
+            var buffers = stackalloc UnsafeUntypedBufferAccessor[Index.KindCount];
+            var ctx = new KindCursor { Index = Index, Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers, Counters = Counters };
+            ctx.Bind(in chunk);
+            if (requested)
             {
                 var requests = chunk.GetBufferAccessor(ref RequestHandle);
                 for (var row = 0; row < count; row++)
@@ -86,8 +87,29 @@ namespace Tl.Unity
         public UnsafeUntypedBufferAccessor* Buffers;
         public int* Counters;
         public ulong Reach;
+        public ulong Taken;
 
         const int MaxSlots = 256;
+
+        public void Bind(in ArchetypeChunk chunk)
+        {
+            Chunk = chunk;
+            Reach = 0;
+            Taken = 0;
+            for (var k = 0; k < Index.KindCount; k++)
+                if (KindHandleSet.IsMapped(Handles, k) && chunk.Has(ref *KindHandleSet.Entry(Handles, k)))
+                    Reach |= 1ul << k;
+        }
+
+        UnsafeUntypedBufferAccessor* Buffer(int kind)
+        {
+            if ((Taken & (1ul << kind)) == 0)
+            {
+                Buffers[kind] = Chunk.GetUntypedBufferAccessor(ref *KindHandleSet.Entry(Handles, kind));
+                Taken |= 1ul << kind;
+            }
+            return Buffers + kind;
+        }
 
         public void Apply(int row, ref DynamicBuffer<Playback> slots, in TimelineRequest request)
         {
@@ -196,12 +218,13 @@ namespace Tl.Unity
         public bool TickEntity(int row, ref DynamicBuffer<Playback> slots, int stepDir)
         {
             var count = slots.Length;
+            var cells = (Playback*)slots.GetUnsafePtr();
             var live = false;
             var tls = Index.Timelines;
             var sec = Index.Sec;
             for (var i = 0; i < count; i++)
             {
-                var s = slots[i];
+                var s = cells[i];
                 var id = s.Timeline;
                 if (id == 0) continue;
                 var flags = s.Flags;
@@ -211,8 +234,7 @@ namespace Tl.Unity
                     var t = s.Tick + dir;
                     if ((uint)t < tls[id - 1].Duration)
                     {
-                        s.Tick = (ushort)t;
-                        slots[i] = s;
+                        cells[i].Tick = (ushort)t;
                         if (Index.KindCount != 0 && sec.Timelines[id - 1].KindMask != 0 && (sec.EventBitsAt(sec.Timelines + (id - 1), t) & (dir > 0 ? 1 : 2)) != 0) ApplyEvents(row, i, id, t, dir);
                         live = true;
                         continue;
@@ -406,9 +428,10 @@ namespace Tl.Unity
         {
             if ((Reach & (1ul << kind)) == 0) return null;
             var stride = (int)Index.Sec.Kinds[kind].EntryBytes;
-            var length = Buffers[kind].GetBufferLength(row);
-            Buffers[kind].ResizeUninitialized(row, length + 1);
-            var entry = (byte*)Buffers[kind].GetUnsafePtr(row) + (long)length * stride;
+            var buffer = Buffer(kind);
+            var length = buffer->GetBufferLength(row);
+            buffer->ResizeUninitialized(row, length + 1);
+            var entry = (byte*)buffer->GetUnsafePtr(row) + (long)length * stride;
             UnsafeUtility.MemClear(entry, stride);
             if (length == 0) Chunk.SetComponentEnabled(ref *KindHandleSet.Active(Handles, kind), row, true);
             return (global::Tl.KindEntry*)entry;
@@ -418,15 +441,16 @@ namespace Tl.Unity
         {
             if ((Reach & (1ul << kind)) == 0) return false;
             var stride = (int)Index.Sec.Kinds[kind].EntryBytes;
-            var length = Buffers[kind].GetBufferLength(row);
-            var data = (byte*)Buffers[kind].GetUnsafePtr(row);
+            var buffer = Buffer(kind);
+            var length = buffer->GetBufferLength(row);
+            var data = (byte*)buffer->GetUnsafePtr(row);
             for (var i = 0; i < length; i++)
             {
                 var e = (global::Tl.KindEntry*)(data + (long)i * stride);
                 if ((e->Flags & global::Tl.KindEntryFlags.Span) == 0 || e->Slot != slot || e->Timeline != timeline || e->Step != step) continue;
                 var tail = (length - i - 1) * stride;
                 if (tail > 0) UnsafeUtility.MemMove(data + (long)i * stride, data + (long)(i + 1) * stride, tail);
-                Buffers[kind].ResizeUninitialized(row, length - 1);
+                buffer->ResizeUninitialized(row, length - 1);
                 if (length == 1) Chunk.SetComponentEnabled(ref *KindHandleSet.Active(Handles, kind), row, false);
                 return true;
             }

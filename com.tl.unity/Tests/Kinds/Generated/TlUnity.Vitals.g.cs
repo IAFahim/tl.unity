@@ -19,9 +19,17 @@ public ComponentTypeHandle<global::KindGame.DamageActive> DamageActiveHandle;
 [ReadOnly] public ComponentTypeHandle<global::KindGame.DamageEnabled> DamageEnabledHandle;
 public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in global::Unity.Burst.Intrinsics.v128 chunkEnabledMask)
 {
+var __l0 = false;
+if (chunk.Has(ref DamageEntryHandle))
+{
+var __a0 = chunk.GetEnableableBits(ref DamageActiveHandle);
+var __e0 = chunk.GetEnableableBits(ref DamageEnabledHandle);
+__l0 = ((__a0.ULong0 & __e0.ULong0) | (__a0.ULong1 & __e0.ULong1)) != 0;
+}
+if (!__l0) return;
 var __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
 var __c0 = (global::KindGame.Health*)chunk.GetRequiredComponentDataPtrRW(ref HealthHandle);
-Kind_0(chunk, __playbacks, __c0);
+if (__l0) Kind_0(chunk, __playbacks, __c0);
 }
 void Kind_0(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Health* __c0)
 {

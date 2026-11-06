@@ -86,7 +86,7 @@ namespace Tl.Unity
         public int ForEachCount;
         [ReadOnly] public NativeArray<int> RegistryToLibrary;
         [ReadOnly] public EntityStorageInfoLookup Storage;
-        public KindHandleSet Handles;
+        [NativeDisableContainerSafetyRestriction] public KindHandleSet Handles;
         [NativeDisableUnsafePtrRestriction] public int* Counters;
         [NativeDisableUnsafePtrRestriction] public KindIndex Index;
 
@@ -116,14 +116,7 @@ namespace Tl.Unity
                     {
                         last = info.Chunk;
                         lastValid = true;
-                        cursor.Chunk = last;
-                        cursor.Reach = 0;
-                        for (var k = 0; k < Index.KindCount; k++)
-                        {
-                            if (!KindHandleSet.IsMapped(cursor.Handles, k) || !last.Has(ref *KindHandleSet.Entry(cursor.Handles, k))) continue;
-                            buffers[k] = last.GetUntypedBufferAccessor(ref *KindHandleSet.Entry(cursor.Handles, k));
-                            cursor.Reach |= 1ul << k;
-                        }
+                        cursor.Bind(in last);
                     }
                     var entry = cursor.AppendEntry(info.IndexInChunk, kind);
                     if (entry == null)
