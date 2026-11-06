@@ -26,7 +26,6 @@ namespace Tl.Unity.Editor
         }
     }
 
-// SCAFFOLD (tl#557)
     public static class KindProfileSets
     {
         public static int[] ResolveUnion(KindProfile profile, KindRegistry registry, KindSets mode)

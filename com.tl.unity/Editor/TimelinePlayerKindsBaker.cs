@@ -31,7 +31,6 @@ namespace Tl.Unity.Editor
         }
     }
 
-// SCAFFOLD (tl#557)
     public sealed class TimelinePlayerKindsAuthoring : MonoBehaviour
     {
         [Serializable]
@@ -60,6 +59,8 @@ namespace Tl.Unity.Editor
         public NextBinding[] Next = Array.Empty<NextBinding>();
         public FedBinding[] FedKinds = Array.Empty<FedBinding>();
         public string[] RequiredKinds = Array.Empty<string>();
+        public string Profile = string.Empty;
+        public TimelineKindLibraryAsset Library;
 
         public Dictionary<int, int[]> SlotMap()
         {
@@ -121,6 +122,7 @@ namespace Tl.Unity.Editor
             var kinds = new HashSet<int>();
             CollectFedKinds(authoring.gameObject, fed, timelines, registry, kinds);
             CollectRequiredKinds(authoring.gameObject, authoring.RequiredKinds, registry, kinds);
+            CollectProfileKinds(authoring, registry, kinds);
             CollectAttributedKinds(authoring, registry, kinds);
             var entity = GetEntity(TransformUsageFlags.None);
             for (var i = 0; i < registry.Count; i++)
@@ -175,6 +177,19 @@ namespace Tl.Unity.Editor
                     kinds.Add(index);
                 }
             }
+        }
+
+        static void CollectProfileKinds(TimelinePlayerKindsAuthoring authoring, KindRegistry registry, HashSet<int> kinds)
+        {
+            var library = authoring.Library;
+            if (library == null || library.KindSets != KindSets.UnionPerProfile)
+                return;
+            if (string.IsNullOrEmpty(authoring.Profile))
+                return;
+            if (!library.TryGetProfile(authoring.Profile, out var profile) || profile == null)
+                throw new InvalidOperationException("GameObject '" + authoring.gameObject.name + "' profile '" + authoring.Profile + "' not found in library '" + library.name + "'.");
+            foreach (var id in KindProfileSets.ResolveUnion(profile, registry, KindSets.UnionPerProfile))
+                kinds.Add(id);
         }
 
         static int ResolveKind(GameObject gameObject, string name, string context, KindRegistry registry)
