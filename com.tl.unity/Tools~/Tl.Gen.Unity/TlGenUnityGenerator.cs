@@ -47,7 +47,7 @@ namespace Tl.Gen.Unity
             }
             if (failed)
                 return;
-            var kinds = UnityKindPlan.Plan(compilation, assignments, context);
+            var kinds = UnityKindPlan.Plan(compilation, assignments, models, context);
             if (kinds.Count != 0)
             {
                 var id = Sanitize(compilation.AssemblyName ?? "Game");
@@ -57,10 +57,7 @@ namespace Tl.Gen.Unity
             {
                 if (model is null)
                     continue;
-                var index = -1;
-                for (var a = 0; a < assignments.Count; a++)
-                    if (assignments[a].System.TypeName == model.Namespace + "." + model.SystemTypeName || assignments[a].System.TypeName == model.SystemTypeName)
-                        index = a;
+                var index = UnityKindPlan.AssignmentOf(assignments, model);
                 var own = new List<UnityKindInfo>();
                 if (index >= 0)
                     foreach (var kind in assignments[index].Kinds)

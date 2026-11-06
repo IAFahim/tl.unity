@@ -15,7 +15,7 @@ namespace Tl.Unity
 
     public readonly struct KindDescriptor
     {
-        public KindDescriptor(string name, Type entry, Type active, Type enabled, int valueBytes, int entryBytes, string signature)
+        public KindDescriptor(string name, Type entry, Type active, Type enabled, int valueBytes, int entryBytes, string signature, Type[] columns)
         {
             Name = name;
             Entry = entry;
@@ -24,6 +24,7 @@ namespace Tl.Unity
             ValueBytes = valueBytes;
             EntryBytes = entryBytes;
             Signature = signature;
+            Columns = columns ?? Array.Empty<Type>();
         }
 
         public readonly string Name;
@@ -33,6 +34,7 @@ namespace Tl.Unity
         public readonly int ValueBytes;
         public readonly int EntryBytes;
         public readonly string Signature;
+        public readonly Type[] Columns;
     }
 
     public static class TlAssemblies

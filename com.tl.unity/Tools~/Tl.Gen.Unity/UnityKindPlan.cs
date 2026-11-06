@@ -5,7 +5,32 @@ namespace Tl.Gen.Unity
 {
     internal static class UnityKindPlan
     {
-        internal static IReadOnlyList<UnityKindInfo> Plan(Compilation compilation, IReadOnlyList<SystemAssignment> assignments, SourceProductionContext context)
+        internal static int AssignmentOf(IReadOnlyList<SystemAssignment> assignments, UnitySystemModel model)
+        {
+            var index = -1;
+            for (var a = 0; a < assignments.Count; a++)
+                if (assignments[a].System.TypeName == model.Namespace + "." + model.SystemTypeName || assignments[a].System.TypeName == model.SystemTypeName)
+                    index = a;
+            return index;
+        }
+
+        static IReadOnlyList<string> ColumnsOf(IReadOnlyList<SystemAssignment> assignments, IReadOnlyList<UnitySystemModel?> models, KindDecl kind)
+        {
+            foreach (var model in models)
+            {
+                if (model is null)
+                    continue;
+                var index = AssignmentOf(assignments, model);
+                if (index < 0)
+                    continue;
+                foreach (var owned in assignments[index].Kinds)
+                    if (owned.Name == kind.Name)
+                        return UnityKindJobEmitter.ColumnsOf(model, assignments[index], kind);
+            }
+            return new List<string>();
+        }
+
+        internal static IReadOnlyList<UnityKindInfo> Plan(Compilation compilation, IReadOnlyList<SystemAssignment> assignments, IReadOnlyList<UnitySystemModel?> models, SourceProductionContext context)
         {
             var byName = new SortedDictionary<string, KindDecl>(StringComparer.Ordinal);
             foreach (var assignment in assignments)
@@ -44,7 +69,7 @@ namespace Tl.Gen.Unity
                     continue;
                 }
                 var entryBytes = kind.Accepts == 0 ? 8 : 8 + UnityLayout.Round(valueBytes, 4);
-                infos.Add(new UnityKindInfo(kind, registry++, valueBytes, entryBytes, Capacity(compilation, kind, context), UnityKindEmitter.NamespaceOf(kind.TypeName), UnityKindEmitter.Signature(assignments, kind)));
+                infos.Add(new UnityKindInfo(kind, registry++, valueBytes, entryBytes, Capacity(compilation, kind, context), UnityKindEmitter.NamespaceOf(kind.TypeName), UnityKindEmitter.Signature(assignments, kind), ColumnsOf(assignments, models, kind)));
             }
             return infos;
         }

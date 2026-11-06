@@ -6,7 +6,7 @@ namespace Tl.Gen.Unity
 {
     internal sealed class UnityKindInfo
     {
-        public UnityKindInfo(KindDecl decl, int registry, int valueBytes, int entryBytes, string capacity, string ns, string signature)
+        public UnityKindInfo(KindDecl decl, int registry, int valueBytes, int entryBytes, string capacity, string ns, string signature, IReadOnlyList<string> columns)
         {
             Decl = decl;
             Registry = registry;
@@ -15,6 +15,7 @@ namespace Tl.Gen.Unity
             Capacity = capacity;
             Namespace = ns;
             Signature = signature;
+            Columns = columns;
         }
 
         public readonly KindDecl Decl;
@@ -24,6 +25,7 @@ namespace Tl.Gen.Unity
         public readonly string Capacity;
         public readonly string Namespace;
         public readonly string Signature;
+        public readonly IReadOnlyList<string> Columns;
 
         public string Name => Decl.Name;
         public string Entry => "global::" + Namespace + "." + Decl.Name + "Entry";
@@ -46,6 +48,16 @@ namespace Tl.Gen.Unity
             var bare = typeName.StartsWith("global::") ? typeName.Substring(8) : typeName;
             var dot = bare.LastIndexOf('.');
             return dot < 0 ? "" : bare.Substring(0, dot);
+        }
+
+        static string ColumnTypes(IReadOnlyList<string> columns)
+        {
+            if (columns.Count == 0)
+                return "global::System.Type.EmptyTypes";
+            var parts = new List<string>();
+            foreach (var column in columns)
+                parts.Add("typeof(" + column + ")");
+            return "new global::System.Type[] { " + string.Join(", ", parts) + " }";
         }
 
         static string Sanitize(string typeName)
@@ -227,7 +239,7 @@ namespace Tl.Gen.Unity
             W(writer, "public void Register(global::Tl.Unity.KindRegistry registry)");
             W(writer, "{");
             foreach (var kind in kinds)
-                W(writer, "registry.Add(new global::Tl.Unity.KindDescriptor(\"" + kind.Name + "\", typeof(" + kind.Entry + "), typeof(" + kind.Active + "), typeof(" + kind.Enabled + "), " + kind.ValueBytes + ", " + kind.EntryBytes + ", \"" + kind.Signature.Replace("\\", "\\\\").Replace("\n", "\\n").Replace("\"", "\\\"") + "\"));");
+                W(writer, "registry.Add(new global::Tl.Unity.KindDescriptor(\"" + kind.Name + "\", typeof(" + kind.Entry + "), typeof(" + kind.Active + "), typeof(" + kind.Enabled + "), " + kind.ValueBytes + ", " + kind.EntryBytes + ", \"" + kind.Signature.Replace("\\", "\\\\").Replace("\n", "\\n").Replace("\"", "\\\"") + "\", " + ColumnTypes(kind.Columns) + "));");
             W(writer, "}");
             W(writer, "}");
         }
