@@ -206,12 +206,14 @@ namespace Tl.Unity.Editor
     {
         static KindCapacityAfterCompile()
         {
-            AssemblyReloadEvents.afterAssemblyReload += () =>
-            {
-                if (AssetDatabase.IsAssetImportWorkerProcess() || EditorApplication.isPlayingOrWillChangePlaymode)
-                    return;
-                KindCapacityBake.BakeAll();
-            };
+            AssemblyReloadEvents.afterAssemblyReload += OnReload;
+        }
+
+        static void OnReload()
+        {
+            if (AssetDatabase.IsAssetImportWorkerProcess() || EditorApplication.isPlayingOrWillChangePlaymode)
+                return;
+            KindCapacityBake.BakeAll();
         }
     }
 }

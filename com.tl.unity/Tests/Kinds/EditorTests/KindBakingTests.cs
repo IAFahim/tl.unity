@@ -294,10 +294,8 @@ namespace KindGame
                 Directory.Delete(root, true);
             Directory.CreateDirectory(folder);
             foreach (var file in Directory.GetFiles(TimelineKindSets.PhysicalPath("Packages/com.tl.unity/Tests/Kinds/Timelines~"), "*.json"))
-                if (Path.GetFileName(file) != "run_legacy.json")
-                    File.Copy(file, Path.Combine(folder, Path.GetFileName(file)));
+                File.Copy(file, Path.Combine(folder, Path.GetFileName(file)));
             var libraryJson = Path.Combine(folder, "library.json");
-            File.WriteAllText(libraryJson, File.ReadAllText(libraryJson).Replace("\"run_legacy.json\",", string.Empty));
             var output = Path.Combine(root, "Kinds.g.cs");
             var assembly = KindCapacityBake.Stage("Tl.Unity.Kinds");
 
