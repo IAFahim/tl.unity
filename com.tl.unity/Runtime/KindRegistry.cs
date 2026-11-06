@@ -35,6 +35,18 @@ namespace Tl.Unity
         public readonly string Signature;
     }
 
+    public static class TlAssemblies
+    {
+        public static System.Collections.Generic.IEnumerable<System.Reflection.Assembly> Loaded()
+        {
+#if UNITY_7000_0_OR_NEWER
+            return UnityEngine.Assemblies.CurrentAssemblies.GetLoadedAssemblies();
+#else
+            return AppDomain.CurrentDomain.GetAssemblies();
+#endif
+        }
+    }
+
     public sealed class KindRegistry
     {
         readonly List<KindDescriptor> _kinds = new List<KindDescriptor>();
@@ -62,7 +74,7 @@ namespace Tl.Unity
         public static KindRegistry Discover()
         {
             var registry = new KindRegistry();
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var assembly in TlAssemblies.Loaded())
             {
                 Type[] types;
                 try

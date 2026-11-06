@@ -11,7 +11,7 @@ namespace KindGame
 
         protected override void OnUpdate()
         {
-            var view = GetSingleton<TimelineLibrary>().View;
+            var view = SystemAPI.GetSingleton<TimelineLibrary>().View;
             var anchors = new AnchorLookup { Anchors = GetComponentLookup<Anchor>(true) };
             Dependency = TimelineJobs.Movement(ref CheckedStateRef, view, TimelineLibraryBootstrap.Kinds, Forward, anchors, Dependency);
         }
@@ -23,7 +23,7 @@ namespace KindGame
 
         protected override void OnUpdate()
         {
-            var view = GetSingleton<TimelineLibrary>().View;
+            var view = SystemAPI.GetSingleton<TimelineLibrary>().View;
             Dependency = TimelineJobs.Vitals(ref CheckedStateRef, view, TimelineLibraryBootstrap.Kinds, Forward, Dependency);
         }
     }

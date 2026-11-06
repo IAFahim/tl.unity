@@ -45,7 +45,7 @@ namespace Tl.Unity
 
         protected override void OnUpdate()
         {
-            var view = GetSingleton<TimelineLibrary>().View;
+            var view = SystemAPI.GetSingleton<TimelineLibrary>().View;
             if (!view.Kinds.IsEmpty)
                 return;
             using (var entities = _requestQuery.ToEntityArray(Allocator.Temp))
@@ -149,7 +149,7 @@ namespace Tl.Unity
 
         protected override void OnUpdate()
         {
-            var view = GetSingleton<TimelineLibrary>().View;
+            var view = SystemAPI.GetSingleton<TimelineLibrary>().View;
             if (!view.Kinds.IsEmpty)
                 return;
             Dependency = TimelineJobs.ScheduleAdvance(this, _playbackQuery, view, Dependency);

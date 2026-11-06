@@ -15,11 +15,11 @@ namespace Tl.Unity.Tests
         EntityManager _entities;
         Entity _entity;
 
-        static ushort RunId = 1;
-        static ushort JumpId = 2;
-        static ushort SlideId = 3;
-        static ushort HoldId = 4;
-        static ushort StackId = 5;
+        const ushort RunId = 1;
+        const ushort JumpId = 2;
+        const ushort SlideId = 3;
+        const ushort HoldId = 4;
+        const ushort StackId = 5;
 
         [SetUp]
         public void SetUp()

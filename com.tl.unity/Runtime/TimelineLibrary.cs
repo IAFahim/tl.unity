@@ -104,6 +104,9 @@ namespace Tl.Unity
         }
     }
 
+#if UNITY_7000_0_OR_NEWER
+    [global::Unity.Scripting.LifecycleManagement.NoAutoStaticsCleanup]
+#endif
     public static partial class TlGeneratedBootstrap
     {
         static readonly HashSet<string> Installed = new HashSet<string>();
@@ -118,7 +121,7 @@ namespace Tl.Unity
 
         public static void InstallDiscoveredModules()
         {
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var assembly in TlAssemblies.Loaded())
             {
                 Type[] types;
                 try
@@ -160,12 +163,25 @@ namespace Tl.Unity
         }
     }
 
+#if UNITY_7000_0_OR_NEWER
+    [global::Unity.Scripting.LifecycleManagement.NoAutoStaticsCleanup]
+#endif
     public static class TimelineLibraryBootstrap
     {
         static TimelineLibraryOwner Owner;
         static Entity OwnerEntity;
         static bool HasOwnerEntity;
         static uint Version;
+
+        [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ForgetPreviousPlay()
+        {
+            if (Owner != null)
+                Owner.Dispose();
+            Owner = null;
+            OwnerEntity = Entity.Null;
+            HasOwnerEntity = false;
+        }
 
         public static KindIndex Kinds => Owner != null ? Owner.Kinds : default;
 

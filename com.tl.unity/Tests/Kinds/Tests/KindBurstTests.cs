@@ -12,6 +12,7 @@ namespace KindGame
     // ComponentLookup that has no storage on defaults, and invoking it would
     // dereference a null lookup instead of testing compilation.
     [TestFixture]
+    [BurstCompile]
     public class KindBurstTests
     {
         internal delegate float LiftFn(float first, float next);
