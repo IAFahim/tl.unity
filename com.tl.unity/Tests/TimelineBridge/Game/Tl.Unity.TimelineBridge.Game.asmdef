@@ -1,0 +1,24 @@
+{
+  "name": "Tl.Unity.TimelineBridge.Game",
+  "rootNamespace": "KindGame.Bridge",
+  "references": [
+    "Tl.Unity",
+    "Tl.Unity.Authoring",
+    "Tl.Unity.Timeline",
+    "Tl.Unity.Kinds",
+    "Unity.Timeline"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS",
+    "TL_UNITY_TIMELINE"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.unity.timeline",
+      "expression": "0.0.0",
+      "define": "TL_UNITY_TIMELINE"
+    }
+  ],
+  "noEngineReferences": false
+}
