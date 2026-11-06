@@ -4,6 +4,19 @@ Tl 4 playback-model runtime for Unity ECS with Burst: playback buffers,
 library singleton, simulation systems, and generated system jobs. Compiles
 against Tl.Core netstandard2.1.
 
+## Install
+
+Add to `Packages/manifest.json`:
+
+```json
+"com.tl.unity": "https://github.com/IAFahim/tl.unity.git?path=/com.tl.unity#main"
+```
+
+Verified on Unity 7000.0.0a16 (fresh project, compiles with 0 errors).
+
+Baking kinds needs a `tlb` with the `kinds` command. Build it from IAFahim/tl
+`main` (`dotnet build tools/Tl.Bake -c Release`) and point `TL_TLB` at it.
+
 ## Kinds
 
 Game-defined per-step work (value type + combine + apply) fed by clips or
