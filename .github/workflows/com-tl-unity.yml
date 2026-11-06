@@ -1,0 +1,25 @@
+name: com.tl.unity
+on: [push, pull_request]
+concurrency:
+  group: com-tl-unity-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  core-pin:
+    name: Tl.Core matches the tl pin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive}
+      - run: bash eng/sync-tl-core.sh --check
+  unity:
+    name: com.tl.unity EditMode + PlayMode
+    runs-on: [self-hosted, unity]
+    needs: core-pin
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive}
+      - run: bash eng/test-com-tl-unity.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: com-tl-unity-reports, path: artifacts/com-tl-unity}

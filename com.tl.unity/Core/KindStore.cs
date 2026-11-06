@@ -1,0 +1,810 @@
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+
+namespace Tl;
+
+public readonly struct KindStats
+{
+    public KindStats(int rows, int maxLength, int overflows, long bytesPerRow)
+    {
+        Rows = rows;
+        MaxLength = maxLength;
+        Overflows = overflows;
+        BytesPerRow = bytesPerRow;
+    }
+
+    public readonly int Rows;
+    public readonly int MaxLength;
+    public readonly int Overflows;
+    public readonly long BytesPerRow;
+}
+
+public readonly unsafe struct KindPulses<T> where T : unmanaged
+{
+    readonly KindStore.PulseHandle _handle;
+
+    internal KindPulses(KindStore.PulseHandle handle) { _handle = handle; }
+
+    public void To(int entity, T value) => _handle.Send(entity, &value);
+}
+
+public readonly unsafe struct KindPulses<T, TFold> where T : unmanaged where TFold : struct, IPulseFold<T>
+{
+    readonly KindStore.PulseHandle _handle;
+
+    internal KindPulses(KindStore.PulseHandle handle) { _handle = handle; }
+
+    public void To(int entity, T value) => _handle.Send<T, TFold>(entity, value);
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct PulseQueue
+{
+    public byte* Items;
+    public int Count;
+    public int Capacity;
+    public int Stride;
+}
+
+public sealed unsafe class KindStore : IDisposable
+{
+    readonly TimelineWorld _world;
+    readonly PlaybackTable _players;
+    readonly string[]? _names;
+    readonly ulong[]? _reach;
+    ulong _generation;
+    KindSectionView _sec;
+    LibraryTimeline* _tls;
+    int _timelineCount;
+    int _kindCount;
+    KindTable** _tables;
+    PulseQueue* _queues;
+    ulong* _mask;
+    int* _offset;
+    int* _rows;
+    ulong* _closure;
+    uint* _pairs;
+    int* _pairStart;
+    int* _windowBase;
+    int* _firstStage;
+    int* _stageCount;
+    LibraryStep*** _stepArrays;
+    int _windowTotal;
+    readonly HashSet<string> _verified = new(StringComparer.Ordinal);
+    bool _disposed;
+    string[] _kindNames = Array.Empty<string>();
+    Dictionary<string, int> _kindIndex = new(StringComparer.Ordinal);
+    int[] _valueBytes = Array.Empty<int>();
+    byte[] _accepts = Array.Empty<byte>();
+    bool[] _folds = Array.Empty<bool>();
+    int[] _owner = Array.Empty<int>();
+    int _epoch;
+
+    internal sealed class PulseHandle
+    {
+        readonly KindStore _store;
+        readonly string _name;
+        int _kind;
+        int _epoch;
+        bool _folds;
+
+        internal PulseHandle(KindStore store, string name, int kind)
+        {
+            _store = store;
+            _name = name;
+            _kind = kind;
+            _epoch = store._epoch;
+            _folds = store._folds[kind];
+        }
+
+        internal void Send(int entity, void* value)
+        {
+            Refresh();
+            if (_kind < 0) _store.DroppedPulses++;
+            else _store.Send(_kind, entity, value);
+        }
+
+        internal void Send<T, TFold>(int entity, T value) where T : unmanaged where TFold : struct, IPulseFold<T>
+        {
+            Refresh();
+            if (_kind < 0) _store.DroppedPulses++;
+            else if (_folds) _store.SendFolded<T, TFold>(_kind, entity, value);
+            else _store.Send(_kind, entity, &value);
+        }
+
+        void Refresh()
+        {
+            if (_epoch == _store._epoch) return;
+            _kind = _store.IndexOf(_name);
+            _folds = _kind >= 0 && _store._folds[_kind];
+            _epoch = _store._epoch;
+        }
+    }
+
+    public KindStore(TimelineWorld world, PlaybackTable players, string[]? kindNames = null, ulong[]? reach = null)
+    {
+        _world = world ?? throw new ArgumentNullException(nameof(world));
+        _players = players ?? throw new ArgumentNullException(nameof(players));
+        if (kindNames != null && (kindNames.Length > 64 || reach == null || reach.Length != players.EntityCapacity))
+            throw new ArgumentException("kindNames holds at most 64 names and reach needs one mask per entity.");
+        _names = kindNames;
+        _reach = reach;
+        Build();
+        players.AttachKinds(this);
+    }
+
+    public int KindCount => _kindCount;
+
+    public long DroppedPulses { get; private set; }
+
+    public string NameOf(int kind) => _kindNames[kind];
+
+    public int IndexOf(string name) => _kindIndex.TryGetValue(name, out var kind) ? kind : -1;
+
+    public KindStats GetStats(int kind)
+    {
+        var t = _tables[kind];
+        return t == null ? default : new KindStats(t->Rows, t->MaxLength, t->Overflows, t->StorageBytesPerRow);
+    }
+
+    public KindPulses<T> Pulses<T>(string kind) where T : unmanaged
+    {
+        var k = IndexOf(kind);
+        if (k < 0) throw new ArgumentException($"The loaded library has no kind '{kind}'.");
+        if (_accepts[k] == (byte)KindEntries.Spans) throw new ArgumentException($"Kind '{kind}' accepts spans only; game code cannot send it pulses.");
+        if (_valueBytes[k] != sizeof(T)) throw new ArgumentException($"Kind '{kind}' takes {_valueBytes[k]}-byte values; {typeof(T).Name} is {sizeof(T)}.");
+        return new KindPulses<T>(new PulseHandle(this, kind, k));
+    }
+
+    public KindPulses<T, TFold> Pulses<T, TFold>(string kind) where T : unmanaged where TFold : struct, IPulseFold<T>
+    {
+        _ = Pulses<T>(kind);
+        var k = IndexOf(kind);
+        if (!_folds[k]) throw new ArgumentException($"Kind '{kind}' does not set FoldsPulses; set it on the kind, or send with Pulses<T>.");
+        return new KindPulses<T, TFold>(new PulseHandle(this, kind, k));
+    }
+
+    internal void SendFolded<T, TFold>(int kind, int entity, T value) where T : unmanaged where TFold : struct, IPulseFold<T>
+    {
+        var q = _queues + kind;
+        if (q->Count > 0)
+        {
+            var last = q->Items + (nuint)(q->Count - 1) * (nuint)q->Stride;
+            if (*(int*)last == entity)
+            {
+                var total = Unsafe.ReadUnaligned<T>(last + 4);
+                default(TFold).Fold(ref total, in value);
+                CopyValue(last + 4, (byte*)&total, sizeof(T));
+                return;
+            }
+        }
+        Send(kind, entity, &value);
+    }
+
+    internal void Send(int kind, int entity, void* value)
+    {
+        if ((uint)entity >= (uint)_players.EntityCapacity) throw new ArgumentOutOfRangeException(nameof(entity));
+        var q = _queues + kind;
+        if (q->Count == q->Capacity)
+        {
+            var capacity = q->Capacity == 0 ? 16 : q->Capacity * 2;
+            var items = (byte*)NativeMemory.AlignedAlloc((nuint)capacity * (nuint)q->Stride, 8);
+            if (q->Count > 0) new ReadOnlySpan<byte>(q->Items, q->Count * q->Stride).CopyTo(new Span<byte>(items, capacity * q->Stride));
+            if (q->Items != null) NativeMemory.AlignedFree(q->Items);
+            q->Items = items;
+            q->Capacity = capacity;
+        }
+        var at = q->Items + (nuint)q->Count * (nuint)q->Stride;
+        *(int*)at = entity;
+        CopyValue(at + 4, (byte*)value, _valueBytes[kind]);
+        q->Count++;
+    }
+
+    public KindTable* Table(int kind) => (uint)kind < (uint)_kindCount ? _tables[kind] : null;
+
+    public static int TrailingZeros(ulong value) => Tz(value);
+
+    public LibraryStep* StepOf(ushort timeline, int window, ushort tick)
+    {
+        var t = timeline - 1;
+        if ((uint)t >= (uint)_timelineCount) return null;
+        var g = _windowBase[t] + window;
+        var arr = _stepArrays[g];
+        if (arr == null) return null;
+        var tl = _tls + t;
+        var stage = LibraryViewReader.StageAt(tl, tick);
+        if (stage == null) return null;
+        var s = (int)(stage - tl->Stages) - _firstStage[g];
+        return (uint)s < (uint)_stageCount[g] ? arr[s] : null;
+    }
+
+    public uint MarkerOf(ushort timeline, int window)
+    {
+        var tk = _sec.TimelineOf(timeline);
+        return tk == null ? uint.MaxValue : _sec.Windows(tk)[window].Pair;
+    }
+
+    public void Verify(string kind, int valueBytes, string signature)
+    {
+        if (_verified.Contains(kind)) return;
+        var k = IndexOf(kind);
+        if (k >= 0)
+        {
+            if (_valueBytes[k] != valueBytes) throw new InvalidOperationException($"Kind '{kind}' is {valueBytes} bytes in code but {_valueBytes[k]} in the loaded library; rebake the library with tlb.");
+            var have = new System.Text.StringBuilder();
+            if (_sec.Kinds[k].GroupNameLength != 0) have.Append('@').Append(_sec.GroupOf(k));
+            for (var f = 0; f < _sec.FeederCount; f++)
+            {
+                if (_sec.Feeders[f].Kind != k) continue;
+                if (have.Length > 0) have.Append('\n');
+                have.Append(_sec.Text(_sec.Feeders[f].ConsumerOffset, _sec.Feeders[f].ConsumerLength)).Append('.').Append(_sec.Text(_sec.Feeders[f].MethodOffset, _sec.Feeders[f].MethodLength)).Append(':').Append(_sec.Feeders[f].Trigger);
+            }
+            if (have.ToString() != signature)
+                throw new InvalidOperationException($"Kind '{kind}' feeders in the loaded library differ from the compiled game; rebake the library with tlb.\nlibrary: {have.ToString().Replace('\n', ' ')}\ncode:    {signature.Replace('\n', ' ')}");
+        }
+        _verified.Add(kind);
+    }
+
+    internal int RowOf(int entity, int kind)
+    {
+        var mask = _mask[entity];
+        if ((mask & (1ul << kind)) == 0) return -1;
+        return _rows[_offset[entity] + Pop(mask & ((1ul << kind) - 1))];
+    }
+
+    internal void ClearPulses()
+    {
+        for (var k = 0; k < _kindCount; k++)
+        {
+            _queues[k].Count = 0;
+            var t = _tables[k];
+            if (t == null || _owner[k] != k) continue;
+            for (var r = 0; r < t->Rows; r++) t->RemovePulses(r);
+        }
+    }
+
+    internal void ValidateStart(int entity, ushort timeline)
+    {
+        var missing = _closure[timeline - 1] & ~_mask[entity];
+        if (missing == 0) return;
+        throw new ArgumentException($"Entity {entity} cannot reach kind '{_kindNames[Tz(missing)]}' fed by timeline {timeline} or its next chain; add the kind to the entity's reach.");
+    }
+
+    internal void Stop(int entity, int slot)
+    {
+        var s = _players.SlotsOf(entity) + slot;
+        _players.SetPlaying(entity, true);
+        if (_kindCount == 0 || (s->Flags & (PlaybackFlags.StartPending | PlaybackFlags.Ended)) != 0) return;
+        var id = s->Timeline;
+        var tk = _sec.Timelines + (id - 1);
+        if (tk->KindMask == 0) return;
+        var windows = _sec.Windows(tk);
+        int tick = s->Tick;
+        for (var k = _pairStart[id - 1]; k < _pairStart[id]; k++)
+        {
+            var w = (int)(_pairs[k] >> 16);
+            var f = (int)(_pairs[k] & 0xffff);
+            if (tick < windows[w].Start || tick >= windows[w].End) continue;
+            var feeder = _sec.Feeders + f;
+            if (feeder->Trigger == 0) _tables[feeder->Kind]->RemoveSpan(RowOf(entity, feeder->Kind), (byte)slot, id, (ushort)w, feeder->Kind);
+            else if (feeder->Trigger == 2 && tick < windows[w].End - 1) Append(entity, feeder, slot, id, w, KindEntryFlags.Pulse | KindEntryFlags.Interrupted);
+        }
+    }
+
+    internal void Sync()
+    {
+        if (_generation != _world._generation) Rebuild();
+    }
+
+    internal void TickPass(bool forward)
+    {
+        Sync();
+        var stepDir = forward ? 1 : -1;
+        var playing = _players.Playing;
+        for (var w = 0; w < _players.PlayingWords; w++)
+        {
+            var bits = playing[w];
+            while (bits != 0)
+            {
+                var e = (w << 6) + Tz(bits);
+                bits &= bits - 1;
+                TickEntity(e, stepDir);
+            }
+        }
+        MergePulses();
+    }
+
+    void TickEntity(int e, int stepDir)
+    {
+        var p = _players;
+        var slots = p.SlotsOf(e);
+        var count = p.CountOf(e);
+        var live = false;
+        for (var i = 0; i < count; i++)
+        {
+            var s = slots + i;
+            var id = s->Timeline;
+            if (id == 0) continue;
+            var flags = s->Flags;
+            if ((flags & ~PlaybackFlags.Reverse) == 0)
+            {
+                var dir = flags == 0 ? stepDir : -stepDir;
+                var t = s->Tick + dir;
+                if ((uint)t < _tls[id - 1].Duration)
+                {
+                    s->Tick = (ushort)t;
+                    if (_kindCount != 0 && _sec.Timelines[id - 1].KindMask != 0 && (_sec.EventBitsAt(_sec.Timelines + (id - 1), t) & (dir > 0 ? 1 : 2)) != 0) ApplyEvents(e, i, id, t, dir);
+                    live = true;
+                    continue;
+                }
+            }
+            live |= TickSlot(e, i, s, stepDir);
+        }
+        if (!live) p.SetPlaying(e, false);
+    }
+
+    bool TickSlot(int e, int i, Playback* s, int stepDir)
+    {
+        s->Flags &= ~PlaybackFlags.Began;
+        if ((s->Flags & PlaybackFlags.Stopping) != 0)
+        {
+            if ((s->Flags & PlaybackFlags.StopAged) != 0)
+            {
+                *s = default;
+                return false;
+            }
+            s->Flags |= PlaybackFlags.StopAged;
+            return true;
+        }
+        if ((s->Flags & PlaybackFlags.StartPending) != 0)
+        {
+            Begin(e, i, s, stepDir);
+            return true;
+        }
+        if ((s->Flags & PlaybackFlags.Paused) != 0) return true;
+        if ((s->Flags & PlaybackFlags.Ended) != 0) return false;
+        var dir = (s->Flags & PlaybackFlags.Reverse) != 0 ? -stepDir : stepDir;
+        var id = s->Timeline;
+        var tl = _tls + (id - 1);
+        int duration = (int)tl->Duration;
+        var t = s->Tick + dir;
+        if ((uint)t < (uint)duration)
+        {
+            s->Tick = (ushort)t;
+            Events(e, i, id, t, dir);
+            return true;
+        }
+        if (tl->Loop != 0)
+        {
+            WrapRemove(e, i, id, dir);
+            t = dir > 0 ? 0 : duration - 1;
+            s->Tick = (ushort)t;
+            Events(e, i, id, t, dir);
+            return true;
+        }
+        RemoveActiveSpans(e, i, s);
+        if (tl->Next != 0)
+        {
+            var next = _tls + (tl->Next - 1);
+            s->Timeline = tl->Next;
+            s->Channel = (byte)next->Channel;
+            s->Tick = (ushort)(dir > 0 ? 0 : next->Duration - 1);
+            Begin(e, i, s, stepDir);
+            return true;
+        }
+        if (tl->Hold != 0)
+        {
+            s->Tick = (ushort)(duration - 1);
+            s->Flags |= PlaybackFlags.Ended;
+            return false;
+        }
+        *s = default;
+        return false;
+    }
+
+    void Events(int e, int i, ushort id, int tick, int dir)
+    {
+        if (_kindCount != 0 && _sec.Timelines[id - 1].KindMask != 0 && (_sec.EventBitsAt(_sec.Timelines + (id - 1), tick) & (dir > 0 ? 1 : 2)) != 0) ApplyEvents(e, i, id, tick, dir);
+    }
+
+    void Begin(int e, int i, Playback* s, int stepDir)
+    {
+        s->Flags = (s->Flags & ~PlaybackFlags.StartPending) | PlaybackFlags.Began;
+        var id = s->Timeline;
+        if (_kindCount == 0 || _sec.Timelines[id - 1].KindMask == 0) return;
+        var dir = (s->Flags & PlaybackFlags.Reverse) != 0 ? -stepDir : stepDir;
+        var windows = _sec.Windows(_sec.Timelines + (id - 1));
+        int tick = s->Tick;
+        for (var k = _pairStart[id - 1]; k < _pairStart[id]; k++)
+        {
+            var w = (int)(_pairs[k] >> 16);
+            var f = (int)(_pairs[k] & 0xffff);
+            var window = windows[w];
+            var feeder = _sec.Feeders + f;
+            var inside = tick >= window.Start && tick < window.End;
+            switch (feeder->Trigger)
+            {
+                case 0:
+                    if (inside) Append(e, feeder, i, id, w, KindEntryFlags.Span | ((dir > 0 ? tick != window.Start : tick != window.End - 1) ? KindEntryFlags.Synthetic : 0));
+                    break;
+                case 1:
+                    if (inside) Append(e, feeder, i, id, w, KindEntryFlags.Pulse | (tick != window.Start ? KindEntryFlags.Synthetic : 0));
+                    break;
+                case 2:
+                    if (tick == window.End - 1) Append(e, feeder, i, id, w, KindEntryFlags.Pulse);
+                    break;
+                default:
+                    if (tick == window.Start) Append(e, feeder, i, id, w, KindEntryFlags.Pulse);
+                    break;
+            }
+        }
+    }
+
+    void RemoveActiveSpans(int e, int i, Playback* s)
+    {
+        var id = s->Timeline;
+        if (_kindCount == 0 || _sec.Timelines[id - 1].KindMask == 0) return;
+        var windows = _sec.Windows(_sec.Timelines + (id - 1));
+        int tick = s->Tick;
+        for (var k = _pairStart[id - 1]; k < _pairStart[id]; k++)
+        {
+            var w = (int)(_pairs[k] >> 16);
+            var feeder = _sec.Feeders + (_pairs[k] & 0xffff);
+            if (feeder->Trigger == 0 && tick >= windows[w].Start && tick < windows[w].End) _tables[feeder->Kind]->RemoveSpan(RowOf(e, feeder->Kind), (byte)i, id, (ushort)w, feeder->Kind);
+        }
+    }
+
+    void WrapRemove(int e, int i, ushort id, int dir)
+    {
+        if (_kindCount == 0) return;
+        var tk = _sec.Timelines + (id - 1);
+        if (tk->KindMask == 0) return;
+        var events = _sec.Events(tk);
+        var from = dir > 0 ? tk->WrapForward : tk->WrapBackward;
+        var to = from + (dir > 0 ? tk->WrapForwardCount : tk->WrapBackwardCount);
+        for (var n = from; n < to; n++)
+        {
+            var feeder = _sec.Feeders + events[n].Feeder;
+            _tables[feeder->Kind]->RemoveSpan(RowOf(e, feeder->Kind), (byte)i, id, events[n].Window, feeder->Kind);
+        }
+    }
+
+    void ApplyEvents(int e, int i, ushort id, int tick, int dir)
+    {
+        var tk = _sec.Timelines + (id - 1);
+        var events = _sec.Events(tk);
+        var d = dir > 0 ? 0 : 1;
+        var to = _sec.EventEnd(tk, tick, d);
+        for (var n = _sec.EventStart(tk, tick, d); n < to; n++)
+        {
+            var ev = events[n];
+            var feeder = _sec.Feeders + ev.Feeder;
+            switch ((KindEventOp)ev.Op)
+            {
+                case KindEventOp.Remove:
+                    _tables[feeder->Kind]->RemoveSpan(RowOf(e, feeder->Kind), (byte)i, id, ev.Window, feeder->Kind);
+                    break;
+                case KindEventOp.Insert:
+                    Append(e, feeder, i, id, ev.Window, KindEntryFlags.Span);
+                    break;
+                default:
+                    Append(e, feeder, i, id, ev.Window, KindEntryFlags.Pulse);
+                    break;
+            }
+        }
+    }
+
+    void Append(int entity, LibraryFeeder* feeder, int slot, ushort timeline, int window, KindEntryFlags flags)
+    {
+        var entry = _tables[feeder->Kind]->Append(RowOf(entity, feeder->Kind));
+        entry->Timeline = timeline;
+        entry->Step = (ushort)window;
+        entry->Slot = (byte)slot;
+        entry->Feeder = feeder->Ordinal;
+        entry->Flags = flags;
+        entry->Reserved = 0;
+        if (_tables[feeder->Kind]->Grouped) *(ushort*)((byte*)entry + 8) = (ushort)feeder->Kind;
+    }
+
+    void MergePulses()
+    {
+        for (var k = 0; k < _kindCount; k++)
+        {
+            var q = _queues + k;
+            if (q->Count == 0) continue;
+            var table = _tables[k];
+            for (var n = 0; n < q->Count; n++)
+            {
+                var at = q->Items + (nuint)n * (nuint)q->Stride;
+                var entity = *(int*)at;
+                var row = table == null ? -1 : RowOf(entity, k);
+                if (row < 0)
+                {
+                    DroppedPulses++;
+                    continue;
+                }
+                var entry = table->Append(row);
+                *entry = new KindEntry { Flags = KindEntryFlags.Pulse };
+                if (table->Grouped) *(ushort*)((byte*)entry + 8) = (ushort)k;
+                CopyValue((byte*)entry + table->ValueAt, at + 4, _valueBytes[k]);
+            }
+            q->Count = 0;
+        }
+    }
+
+    void Rebuild()
+    {
+        var pending = new List<(string Name, int Entity, byte[] Value)>();
+        for (var k = 0; k < _kindCount; k++)
+            for (var n = 0; n < _queues[k].Count; n++)
+            {
+                var at = _queues[k].Items + (nuint)n * (nuint)_queues[k].Stride;
+                var value = new byte[_valueBytes[k]];
+                new ReadOnlySpan<byte>(at + 4, value.Length).CopyTo(value);
+                pending.Add((_kindNames[k], *(int*)at, value));
+            }
+        Build();
+        foreach (var (name, entity, value) in pending)
+        {
+            var k = IndexOf(name);
+            if (k < 0 || _valueBytes[k] != value.Length) DroppedPulses++;
+            else fixed (byte* v = value) Send(k, entity, v);
+        }
+        var p = _players;
+        for (var e = 0; e < p.EntityCapacity; e++)
+        {
+            var slots = p.SlotsOf(e);
+            var count = p.CountOf(e);
+            for (var i = 0; i < count; i++)
+            {
+                var s = slots + i;
+                if (s->Timeline == 0) continue;
+                if ((s->Flags & PlaybackFlags.Stopping) != 0) { *s = default; continue; }
+                if (s->Timeline > _timelineCount) throw new ArgumentException($"Playback slot {i} of entity {e} names no timeline in the reloaded library.");
+                p.SetPlaying(e, true);
+                if ((s->Flags & (PlaybackFlags.StartPending | PlaybackFlags.Ended)) != 0 || _kindCount == 0) continue;
+                ValidateStart(e, s->Timeline);
+                var id = s->Timeline;
+                var tk = _sec.Timelines + (id - 1);
+                if (tk->KindMask == 0) continue;
+                var windows = _sec.Windows(tk);
+                int tick = s->Tick;
+                for (var k = _pairStart[id - 1]; k < _pairStart[id]; k++)
+                {
+                    var w = (int)(_pairs[k] >> 16);
+                    var feeder = _sec.Feeders + (_pairs[k] & 0xffff);
+                    if (feeder->Trigger == 0 && tick >= windows[w].Start && tick < windows[w].End) Append(e, feeder, i, id, w, KindEntryFlags.Span | KindEntryFlags.Synthetic);
+                }
+            }
+        }
+    }
+
+    void Build()
+    {
+        Release();
+        var view = _world._view;
+        _generation = _world._generation;
+        _sec = view.Kinds;
+        _tls = view.Timelines;
+        _timelineCount = view.TimelineCount;
+        _kindCount = _sec.IsEmpty ? 0 : _sec.KindCount;
+        _epoch++;
+        _kindNames = new string[_kindCount];
+        _valueBytes = new int[_kindCount];
+        _accepts = new byte[_kindCount];
+        _folds = new bool[_kindCount];
+        _kindIndex = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var k = 0; k < _kindCount; k++)
+        {
+            _kindNames[k] = _sec.NameOf(k);
+            _kindIndex[_kindNames[k]] = k;
+            _valueBytes[k] = (int)_sec.Kinds[k].ValueBytes;
+            _accepts[k] = _sec.Kinds[k].Accepts;
+            _folds[k] = _sec.Kinds[k].Flags != 0;
+        }
+        var entities = _players.EntityCapacity;
+        _owner = new int[_kindCount];
+        var firstOf = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var k = 0; k < _kindCount; k++)
+        {
+            _owner[k] = k;
+            if (_sec.Kinds[k].GroupNameLength == 0) continue;
+            var group = _sec.GroupOf(k);
+            if (firstOf.TryGetValue(group, out var first)) _owner[k] = first;
+            else firstOf[group] = k;
+        }
+        _mask = (ulong*)Zeroed((nuint)entities * 8);
+        var all = _kindCount == 64 ? ~0ul : (1ul << _kindCount) - 1;
+        if (_names == null) for (var e = 0; e < entities; e++) _mask[e] = all;
+        else
+        {
+            var map = new int[_names.Length];
+            for (var n = 0; n < map.Length; n++) map[n] = IndexOf(_names[n]);
+            for (var e = 0; e < entities; e++)
+                for (var n = 0; n < map.Length; n++)
+                    if (map[n] >= 0 && (_reach![e] & (1ul << n)) != 0) _mask[e] |= 1ul << map[n];
+        }
+        _offset = (int*)Zeroed((nuint)entities * 4);
+        var refs = 0;
+        for (var e = 0; e < entities; e++)
+        {
+            _offset[e] = refs;
+            refs += Pop(_mask[e]);
+        }
+        _rows = (int*)Zeroed((nuint)Math.Max(1, refs) * 4);
+        _tables = (KindTable**)Zeroed((nuint)Math.Max(1, _kindCount) * (nuint)sizeof(nint));
+        _queues = (PulseQueue*)Zeroed((nuint)Math.Max(1, _kindCount) * (nuint)sizeof(PulseQueue));
+        var members = new List<int>();
+        var rowIn = new int[entities];
+        for (var o = 0; o < _kindCount; o++)
+        {
+            ref var row = ref _sec.Kinds[o];
+            _queues[o].Stride = 4 + (int)((row.ValueBytes + 3u) & ~3u);
+            if (_owner[o] != o) continue;
+            var bits = 0ul;
+            var largest = 0u;
+            for (var k = o; k < _kindCount; k++)
+                if (_owner[k] == o)
+                {
+                    bits |= 1ul << k;
+                    if (_sec.Kinds[k].Accepts != 0) largest = Math.Max(largest, _sec.Kinds[k].ValueBytes);
+                }
+            members.Clear();
+            for (var e = 0; e < entities; e++)
+                if ((_mask[e] & bits) != 0)
+                {
+                    rowIn[e] = members.Count;
+                    members.Add(e);
+                }
+            for (var k = o; k < _kindCount; k++)
+                if (_owner[k] == o)
+                    for (var e = 0; e < entities; e++)
+                        if ((_mask[e] & (1ul << k)) != 0) _rows[_offset[e] + Pop(_mask[e] & ((1ul << k) - 1))] = rowIn[e];
+            if (members.Count == 0) continue;
+            var grouped = row.GroupNameLength != 0;
+            var table = KindTable.Create(o, members.ToArray(), (int)(grouped ? row.GroupCapacity : row.Capacity), grouped ? 12 + (int)((largest + 3u) & ~3u) : (int)row.EntryBytes, grouped);
+            for (var k = o; k < _kindCount; k++)
+                if (_owner[k] == o) _tables[k] = table;
+        }
+        _closure = (ulong*)Zeroed((nuint)Math.Max(1, _timelineCount) * 8);
+        _pairStart = (int*)Zeroed((nuint)(_timelineCount + 2) * 4);
+        var pairs = new List<uint>();
+        for (var t = 0; t < _timelineCount; t++)
+        {
+            var at = t;
+            for (var hop = 0; hop <= _timelineCount; hop++)
+            {
+                if (_kindCount != 0) _closure[t] |= _sec.Timelines[at].KindMask;
+                if (_tls[at].Next == 0) break;
+                at = _tls[at].Next - 1;
+            }
+            _pairStart[t] = pairs.Count;
+            if (_kindCount == 0 || _sec.Timelines[t].KindMask == 0) continue;
+            var tk = _sec.Timelines + t;
+            var events = _sec.Events(tk);
+            var set = new SortedSet<uint>();
+            for (var n = 0u; n < tk->EventCount; n++)
+                if (events[n].Op != (byte)KindEventOp.Remove) set.Add(((uint)events[n].Window << 16) | events[n].Feeder);
+            pairs.AddRange(set);
+        }
+        _pairStart[_timelineCount] = pairs.Count;
+        BuildSteps();
+        _pairs = (uint*)Zeroed((nuint)Math.Max(1, pairs.Count) * 4);
+        for (var n = 0; n < pairs.Count; n++) _pairs[n] = pairs[n];
+    }
+
+    void BuildSteps()
+    {
+        _windowBase = (int*)Zeroed((nuint)(_timelineCount + 1) * 4);
+        var total = 0;
+        for (var t = 0; t < _timelineCount; t++)
+        {
+            _windowBase[t] = total;
+            if (_kindCount != 0 && _sec.Timelines[t].KindMask != 0) total += (int)_sec.Timelines[t].WindowCount;
+        }
+        _windowBase[_timelineCount] = total;
+        _windowTotal = total;
+        _firstStage = (int*)Zeroed((nuint)Math.Max(1, total) * 4);
+        _stageCount = (int*)Zeroed((nuint)Math.Max(1, total) * 4);
+        _stepArrays = (LibraryStep***)Zeroed((nuint)Math.Max(1, total) * (nuint)sizeof(nint));
+        for (var t = 0; t < _timelineCount; t++)
+        {
+            if (_kindCount == 0 || _sec.Timelines[t].KindMask == 0) continue;
+            var tk = _sec.Timelines + t;
+            var tl = _tls + t;
+            var windows = _sec.Windows(tk);
+            for (var w = 0; w < tk->WindowCount; w++)
+            {
+                var win = windows[w];
+                if ((win.Flags & 1u) != 0) continue;
+                int first = -1, last = -1;
+                for (var s = 0; s < tl->StageCount; s++)
+                {
+                    if (tl->Stages[s].Start <= win.Start && win.Start < tl->Stages[s].End) first = s;
+                    if (tl->Stages[s].Start <= win.End - 1 && win.End - 1 < tl->Stages[s].End) last = s;
+                }
+                if (first < 0 || last < first) continue;
+                var arr = (LibraryStep**)Zeroed((nuint)(last - first + 1) * (nuint)sizeof(nint));
+                for (var s = first; s <= last; s++)
+                    for (var n = 0; n < tl->Stages[s].StepCount; n++)
+                    {
+                        var step = tl->Stages[s].Steps + n;
+                        if (step->TrackIndex == win.Track && step->Pair == win.Pair && step->WindowStart == win.Start && step->WindowEnd == win.End) { arr[s - first] = step; break; }
+                    }
+                var g = _windowBase[t] + w;
+                _firstStage[g] = first;
+                _stageCount[g] = last - first + 1;
+                _stepArrays[g] = arr;
+            }
+        }
+    }
+
+    static void CopyValue(byte* to, byte* from, int bytes)
+    {
+        if (bytes == 4) *(int*)to = *(int*)from;
+        else if (bytes == 8) *(long*)to = *(long*)from;
+        else Buffer.MemoryCopy(from, to, bytes, bytes);
+    }
+
+    static void* Zeroed(nuint bytes)
+    {
+        var p = NativeMemory.AlignedAlloc(bytes == 0 ? 1 : bytes, 64);
+        NativeMemory.Clear(p, bytes);
+        return p;
+    }
+
+    void Release()
+    {
+        if (_tables != null)
+            for (var k = 0; k < _kindCount; k++) if (_owner[k] == k) KindTable.Free(_tables[k]);
+        if (_queues != null)
+            for (var k = 0; k < _kindCount; k++) if (_queues[k].Items != null) NativeMemory.AlignedFree(_queues[k].Items);
+        if (_stepArrays != null)
+            for (var g = 0; g < _windowTotal; g++) if (_stepArrays[g] != null) NativeMemory.AlignedFree(_stepArrays[g]);
+        _verified.Clear();
+        foreach (var block in new void*[] { _tables, _queues, _mask, _offset, _rows, _closure, _pairs, _pairStart, _windowBase, _firstStage, _stageCount, _stepArrays })
+            if (block != null) NativeMemory.AlignedFree(block);
+        _tables = null;
+        _queues = null;
+        _mask = null;
+        _offset = null;
+        _rows = null;
+        _closure = null;
+        _pairs = null;
+        _pairStart = null;
+        _windowBase = null;
+        _firstStage = null;
+        _stageCount = null;
+        _stepArrays = null;
+        _windowTotal = 0;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        Release();
+        _players.AttachKinds(null);
+        GC.SuppressFinalize(this);
+    }
+
+    internal static int Pop(ulong v)
+    {
+#if NET
+        return System.Numerics.BitOperations.PopCount(v);
+#else
+        v -= (v >> 1) & 0x5555555555555555ul;
+        v = (v & 0x3333333333333333ul) + ((v >> 2) & 0x3333333333333333ul);
+        return (int)((((v + (v >> 4)) & 0x0F0F0F0F0F0F0F0Ful) * 0x0101010101010101ul) >> 56);
+#endif
+    }
+
+    internal static int Tz(ulong v)
+    {
+#if NET
+        return System.Numerics.BitOperations.TrailingZeroCount(v);
+#else
+        return Pop((v & (ulong)-(long)v) - 1);
+#endif
+    }
+}

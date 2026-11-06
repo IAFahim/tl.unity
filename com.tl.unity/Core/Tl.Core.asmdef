@@ -1,0 +1,7 @@
+{
+  "name": "Tl.Core",
+  "rootNamespace": "Tl",
+  "allowUnsafeCode": true,
+  "autoReferenced": true,
+  "noEngineReferences": true
+}
