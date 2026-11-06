@@ -1,0 +1,24 @@
+{
+  "name": "potion_hop",
+  "duration": 6,
+  "tracks": [
+    {
+      "namespace": "PlainGame",
+      "type": "ArcTrack",
+      "data": {
+        "Scale": 1
+      },
+      "clips": [
+        {
+          "namespace": "PlainGame",
+          "type": "ArcClip",
+          "start": 0,
+          "end": 6,
+          "data": {
+            "Velocity": 1
+          }
+        }
+      ]
+    }
+  ]
+}

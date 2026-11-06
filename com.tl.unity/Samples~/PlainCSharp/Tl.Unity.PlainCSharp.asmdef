@@ -1,0 +1,9 @@
+{
+  "name": "Tl.Unity.PlainCSharp",
+  "rootNamespace": "PlainGame",
+  "references": [
+    "Tl.Core"
+  ],
+  "allowUnsafeCode": true,
+  "autoReferenced": true
+}

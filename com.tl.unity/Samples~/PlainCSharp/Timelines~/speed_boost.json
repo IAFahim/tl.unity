@@ -1,0 +1,25 @@
+{
+  "name": "speed_boost",
+  "duration": 20,
+  "tracks": [
+    {
+      "namespace": "PlainGame",
+      "type": "WalkTrack",
+      "data": {
+        "Scale": 1
+      },
+      "clips": [
+        {
+          "namespace": "PlainGame",
+          "type": "WalkClip",
+          "start": 0,
+          "end": 20,
+          "data": {
+            "Speed": 5,
+            "Priority": 10
+          }
+        }
+      ]
+    }
+  ]
+}

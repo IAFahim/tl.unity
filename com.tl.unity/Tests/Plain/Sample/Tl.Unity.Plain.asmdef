@@ -1,0 +1,12 @@
+{
+  "name": "Tl.Unity.Plain",
+  "rootNamespace": "PlainGame",
+  "references": [
+    "Tl.Core"
+  ],
+  "allowUnsafeCode": true,
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ]
+}

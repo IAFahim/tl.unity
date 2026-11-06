@@ -1,0 +1,22 @@
+{
+  "name": "Tl.Unity.Plain.Tests",
+  "rootNamespace": "PlainGame.Tests",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity.Plain",
+    "UnityEngine.TestRunner"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": true,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

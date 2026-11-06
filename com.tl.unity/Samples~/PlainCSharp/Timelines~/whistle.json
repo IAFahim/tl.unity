@@ -1,0 +1,24 @@
+{
+  "name": "whistle",
+  "duration": 6,
+  "tracks": [
+    {
+      "namespace": "PlainGame",
+      "type": "CueTrack",
+      "data": {
+        "Scale": 1
+      },
+      "clips": [
+        {
+          "namespace": "PlainGame",
+          "type": "CueClip",
+          "start": 0,
+          "end": 6,
+          "data": {
+            "Voice": 7
+          }
+        }
+      ]
+    }
+  ]
+}
