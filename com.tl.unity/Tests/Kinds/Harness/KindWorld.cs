@@ -5,9 +5,16 @@ using Unity.Entities;
 
 namespace KindGame
 {
+    [UpdateInGroup(typeof(TimelineSimulationGroup))]
+    [UpdateAfter(typeof(TimelineKindTickSystem))]
     public partial class MovementSystem : SystemBase
     {
         public bool Forward = true;
+
+        protected override void OnCreate()
+        {
+            RequireForUpdate<TimelineLibrary>();
+        }
 
         protected override void OnUpdate()
         {
@@ -17,9 +24,16 @@ namespace KindGame
         }
     }
 
+    [UpdateInGroup(typeof(TimelineSimulationGroup))]
+    [UpdateAfter(typeof(TimelineKindTickSystem))]
     public partial class VitalsSystem : SystemBase
     {
         public bool Forward = true;
+
+        protected override void OnCreate()
+        {
+            RequireForUpdate<TimelineLibrary>();
+        }
 
         protected override void OnUpdate()
         {

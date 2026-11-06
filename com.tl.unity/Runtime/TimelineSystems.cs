@@ -38,7 +38,7 @@ namespace Tl.Unity
         protected override void OnCreate()
         {
             base.OnCreate();
-            _requestQuery = GetEntityQuery(ComponentType.ReadOnly<TimelineRequest>(), ComponentType.ReadWrite<Playback>());
+            _requestQuery = GetEntityQuery(new EntityQueryDesc { All = new[] { ComponentType.ReadOnly<TimelineRequest>(), ComponentType.ReadWrite<Playback>() }, Absent = new[] { ComponentType.ReadOnly<TimelinePlaying>() } });
             _closedQuery = GetEntityQuery(ComponentType.ReadOnly<TimelineLibrary>());
             RequireForUpdate<TimelineLibrary>();
         }
@@ -143,7 +143,7 @@ namespace Tl.Unity
         protected override void OnCreate()
         {
             base.OnCreate();
-            _playbackQuery = GetEntityQuery(ComponentType.ReadWrite<Playback>());
+            _playbackQuery = GetEntityQuery(new EntityQueryDesc { All = new[] { ComponentType.ReadWrite<Playback>() }, Absent = new[] { ComponentType.ReadOnly<TimelinePlaying>() } });
             RequireForUpdate<TimelineLibrary>();
         }
 
