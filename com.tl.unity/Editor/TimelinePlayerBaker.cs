@@ -31,7 +31,9 @@ namespace Tl.Unity.Editor
             AddBuffer<Playback>(entity);
             var requests = AddBuffer<TimelineRequest>(entity);
             var types = new List<Type>();
-            foreach (var component in GetComponents<MonoBehaviour>())
+            var behaviours = new List<MonoBehaviour>();
+            GetComponents(behaviours);
+            foreach (var component in behaviours)
                 if (component != null)
                     types.Add(component.GetType());
             var registry = TimelineKindSets.Registry;
