@@ -16,6 +16,11 @@
       "displayName": "Kinds IL2CPP player",
       "description": "Runs the 600-step kind script on a Linux IL2CPP player and prints whether its hash equals the .NET hash.",
       "path": "Samples~/KindsIL2CPP"
+    },
+    {
+      "displayName": "Bullets IL2CPP player",
+      "description": "Sums game-code Damage pulses with timeline hit pulses into one Health write and prints whether its hash equals the .NET hash.",
+      "path": "Samples~/BulletsIL2CPP"
     }
   ]
 }

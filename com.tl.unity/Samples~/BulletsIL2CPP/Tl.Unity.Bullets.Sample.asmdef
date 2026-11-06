@@ -1,0 +1,7 @@
+{
+  "name": "Tl.Unity.Bullets.Sample",
+  "references": [
+    "Tl.Unity.Kinds"
+  ],
+  "autoReferenced": true
+}

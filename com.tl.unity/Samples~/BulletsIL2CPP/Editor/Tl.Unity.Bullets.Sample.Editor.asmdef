@@ -1,0 +1,10 @@
+{
+  "name": "Tl.Unity.Bullets.Sample.Editor",
+  "references": [
+    "Tl.Unity.Bullets.Sample"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "autoReferenced": true
+}
