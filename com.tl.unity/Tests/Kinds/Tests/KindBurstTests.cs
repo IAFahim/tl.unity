@@ -23,7 +23,7 @@ namespace KindGame
         internal delegate int HitFn(int amount, bool reverse);
         internal delegate int StatPulseFn(int delta, bool reverse);
         internal delegate int MarkerFn(int delta);
-        internal delegate Speed WalkFn(in Frame<WalkTrack, WalkClip> frame, in WalkStat stat, in Target target, in AnchorLookup anchors);
+        internal delegate void WalkFn(in Frame<WalkTrack, WalkClip> frame, in WalkStat stat, in Target target, in AnchorLookup anchors, out Speed speed);
 
         [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
         static float LiftBurst(float first, float next)
@@ -105,9 +105,9 @@ namespace KindGame
         }
 
         [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
-        static Speed WalkBurst(in Frame<WalkTrack, WalkClip> frame, in WalkStat stat, in Target target, in AnchorLookup anchors)
+        static void WalkBurst(in Frame<WalkTrack, WalkClip> frame, in WalkStat stat, in Target target, in AnchorLookup anchors, out Speed speed)
         {
-            return Walk.Evaluate(in frame, in stat, in target, in anchors);
+            speed = Walk.Evaluate(in frame, in stat, in target, in anchors);
         }
 
         [Test]
