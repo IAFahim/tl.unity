@@ -21,7 +21,7 @@ namespace Tl.Unity
         public BufferTypeHandle<Playback> PlaybackHandle;
         public BufferTypeHandle<TimelineRequest> RequestHandle;
         public ComponentTypeHandle<TimelinePlaying> PlayingHandle;
-        public KindHandleSet Handles;
+        [NativeDisableContainerSafetyRestriction] public KindHandleSet Handles;
         [NativeDisableUnsafePtrRestriction] public int* Counters;
         public int StepDir;
         public uint LastSystemVersion;
@@ -218,12 +218,13 @@ namespace Tl.Unity
         public bool TickEntity(int row, ref DynamicBuffer<Playback> slots, int stepDir)
         {
             var count = slots.Length;
+            var cells = (Playback*)slots.GetUnsafePtr();
             var live = false;
             var tls = Index.Timelines;
             var sec = Index.Sec;
             for (var i = 0; i < count; i++)
             {
-                var s = slots[i];
+                var s = cells[i];
                 var id = s.Timeline;
                 if (id == 0) continue;
                 var flags = s.Flags;
@@ -233,8 +234,7 @@ namespace Tl.Unity
                     var t = s.Tick + dir;
                     if ((uint)t < tls[id - 1].Duration)
                     {
-                        s.Tick = (ushort)t;
-                        slots[i] = s;
+                        cells[i].Tick = (ushort)t;
                         if (Index.KindCount != 0 && sec.Timelines[id - 1].KindMask != 0 && (sec.EventBitsAt(sec.Timelines + (id - 1), t) & (dir > 0 ? 1 : 2)) != 0) ApplyEvents(row, i, id, t, dir);
                         live = true;
                         continue;

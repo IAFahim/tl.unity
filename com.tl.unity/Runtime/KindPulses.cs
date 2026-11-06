@@ -86,7 +86,7 @@ namespace Tl.Unity
         public int ForEachCount;
         [ReadOnly] public NativeArray<int> RegistryToLibrary;
         [ReadOnly] public EntityStorageInfoLookup Storage;
-        public KindHandleSet Handles;
+        [NativeDisableContainerSafetyRestriction] public KindHandleSet Handles;
         [NativeDisableUnsafePtrRestriction] public int* Counters;
         [NativeDisableUnsafePtrRestriction] public KindIndex Index;
 
