@@ -45,12 +45,20 @@ def mono():
     return str(bundled) if bundled and bundled.is_file() else shutil.which('mono')
 
 
+def cli():
+    configured = os.environ.get('TL_UNITY_CLI')
+    if configured:
+        return configured
+    home = pathlib.Path.home() / '.local/bin/unity'
+    return shutil.which('unity') or (str(home) if home.is_file() else None)
+
+
 if __name__ == '__main__':
     kind = sys.argv[1] if len(sys.argv) > 1 else ''
-    finders = {'version': version, 'editor': editor, 'mono': mono}
+    finders = {'version': version, 'editor': editor, 'mono': mono, 'cli': cli}
     if kind not in finders:
-        raise SystemExit('Use version, editor or mono.')
+        raise SystemExit('Use version, editor, mono or cli.')
     found = finders[kind]()
     if not found:
-        raise SystemExit(f'No Unity {kind} found. Install the editor pinned in tests/Tl.V3.Project/ProjectSettings/ProjectVersion.txt under {hub}, or set UNITY_EDITOR_VERSION, TL_UNITY_EDITORS or TL_MONO.')
+        raise SystemExit(f'No Unity {kind} found. Install the editor pinned in tests/Tl.V3.Project/ProjectSettings/ProjectVersion.txt under {hub}, or set UNITY_EDITOR_VERSION, TL_UNITY_EDITORS, TL_MONO or TL_UNITY_CLI.')
     print(found)
