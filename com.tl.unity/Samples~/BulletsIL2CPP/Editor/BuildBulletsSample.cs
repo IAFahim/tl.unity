@@ -23,7 +23,7 @@ public static class BuildBulletsSample
             scenes = new[] { Scene },
             locationPathName = Output,
             target = BuildTarget.StandaloneLinux64,
-            options = BuildOptions.None,
+            options = BuildOptions.IncludeTestAssemblies,
         });
         Debug.Log("Tl bullets sample build: " + report.summary.result + " errors=" + report.summary.totalErrors + " warnings=" + report.summary.totalWarnings);
         if (report.summary.result != UnityEditor.Build.Reporting.BuildResult.Succeeded && Application.isBatchMode)

@@ -6,5 +6,8 @@
     "Tl.Unity.Kinds",
     "Unity.Entities"
   ],
-  "autoReferenced": true
+  "autoReferenced": true,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ]
 }

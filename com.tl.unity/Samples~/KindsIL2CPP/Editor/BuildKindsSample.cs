@@ -23,7 +23,7 @@ public static class BuildKindsSample
             scenes = new[] { Scene },
             locationPathName = Output,
             target = BuildTarget.StandaloneLinux64,
-            options = BuildOptions.None,
+            options = BuildOptions.IncludeTestAssemblies,
         });
         Debug.Log("Tl kinds sample build: " + report.summary.result + " errors=" + report.summary.totalErrors + " warnings=" + report.summary.totalWarnings);
         if (report.summary.result != UnityEditor.Build.Reporting.BuildResult.Succeeded && Application.isBatchMode)

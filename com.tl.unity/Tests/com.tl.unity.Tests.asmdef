@@ -16,5 +16,8 @@
   "precompiledReferences": [
     "nunit.framework.dll"
   ],
-  "allowUnsafeCode": true
+  "allowUnsafeCode": true,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ]
 }

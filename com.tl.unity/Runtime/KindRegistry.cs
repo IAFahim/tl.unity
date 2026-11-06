@@ -52,17 +52,38 @@ namespace Tl.Unity
     public sealed class KindRegistry
     {
         readonly List<KindDescriptor> _kinds = new List<KindDescriptor>();
+        readonly List<string> _sources = new List<string>();
+        string _source = "unknown";
 
         public int Count => _kinds.Count;
 
         public KindDescriptor this[int index] => _kinds[index];
 
+        public string SourceOf(int index) => _sources[index];
+
         public void Add(KindDescriptor descriptor)
         {
             for (var i = 0; i < _kinds.Count; i++)
                 if (_kinds[i].Name == descriptor.Name)
-                    throw new ArgumentException("Kind '" + descriptor.Name + "' is registered twice.");
+                    throw new ArgumentException("Kind '" + descriptor.Name + "' is registered twice: by assembly '" + _sources[i] + "' and by assembly '" + _source + "'. Kind names must be unique across assemblies; rename one of the kinds.");
             _kinds.Add(descriptor);
+            _sources.Add(_source);
+        }
+
+        public void Include(IKindModule module, string assembly)
+        {
+            if (module == null)
+                throw new ArgumentNullException(nameof(module));
+            var previous = _source;
+            _source = string.IsNullOrEmpty(assembly) ? "unknown" : assembly;
+            try
+            {
+                module.Register(this);
+            }
+            finally
+            {
+                _source = previous;
+            }
         }
 
         public int IndexOf(string name)
@@ -93,7 +114,7 @@ namespace Tl.Unity
                         continue;
                     if (type.GetConstructor(Type.EmptyTypes) == null)
                         continue;
-                    ((IKindModule)Activator.CreateInstance(type)).Register(registry);
+                    registry.Include((IKindModule)Activator.CreateInstance(type), assembly.GetName().Name);
                 }
             }
             return registry;
