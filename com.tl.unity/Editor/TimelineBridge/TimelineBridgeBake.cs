@@ -17,6 +17,7 @@ namespace Tl.Unity.Editor
         public readonly List<string> Warnings = new List<string>();
         public string JsonFolder;
         public string LibraryFile;
+        public string BytesFile;
         public bool LibraryJsonChanged;
         public KindCapacityBake.Result Capacities;
     }
@@ -109,6 +110,11 @@ namespace Tl.Unity.Editor
                 arguments.Add("--ids");
                 arguments.Add(TimelineKindSets.PhysicalPath(bridge.IdsFile));
             }
+            if (!string.IsNullOrEmpty(library.KindsFile))
+            {
+                arguments.Add("--kinds");
+                arguments.Add(TimelineKindSets.PhysicalPath(library.KindsFile));
+            }
             if (!string.IsNullOrEmpty(library.Namespace))
             {
                 arguments.Add("--namespace");
@@ -118,6 +124,10 @@ namespace Tl.Unity.Editor
             arguments.Add("json");
             Tlb(library.Tlb, arguments);
             result.LibraryFile = Path.Combine(folder, "game.tlib");
+            result.BytesFile = Path.Combine(folder, "game.bytes");
+            var baked = File.ReadAllBytes(result.LibraryFile);
+            if (!File.Exists(result.BytesFile) || !baked.AsSpan().SequenceEqual(File.ReadAllBytes(result.BytesFile)))
+                File.WriteAllBytes(result.BytesFile, baked);
             if (!string.IsNullOrEmpty(library.KindsFile))
                 result.Capacities = KindCapacityBake.Run(library.Tlb, target, library.Namespace, TimelineKindSets.PhysicalPath(library.KindsFile), gameDll);
             if (refresh)

@@ -318,6 +318,27 @@ namespace KindGame.Bridge
             }
         }
 
+        [Test]
+        public void TheBridgeBakeWritesOneKindsFileAndTheBytesAsset()
+        {
+            var tlb = Environment.GetEnvironmentVariable("TL_TLB");
+            if (string.IsNullOrEmpty(tlb))
+                Assert.Ignore("Set TL_TLB to a tlb or Tl.Bake.dll with the library command.");
+            var folder = CopyKindFolder("run.json", "jump.json", "speed_boost.json");
+            var kindsFolder = Path.Combine(Path.GetTempPath(), "tl-bridge-kinds-" + Guid.NewGuid().ToString("N"));
+            _folders.Add(kindsFolder);
+            Directory.CreateDirectory(kindsFolder);
+            var kindsFile = Path.Combine(kindsFolder, "Kinds.g.cs");
+            var library = Library(folder, tlb);
+            library.KindsFile = kindsFile;
+            var bridge = Bridge(library, BridgeOutput.JsonInLibraryFolder, (Run(), TimelineEnd.Loop, "locomotion"), (Jump(), TimelineEnd.Remove, "locomotion"), (SpeedBoost(), TimelineEnd.Remove, ""));
+            var result = TimelineBridgeBake.Bake(bridge, false);
+            Assert.IsFalse(File.Exists(Path.Combine(folder, "Kinds.g.cs")), "the bridge wrote a second Kinds.g.cs next to game.tlib");
+            StringAssert.Contains("class KindCapacity", File.ReadAllText(kindsFile));
+            Assert.AreEqual(Path.Combine(folder, "game.bytes"), result.BytesFile);
+            CollectionAssert.AreEqual(File.ReadAllBytes(result.LibraryFile), File.ReadAllBytes(result.BytesFile));
+        }
+
         static World Bake(params GameObject[] roots)
         {
             var hybrid = typeof(Baker<>).Assembly;

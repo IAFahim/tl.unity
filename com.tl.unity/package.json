@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "com.unity.entities": "6.7.0",
+    "com.unity.nuget.mono-cecil": "1.11.6",
     "com.unity.timeline": "6.7.0"
   },
   "samples": [

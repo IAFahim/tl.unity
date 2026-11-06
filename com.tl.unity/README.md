@@ -45,14 +45,14 @@ compile; you run no tool for it.
   Profile and `[RequiresKinds]`. Reference it from your game asmdef.
 - `Tl.Unity.Editor`: the baker, `Tools > Tl > Kind Report` and
   `Tools > Tl > Bake Kind Capacities`.
+- `Tl.Unity.Generate`: opt-in marker for the source generator. Reference it
+  from the asmdef that declares your kinds and `[TimelineSystem]` structs.
+- `Unity.Tl.CodeGen` (Editor, IL post-processor): registers the generated
+  components with Entities when such an assembly loads.
 - `Tl.Core`: the shared timeline core, copied from IAFahim/tl.
 
 ## Known gaps
 
-- Generated entity components are `Unknown Type` at run time, so the ECS demo
-  does not run yet: [#18](https://github.com/IAFahim/tl.unity/issues/18).
-- The Timeline Bridge bake can write a second `Kinds.g.cs`:
-  [#19](https://github.com/IAFahim/tl.unity/issues/19).
 - The Linux CI runner is not started:
   [#17](https://github.com/IAFahim/tl.unity/issues/17).
 

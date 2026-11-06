@@ -34,6 +34,8 @@ var failed = result.Diagnostics.Any(static d => d.Severity == DiagnosticSeverity
 var changed = 0;
 foreach (var generated in result.Results.SelectMany(static r => r.GeneratedSources))
 {
+    if (generated.HintName == "TlUnity.Registration.g.cs")
+        continue;
     var path = Path.Combine(output, generated.HintName);
     var text = generated.SourceText.ToString();
     if (File.Exists(path) && File.ReadAllText(path) == text)

@@ -479,8 +479,11 @@ generated code. Repack it after changing the game types or the json with
 Plan-1 `ExecuteActive` consumers keep plan 1's order inside one implicit
 legacy kind that runs first in its system unless `Order` says otherwise.
 Mixing legacy consumers and kinds that write the same field changes the order
-between those two groups. On Unity, legacy consumers other than the event
-raisers above are not dispatched (`TLUNITY9105`: feed a kind instead). The legacy implicit kind and
+between those two groups. On Unity the `Events<T>` raisers above
+(`OnClipStart`, `OnClipEnd` and `ExecuteActive` whose only extra parameters are
+`Events<T>`) are dispatched, in Burst, by the generated job, as in .NET. Other
+legacy consumers (marker handlers, and those methods with column parameters)
+are not dispatched on Unity (`TLUNITY9105`: feed a kind instead). The legacy implicit kind and
 `ExecuteActive` stay (K5 decision, IAFahim/tl#558). They go only after the
 Runner sample and the bench domains move to kinds, a migration tool exists,
 and K-E still passes without the legacy loop.

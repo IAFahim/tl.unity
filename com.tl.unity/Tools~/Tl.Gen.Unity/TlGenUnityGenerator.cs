@@ -59,9 +59,24 @@ namespace Tl.Gen.Unity
                 foreach (var evented in model.Events)
                     events.Add(evented.TypeName);
             }
+            var id = Sanitize(compilation.AssemblyName ?? "Game");
+            var components = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (var element in events)
+                components.Add("global::Tl.Unity.TimelineEvent<" + element + ">");
+            foreach (var kind in kinds)
+            {
+                components.Add(kind.Entry);
+                components.Add(kind.Active);
+                components.Add(kind.Enabled);
+            }
+            foreach (var model in models)
+                if (model is not null)
+                    foreach (var column in UnityKindJobEmitter.ColumnsOf(model))
+                        components.Add(column);
+            if (components.Count != 0)
+                context.AddSource(UnityRegistrationEmitter.FileName, SourceText.From(UnityRegistrationEmitter.Emit(components, id), System.Text.Encoding.UTF8));
             if (kinds.Count != 0)
             {
-                var id = Sanitize(compilation.AssemblyName ?? "Game");
                 context.AddSource("TlUnity.Kinds.g.cs", SourceText.From(UnityKindEmitter.EmitKinds(assignments, kinds, new List<string>(events), id), System.Text.Encoding.UTF8));
             }
             foreach (var model in models)

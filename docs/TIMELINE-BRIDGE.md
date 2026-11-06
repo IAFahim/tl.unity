@@ -10,11 +10,13 @@ Runs on the newest Unity 7 editor (tested on 7000.0.0a16) with
 `com.unity.timeline` 6.7.0, which `com.tl.unity` now depends on.
 
 Status, from an empty project that has the demo of
-[USING-ECS.md](USING-ECS.md): steps 1 to 4 below work. A Timeline built in
-code and a bridge asset baked `sprint.json` and `game.tlib`, and the ids class
-got `Timelines.Sprint`. Step 5 (the director on an entity in a SubScene) was
-set up by script. Playing it does not work yet: the generated components are
-`Unknown Type` at run time ([IAFahim/tl.unity#18](https://github.com/IAFahim/tl.unity/issues/18)).
+[USING-ECS.md](USING-ECS.md), on 7000.0.0a16: steps 1 to 5 below work and play.
+A Timeline built in code (`sprint`: one walk clip, speed 3, 30 ticks, End
+`Loop`) and a bridge asset baked `sprint.json`, `game.tlib` and `game.bytes`,
+the ids class got `Timelines.Sprint`, and a capacity bake afterwards left one
+`Kinds.g.cs` (0 `error CS`). A director on an entity in a SubScene (set up by
+script) then played in a PlayMode test: its `X` grew by 30 over ten steps and
+ten backward steps returned it to the same value.
 The Timeline window itself was not driven (the check was headless); the same
 assets were built in code. Read the ECS demo first: the bridge needs its Timeline Library asset, its
 `Kinds.cs` types and its compiled game assembly.
@@ -25,7 +27,7 @@ assets were built in code. Read the ECS demo first: the bridge needs its Timelin
 Timeline window (.playable)          Timeline Bridge asset           Library folder
   Tl tracks, clips, markers   --->   name, end, next, channel  --->  <name>.json  (path 1)
                                      Bake (menu, button, save)       library.json "timelines"
-                                                  |                  game.tlib, Timelines.g.cs
+                                                  |                  game.tlib, game.bytes, Timelines.g.cs
                                                   +--> tlb library ---^
                                                   +--> tlb kinds   ---> Kinds.g.cs (only if a capacity changes)
 
@@ -136,7 +138,8 @@ A bake:
    `Temp/TlTimelineBridge/<bridge>`), and adds missing file names to the
    `library.json` `timelines` list (globs that already match are kept);
 3. runs `tlb library <folder> --out <Folder>/game.tlib --assembly <game dll>...`
-   (plus `--ids` and `--namespace`), with the compiled script assemblies
+   (plus `--ids`, `--namespace` and, when the library has a Kinds File,
+   `--kinds <Kinds File>`), with the compiled script assemblies
    staged as the capacity bake does;
 4. when the library has a Kinds File, runs `tlb kinds` on the same folder,
    which rewrites `Kinds.g.cs` only when a capacity changes;
@@ -146,12 +149,11 @@ The Console shows one line per bake, the warnings, and the kind capacities.
 Errors start with `Tl timeline bridge '<bridge>':` and name the timeline,
 track, clip and time.
 
-The bake writes `game.tlib`, not `game.bytes`. If your game loads the library
-from a `game.bytes` TextAsset (the ECS demo does), copy `game.tlib` over it
-after each bake. Also check that no second `Kinds.g.cs` appeared in the library
-Folder: the bake can write one, and then the project fails with `CS0101`
-([IAFahim/tl.unity#19](https://github.com/IAFahim/tl.unity/issues/19)). Setting
-the library's Kinds File to `<Folder>/Kinds.g.cs` avoids it.
+The bake writes `game.tlib` and copies it to `game.bytes` in the same folder (only
+when it changed), so a game that loads the library from the `game.bytes`
+TextAsset (the ECS demo does) gets the new library without a manual copy. `tlb`
+writes `KindCapacity` only to the library's Kinds File, never a second
+`Kinds.g.cs` next to `game.tlib`.
 
 ### 5. Put it on an entity
 

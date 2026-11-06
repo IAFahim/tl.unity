@@ -8,11 +8,10 @@ unmanaged data.
 Tested on the newest Unity 7 editor (tested on 7000.0.0a16). Other editors
 and player builds are not covered here.
 
-Status: from an empty project, steps 1 to 9 work (install, `tlb`, library,
-kinds, systems, bakers, scene and SubScene compile, capacity bake and library
-bake, 0 `error CS`). Pressing Play does not work yet: the generated components
-are `Unknown Type` at run time ([IAFahim/tl.unity#18](https://github.com/IAFahim/tl.unity/issues/18),
-section 10).
+Status: from an empty project, steps 1 to 10 work: install, `tlb`, library,
+kinds, systems, bakers, scene and SubScene, capacity bake and library bake
+with 0 `error CS`, and the PlayMode test of section 7 passes in the default
+world (Walker health 58, Dummy health 93, two cues, rewind exact, 0 dropped).
 
 Other ways in:
 
@@ -404,6 +403,13 @@ the `*Active` and `*Enabled` tags, `LocomotionKind`, `DamageKind`, the
 `TimelineJobs.Vitals`) is rewritten by the generator on every compile of `Demo`.
 Change a kind, a column or a `[TimelineSystem]` and recompile: the glue follows.
 
+The generator also writes a registration class for these components. Unity
+registers an assembly's component types from its source files, which does not
+include generator output, so the package's IL post-processor
+(`Unity.Tl.CodeGen`) calls that class from the assembly's load hook. You do
+nothing for it; it runs in the Editor, in the SubScene import worker and in
+Play mode.
+
 ### Step 6: the systems
 
 Your two systems schedule the generated jobs. They read the library and the
@@ -692,11 +698,12 @@ Why it is written this way:
 ### Step 10: run it
 
 Press Play on `Demo.unity`. The SubScene streams in, the library loads, and
-the director runs its script. Today this throws `Unknown Type` (section 10). To look at the entities, open `Window > Entities
+the director runs its script. To look at the entities, open `Window > Entities
 > Hierarchy` and select `Walker` in the runtime world (not checked in this
 guide).
 
-The checked result is the test in section 7. After step 70 it asserts:
+The checked result is the test in section 7, run headless in a fresh project
+on 7000.0.0a16 (1 passed). After step 70 it asserts:
 
 | What | Value |
 |---|---|
@@ -1029,9 +1036,9 @@ plumbing only. A comparison with another design is in
 |---|---|
 | Old behaviour after a code change | One compile error anywhere keeps the old assemblies loaded. Check the log for `error CS` before trusting a run. The Console can be empty while `Editor.log` has the errors. |
 | SubScene serves old data after you rebuilt `game.tlib` or changed a baker | Stale bake. Reimport the SubScene (right-click the SubScene asset, `Reimport`), then check one baked component exists in the live world. The baker depends on the Library asset, the Profile and `game.tlib`, not on your baker code. |
-| `Unknown Type: Demo.LocomotionEntry` (or `Movement_MotionData`) at run time, with 0 `error CS` | Open bug: [IAFahim/tl.unity#18](https://github.com/IAFahim/tl.unity/issues/18). See section 10. |
+| `Unknown Type: Demo.LocomotionEntry` (or `Movement_MotionData`) at run time, with 0 `error CS` | The generated registration did not run. Check that the game asmdef references `Tl.Unity.Generate` and that the `Unity.Tl.CodeGen` post-processor compiled (no `error` for it in `Editor.log`). Do not check generated `.g.cs` files into an assembly that also references `Tl.Unity.Generate`. |
 | `error CS0103` for `Movement_MotionData`, `TimelineJobs`, `LocomotionEntry` | The generator did not run. Check that the game asmdef references `Tl.Unity.Generate`, and fix any other `error CS` first: the generated code is not refreshed while the assembly fails to compile. |
-| `error CS0101` or `CS0229` for `KindCapacity` | Two `Kinds.g.cs` files. Bake the library with `--kinds` (step 5) and delete the one next to `game.tlib`. The Timeline Bridge can write that second file: [IAFahim/tl.unity#19](https://github.com/IAFahim/tl.unity/issues/19). |
+| `error CS0101` or `CS0229` for `KindCapacity` | Two `Kinds.g.cs` files. Bake the library with `--kinds` (step 5) and delete the one next to `game.tlib`. The Timeline Bridge passes the library's Kinds File to `tlb`, so it writes no second file. |
 | `SGQC001: WithAll<LocomotionEntry>() is not supported` | `SystemAPI.Query` cannot name generated types. Build the query with `EntityQueryBuilder` in `OnCreate`. |
 | `BC1028: Creating a managed array ComponentType[]` | `GetEntityQuery(params ...)` is not Burst compatible. Use `EntityQueryBuilder` with one generic call per type. |
 | `BC1042` and a managed static | Something on the step path reads a managed static. Read `TimelineLibrary`, `TimelineStep` and `TimelineKindTick` from singletons instead. |
@@ -1058,16 +1065,6 @@ plumbing only. A comparison with another design is in
 
 ## 10. Known gaps
 
-- Generated components are `Unknown Type` at run time, so the demo does not
-  run yet. The generator output compiles (0 `error CS`), but the Entities
-  TypeManager does not know the emitted types, and Play mode and the SubScene
-  bake throw `Unknown Type: Demo.LocomotionEntry`. Steps 1 to 9 are verified up
-  to compile, capacity bake and library bake; step 10 and the PlayMode test in
-  section 7 are not: [IAFahim/tl.unity#18](https://github.com/IAFahim/tl.unity/issues/18).
-- The Timeline Bridge bake can write a second `Kinds.g.cs` into the library
-  folder: [IAFahim/tl.unity#19](https://github.com/IAFahim/tl.unity/issues/19).
-  Until it is fixed, set Kinds File to `Assets/Demo/Timelines/Kinds.g.cs` (and
-  `--kinds` to the same path in step 5) if you use the bridge.
 - `tlb library` needs `Temp/TlKindBake`, which exists only while the Editor is
   open after a capacity bake. There is no menu command for `tlb library`; the
   Timeline Bridge ([TIMELINE-BRIDGE.md](TIMELINE-BRIDGE.md)) runs it for you.
