@@ -6,14 +6,14 @@ using UnityEngine;
 
 namespace Tl.Unity.Editor
 {
-    [BakingType]
+    [TemporaryBakingType]
     public struct TimelineKindBake : IBufferElementData
     {
         public int Kind;
         public FixedString128Bytes Source;
     }
 
-    [BakingType]
+    [TemporaryBakingType]
     public struct TimelineKindBakeOwner : IComponentData
     {
         public FixedString128Bytes Name;
@@ -25,11 +25,11 @@ namespace Tl.Unity.Editor
         {
             DependsOn(authoring.Library);
             DependsOn(authoring.Profile);
+            if (authoring.Library != null)
+                DependsOn(UnityEditor.AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(TimelineKindSets.LibraryFile(authoring.Library)));
             var entity = GetEntity(TransformUsageFlags.None);
             AddBuffer<Playback>(entity);
             var requests = AddBuffer<TimelineRequest>(entity);
-            AddComponent<TimelinePlaying>(entity);
-            SetComponentEnabled<TimelinePlaying>(entity, false);
             var types = new List<Type>();
             foreach (var component in GetComponents<MonoBehaviour>())
                 if (component != null)
@@ -51,6 +51,10 @@ namespace Tl.Unity.Editor
                 Debug.LogWarning("Tl baking: GameObject '" + authoring.name + "' " + warning, authoring);
             foreach (var start in plan.Starts)
                 requests.Add(TimelineRequest.Start(0, start));
+            if (!plan.LibraryHasKinds)
+                return;
+            AddComponent<TimelinePlaying>(entity);
+            SetComponentEnabled<TimelinePlaying>(entity, false);
             AddComponent(entity, new TimelineKindBakeOwner { Name = Fit(authoring.name) });
             var reached = AddBuffer<TimelineKindBake>(entity);
             foreach (var kind in plan.Kinds.Values)
@@ -76,7 +80,11 @@ namespace Tl.Unity.Editor
 
         protected override void OnCreate()
         {
-            _players = GetEntityQuery(ComponentType.ReadOnly<TimelineKindBake>(), ComponentType.ReadOnly<TimelineKindBakeOwner>());
+            _players = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[] { ComponentType.ReadOnly<TimelineKindBake>(), ComponentType.ReadOnly<TimelineKindBakeOwner>() },
+                Options = EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities,
+            });
         }
 
         protected override void OnUpdate()

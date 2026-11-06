@@ -23,27 +23,12 @@ namespace Tl.Gen.Unity
             return model.SystemTypeName + "_" + column.Name + "Data";
         }
 
-        internal static IReadOnlyList<string> ColumnsOf(UnitySystemModel model, SystemAssignment assignment, KindDecl kind)
+        internal static IReadOnlyList<string> ColumnsOf(UnitySystemModel model)
         {
             var ns = model.Namespace.StartsWith("global::") ? model.Namespace.Substring(8) : model.Namespace;
-            var parameters = new List<ConsumerParam>();
-            foreach (var consumer in assignment.Consumers)
-                foreach (var feeder in consumer.Feeders)
-                    if (feeder.KindName == kind.Name)
-                        parameters.AddRange(feeder.Method.Params);
-            parameters.AddRange(kind.ApplyParams);
             var names = new SortedSet<string>(StringComparer.Ordinal);
-            foreach (var parameter in parameters)
-            {
-                if (parameter.Kind != ConsumerParamKind.Column && parameter.Kind != ConsumerParamKind.ColumnReadOnly)
-                    continue;
-                foreach (var column in model.Columns)
-                    if (column.ElementTypeName == parameter.TypeName && (parameter.Kind == ConsumerParamKind.ColumnReadOnly || !column.ReadOnly))
-                    {
-                        names.Add("global::" + ns + "." + ComponentName(model, column));
-                        break;
-                    }
-            }
+            foreach (var column in model.Columns)
+                names.Add("global::" + ns + "." + ComponentName(model, column));
             return new List<string>(names);
         }
 

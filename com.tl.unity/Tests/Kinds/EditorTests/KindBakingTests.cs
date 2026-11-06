@@ -161,9 +161,61 @@ namespace KindGame
         {
             var library = Library();
             var bare = Player("Bare", library, new[] { "Run" }, columns: false);
-            foreach (var column in new[] { "Movement_MotionData", "Movement_TargetData", "Movement_WalkStatData" })
+            foreach (var column in new[] { "Movement_JumpPowerData", "Movement_MotionData", "Movement_StaminaData", "Movement_TargetData", "Movement_WalkStatData" })
                 LogAssert.Expect(LogType.Error, new Regex("GameObject 'Bare' gets kind 'Locomotion' from timeline 'Run', fed by Walk\\.Evaluate, but has no '" + column + "' component"));
             using var world = Bake(bare);
+        }
+
+        [Test]
+        public void EveryColumnTheSystemQueryNeedsIsRequiredNotJustTheKindsOwn()
+        {
+            var library = Library();
+            var walker = Player("Walker", library, new[] { "Run" }, columns: false);
+            walker.AddComponent<WalkerAuthoring>();
+            foreach (var column in new[] { "Movement_JumpPowerData", "Movement_StaminaData" })
+                LogAssert.Expect(LogType.Error, new Regex("GameObject 'Walker' gets kind 'Locomotion' from timeline 'Run', fed by Walk\\.Evaluate, but has no '" + column + "' component"));
+            using var world = Bake(walker);
+        }
+
+        [Test]
+        public void ALibraryWithoutKindsLeavesThePlayerToThePlaybackSystems()
+        {
+            var library = Library();
+            library.Folder = "Packages/com.tl.unity/Tests/Kinds/LegacyLibrary~";
+            library.TimelineIds = "KindGame.Legacy.Timelines";
+            var legacy = Player("Legacy", library, new[] { "RunLegacy" }, columns: false);
+            using var world = Bake(legacy);
+            var entities = world.EntityManager;
+            var entity = Find(world, "Legacy");
+            Assert.IsFalse(entities.HasComponent<TimelinePlaying>(entity), "no kind Tick owns it, so the request and advance systems must");
+            Assert.AreEqual(string.Empty, KindsOf(world, entity));
+            var requests = entities.GetBuffer<TimelineRequest>(entity);
+            Assert.AreEqual(1, requests.Length);
+            Assert.AreEqual(Legacy.Timelines.RunLegacy, requests[0].Timeline);
+        }
+
+        [Test]
+        public void AnInactivePlayerIsBakedAndCheckedLikeAnActiveOne()
+        {
+            var library = Library();
+            var sleeper = Player("Sleeper", library, new[] { "Jump" });
+            sleeper.SetActive(false);
+            using var world = Bake(sleeper);
+            Assert.AreEqual("Lift+Locomotion+StatChange", KindsOf(world, Find(world, "Sleeper")));
+        }
+
+        [Test]
+        public void AProfileUnderExactKindSetsWarnsThatItIsIgnored()
+        {
+            var library = Library();
+            var profile = ScriptableObject.CreateInstance<KindProfile>();
+            profile.name = "Runners";
+            profile.Kinds = new[] { "Lift" };
+            _made.Add(profile);
+            var walker = Player("Walker", library, new[] { "Run" }, profile: profile);
+            LogAssert.Expect(LogType.Warning, new Regex("GameObject 'Walker' has Profile 'Runners', but library 'KindTestLibrary' uses Exact kind sets"));
+            using var world = Bake(walker);
+            Assert.AreEqual("Locomotion", KindsOf(world, Find(world, "Walker")));
         }
 
         [Test]

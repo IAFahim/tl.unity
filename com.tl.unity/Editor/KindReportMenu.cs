@@ -13,7 +13,7 @@ namespace Tl.Unity.Editor
             var shown = 0;
             foreach (var world in World.All)
             {
-                if (!world.IsCreated)
+                if (!world.IsCreated || (world.Flags & (WorldFlags.Conversion | WorldFlags.Shadow | WorldFlags.Staging)) != 0)
                     continue;
                 var rows = KindReport.Capture(world.EntityManager, registry);
                 if (rows.Count == 0)

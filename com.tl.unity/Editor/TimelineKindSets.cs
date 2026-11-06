@@ -27,8 +27,12 @@ namespace Tl.Unity.Editor
         public readonly SortedDictionary<int, ReachedKind> Kinds = new SortedDictionary<int, ReachedKind>();
         public readonly List<string> Errors = new List<string>();
         public readonly List<string> Warnings = new List<string>();
+        public bool LibraryHasKinds;
     }
 
+#if UNITY_7000_0_OR_NEWER
+    [global::Unity.Scripting.LifecycleManagement.NoAutoStaticsCleanup]
+#endif
     public static unsafe class TimelineKindSets
     {
         static readonly Dictionary<string, (DateTime Stamp, global::Tl.TimelineWorld World)> Libraries = new Dictionary<string, (DateTime, global::Tl.TimelineWorld)>();
@@ -40,12 +44,17 @@ namespace Tl.Unity.Editor
         {
             if (string.IsNullOrEmpty(path))
                 return string.Empty;
-            return Path.GetFullPath(Path.IsPathRooted(path) ? path : FileUtil.GetPhysicalPath(path));
+            return Path.GetFullPath(Path.IsPathRooted(path) ? path : FileUtil.GetPhysicalPath(path)).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+
+        public static string LibraryFile(TimelineLibraryAsset library)
+        {
+            return (library.Folder ?? string.Empty).TrimEnd('/', '\\') + "/game.tlib";
         }
 
         public static global::Tl.TimelineWorld Load(TimelineLibraryAsset library)
         {
-            var file = Path.Combine(PhysicalPath(library.Folder), "game.tlib");
+            var file = PhysicalPath(LibraryFile(library));
             if (!File.Exists(file))
                 throw new FileNotFoundException("Timeline library '" + library.name + "' has no game.tlib in '" + library.Folder + "'.", file);
             var stamp = File.GetLastWriteTimeUtc(file);
@@ -65,7 +74,7 @@ namespace Tl.Unity.Editor
                 return null;
             if (!string.IsNullOrEmpty(library.GameAssembly))
                 return Type.GetType(library.TimelineIds + ", " + library.GameAssembly, false);
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var assembly in TlAssemblies.Loaded())
             {
                 var type = assembly.GetType(library.TimelineIds, false);
                 if (type != null)
@@ -162,6 +171,7 @@ namespace Tl.Unity.Editor
                 return plan;
             }
             var view = Load(library).View;
+            plan.LibraryHasKinds = !view.Kinds.IsEmpty;
             var roots = new List<ushort>();
             AddTimelines(player.StartWith, "start-with", ids, plan, roots, plan.Starts);
             AddTimelines(player.MayStart, "may-start", ids, plan, roots, null);
@@ -181,6 +191,8 @@ namespace Tl.Unity.Editor
                     AddNamedKind(kind == null ? null : kind.Name, "component '" + component.Name + "' [RequiresKinds]", registry, plan);
             }
             var profile = player.Profile;
+            if (profile != null && library.KindSets == KindSets.Exact)
+                plan.Warnings.Add("has Profile '" + profile.name + "', but library '" + library.name + "' uses Exact kind sets, so the profile is ignored. Set Kind Sets to Union Per Profile to use it.");
             if (profile != null && library.KindSets == KindSets.UnionPerProfile)
             {
                 var declared = new HashSet<int>();

@@ -108,29 +108,43 @@ namespace Tl.Unity.Editor
         {
             if (string.IsNullOrEmpty(output))
                 throw new InvalidOperationException("Kinds File is empty.");
-            var arguments = "kinds --library " + Quote(folder) + " --namespace " + ns + " --out " + Quote(output) + " --assembly " + Quote(assembly) + " --diagnostics json";
+            if (string.IsNullOrEmpty(ns))
+                throw new InvalidOperationException("Namespace is empty.");
             var command = string.IsNullOrEmpty(tlb) ? "tlb" : tlb;
-            if (command.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-            {
-                arguments = Quote(command) + " " + arguments;
-                command = "dotnet";
-            }
-            var start = new ProcessStartInfo(command, arguments)
+            var start = new ProcessStartInfo
             {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
             };
+            if (command.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            {
+                start.FileName = "dotnet";
+                start.ArgumentList.Add(command);
+            }
+            else
+                start.FileName = command;
+            foreach (var argument in new[] { "kinds", "--library", folder, "--namespace", ns, "--out", output, "--assembly", assembly, "--diagnostics", "json" })
+                start.ArgumentList.Add(argument);
             string stdout, stderr;
             int exit;
             try
             {
                 using var process = Process.Start(start);
+                var errors = process.StandardError.ReadToEndAsync();
                 stdout = process.StandardOutput.ReadToEnd();
-                stderr = process.StandardError.ReadToEnd();
-                process.WaitForExit();
+                if (!process.WaitForExit(120000))
+                {
+                    process.Kill();
+                    throw new InvalidOperationException("tlb did not finish in 120 s.");
+                }
+                stderr = errors.Result;
                 exit = process.ExitCode;
+            }
+            catch (InvalidOperationException)
+            {
+                throw;
             }
             catch (Exception error)
             {
@@ -138,10 +152,15 @@ namespace Tl.Unity.Editor
             }
             if (exit != 0)
                 throw new InvalidOperationException("tlb exited " + exit + ": " + (stderr.Length > 0 ? stderr : stdout).Trim());
-            return JsonUtility.FromJson<Result>(stdout.Trim());
+            var json = string.Empty;
+            foreach (var line in stdout.Split('\n'))
+                if (line.TrimStart().StartsWith("{", StringComparison.Ordinal))
+                    json = line.Trim();
+            var result = json.Length == 0 ? null : JsonUtility.FromJson<Result>(json);
+            if (result == null || result.kinds == null)
+                throw new InvalidOperationException("tlb printed no kinds report. It may be too old for the kinds command. Output: " + stdout.Trim());
+            return result;
         }
-
-        static string Quote(string path) => "\"" + path + "\"";
     }
 
     sealed class KindCapacityPostprocessor : AssetPostprocessor
@@ -156,14 +175,20 @@ namespace Tl.Unity.Editor
                 var folder = TimelineKindSets.PhysicalPath(library.Folder) + Path.DirectorySeparatorChar;
                 if (!Touches(folder, imported) && !Touches(folder, deleted) && !Touches(folder, moved) && !Touches(folder, movedFrom))
                     continue;
-                try
+                var pending = library;
+                EditorApplication.delayCall += () =>
                 {
-                    KindCapacityBake.Bake(library);
-                }
-                catch (Exception error)
-                {
-                    Debug.LogError("Tl kind capacities: library '" + library.name + "': " + error.Message, library);
-                }
+                    if (pending == null)
+                        return;
+                    try
+                    {
+                        KindCapacityBake.Bake(pending);
+                    }
+                    catch (Exception error)
+                    {
+                        Debug.LogError("Tl kind capacities: library '" + pending.name + "': " + error.Message, pending);
+                    }
+                };
             }
         }
 
@@ -181,7 +206,12 @@ namespace Tl.Unity.Editor
     {
         static KindCapacityAfterCompile()
         {
-            AssemblyReloadEvents.afterAssemblyReload += KindCapacityBake.BakeAll;
+            AssemblyReloadEvents.afterAssemblyReload += () =>
+            {
+                if (AssetDatabase.IsAssetImportWorkerProcess() || EditorApplication.isPlayingOrWillChangePlaymode)
+                    return;
+                KindCapacityBake.BakeAll();
+            };
         }
     }
 }

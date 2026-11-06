@@ -1,0 +1,10 @@
+{
+  "tickRate": 60,
+  "channels": [
+    "locomotion",
+    "action"
+  ],
+  "timelines": [
+    "run_legacy.json"
+  ]
+}
