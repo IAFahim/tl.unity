@@ -44,12 +44,15 @@ during that step's Tick. Pulses to an entity without the kind are counted in
 `Tick.DroppedPulses` and dropped, as are starts for unreachable timelines
 (`Tick.DroppedStarts`).
 
-## Sizing
-
-`Kinds.g.cs` pins the inline capacity per kind (test game: Damage 3, Lift 2,
-Locomotion 2, StatChange 3). The generator sizes each entry buffer from it;
-buffers that overflow spill to the heap and `TrimExcess` moves them back
-inline once the pulses are applied (measured working on Unity in K0).
+ The editor bake shells out to `tlb kinds --library <dir|library.json> --namespace <ns>`
+ (stdout is the `Kinds.g.cs` source; the capacity table goes to stderr; failures
+ exit 1 with stderr only and touch no file) and refreshes the AssetDatabase only
+ when the file changed, so capacities recompile only when a worst case actually
+ changes. Contract owner: TlbKinds in the tl repo (draft PR IAFahim/tl#572;
+ golden reference `tools/Tl.Bake.Tests/KindsCliTests.cs`). Verified from this
+ repo's side: `KindsCliTests` 8/8 green on that branch, and `tlb kinds` over the
+ .NET kind library prints Damage 3 / Lift 2 / Locomotion 2 / StatChange 3 — the
+ same capacities this repo's `Tests/Kinds/Game/Kinds.g.cs` pins.
 Rules of thumb: tens of kinds, not hundreds; capacity 0 for rare kinds; let
 the report guide the rest.
 
