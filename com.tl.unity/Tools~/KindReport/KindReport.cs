@@ -53,7 +53,6 @@ namespace Tl.Tools
             return new KindReportWarning { Archetype = archetype, Code = code, Detail = detail };
         }
 
-// SCAFFOLD (tl#557)
         public static List<KindArchetypeRow> CaptureRows(World world, KindRegistry registry)
         {
             var rows = new List<KindArchetypeRow>();
