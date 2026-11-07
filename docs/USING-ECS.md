@@ -407,8 +407,8 @@ The generator also writes a registration class for these components. Unity
 registers an assembly's component types from its source files, which does not
 include generator output, so the package's IL post-processor
 (`Unity.Tl.CodeGen`) calls that class from the assembly's load hook. You do
-nothing for it; it runs in the Editor, in the SubScene import worker and in
-Play mode.
+nothing for it; it runs in the Editor, in the SubScene import worker, in
+Play mode and in player builds.
 
 ### Step 6: the systems
 
@@ -723,6 +723,11 @@ on 7000.0.0a16 (1 passed). After step 70 it asserts:
 | `Walker` cues | `Count` 2, `Last` 2 |
 | `X` at step 50 equals `X` at step 30 | ten steps back undo ten steps forward |
 | `DroppedPulses`, `DroppedStarts` | 0 and 0 |
+
+The same demo built as a Windows player with `BuildPipeline.BuildPlayer`
+(scene `Demo.unity`, package from a local path) gives these values in both a
+CoreCLR and an IL2CPP player run with `-batchmode -nographics`, with no
+warning in the player log (7000.0.0a16).
 
 ## 4. Reading other entities
 

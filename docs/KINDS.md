@@ -90,7 +90,8 @@ it lives on the Tick system's entity), call `BeginPulses(n)`, write with
 `DamageKind.Pulses(sender.Writer).To(target, value)` (from Burst code or a
 job; pass the job's handle to `AddPulseWriter`). Pulses to an entity without
 the kind are counted in `DroppedPulses` and dropped, as are starts for
-unreachable timelines (`DroppedStarts`), both on `TimelineKindTick`. A count
+unreachable timelines (`DroppedStarts`), both on `TimelineKindTick`; reading
+either completes the Tick's last jobs first, so read them on the main thread. A count
 above zero usually means a missing `[RequiresKinds]`, Kinds list entry or May
 Start name (see Authoring).
 
