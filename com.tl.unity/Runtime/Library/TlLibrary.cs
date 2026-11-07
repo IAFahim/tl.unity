@@ -55,6 +55,31 @@ namespace Tl.Unity
 
         public List<ushort> Swapped { get; } = new List<ushort>();
 
+        public static TlLibrary FromBytes(byte[] library)
+        {
+            var result = new TlLibrary();
+            var errors = new List<string>();
+            if (library == null || !result.Load(library, errors))
+            {
+                result.Dispose();
+                throw new ArgumentException(errors.Count > 0 ? errors[0] : "Tl: no library bytes.");
+            }
+            result.Bytes = library;
+            result.Generation = 1;
+            return result;
+        }
+
+        public Entity Publish(EntityManager manager)
+        {
+            if (!IsLoaded)
+                throw new InvalidOperationException("Tl: the library is not loaded.");
+            var entity = manager.CreateEntity();
+            manager.AddComponentData(entity, new TimelineStep { Forward = true });
+            manager.AddBuffer<ClosedPlayback>(entity);
+            manager.AddComponentData(entity, Component);
+            return entity;
+        }
+
         public bool Add(IReadOnlyList<BlobAssetReference<TlTimelineBlob>> blobs, List<string> errors)
         {
             if (_disposed)

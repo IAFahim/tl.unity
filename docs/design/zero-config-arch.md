@@ -806,3 +806,35 @@ offsets where exactly those values differ; the bake is deterministic, so the sit
 | Control demo (sample, `Dash When Far` clip + `StartDashWhenFar` Burst `IJobEntity`) | Dash starts at x 2.05, cube ends at x 4.0333, z 3.0500 |
 
 The five Force contract files are unchanged; the Control demo adds one optional file (`Control/DashWhenFar.cs`) to show the API.
+
+## 13. Phase 7 results (legacy path deleted, docs, installers)
+
+Deleted from the package: `TimelineLibraryAsset`, `TimelinePlayerAuthoring`, `KindProfile`, `[RequiresKinds]`, the whole old Timeline
+bridge (`TimelineBridgeAsset`, `TimelineDirectorAuthoring`, `TimelineBridgeBake`, `TimelineJson`, the `TlTrack<T>` runtime types),
+`KindCapacityBake` (the `tlb kinds` runner), `TimelineLibraryBootstrap`/`TimelineLibraryOwner`/`TimelineLibrarySystem` (statics, file path,
+`game.bytes`), the `Tl.Unity.Authoring` and `Tl.Unity.Generate` marker assemblies, the EcsDemo and PlainCSharp samples, and the tests of
+those paths (TimelineBridge, KindBakingTests, KindCapacityBake tests, the legacy SubScene scene test). `TimelineKindBakingSystem` is now an
+`ISystem`. The plain generator and its marker moved under `Tests/Plain/Generator` (plain host tests only). Root `END-TO-END.md`,
+`NEXT-TASK.md`, `WORK-REPORT.md` and `docs/TIMELINE-BRIDGE.md` are gone.
+
+Added: `TlLibrary.FromBytes` + `Publish` (tests and tools load a prebuilt library into a world; the KindGame and Direct harnesses use it,
+so the pinned hashes come from the same bytes as before), `Tl > Export Library` (`TlExport.Export`, a `game.tlib` for plain hosts),
+`eng/check-force-demo-sample.py` (guide code blocks equal the sample files, no legacy names in the sample; run by
+`eng/test-com-tl-unity.sh`) and `eng/check-samples-together.sh` (#23). The Kinds and Bullets player samples also need the scripting define
+`TL_UNITY_TESTS` besides the package tests, so importing every sample into a normal project compiles.
+
+Docs rewritten: `docs/USING-ECS.md`, `docs/UNITY-TIMELINE.md` (new), `docs/USING-PLAIN-CSHARP.md`, `docs/KINDS.md`, both READMEs.
+Installers in IAFahim/tl (`install/unity.ps1`, `install/unity.sh`): no .NET, no tl clone, no tool; they make a Universal 3D project from the
+editor's own URP template (`-createProject -cloneFromTemplate`), add the package git URL and the test framework, import the Force demo,
+build its scenes (added to the build list, Force Demo left open) and run its PlayMode tests.
+
+Grep (package outside `Tests/`, samples, `docs/*.md`, READMEs) for `TimelineLibraryAsset`, `TimelineBridge`, `TimelinePlayerAuthoring`,
+`TimelineLibraryBootstrap`, `KindCapacityBake`, `Kinds.g.cs`, `tlb`, `library.json`, `Timelines.g.cs`, `Tl.Unity.Generate` (marker),
+`RequiresKinds`, `KindProfile`, `game.bytes`: no hits. The design plans in `docs/design` keep the names as history. The ECS hash fixture
+(`Tests/Kinds`) keeps its packed library bytes, id constants and capacity constants as test data.
+
+| Check | Result |
+|---|---|
+| `eng/test-com-tl-unity.sh` | EditMode 46/46, PlayMode 54/54, 0 `error CS`, 0 warnings, both hashes green |
+| K bench | A 7.8/8.0, B 2.0/2.0, B0 0.6/0.6 ns/entity, 0 B |
+| `eng/check-samples-together.sh` on a URP project (all three samples imported) | 0 `error CS`, Force demo 4.0333, no library clash, PlayMode 2/2 |

@@ -10,8 +10,6 @@ namespace Tl.Unity.Editor
     {
         public override void Bake(PlayableDirector director)
         {
-            if (GetComponent<TimelinePlayerAuthoring>() != null)
-                return;
             var timelines = TlDirectorTimelines.Collect(this, director, GetComponent<TlAlsoPlays>());
             if (timelines.Count == 0)
                 return;

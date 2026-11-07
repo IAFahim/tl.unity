@@ -509,6 +509,28 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
+        public void ExportLibraryWritesATlibThatLoads()
+        {
+            var push = Timeline("Push");
+            Clip(ForceTrack(push), 0, 2, 4f);
+            var dash = Timeline("Dash");
+            Clip(ForceTrack(dash), 0, 1, 8f);
+            ThenPlayClipOn(push, dash, null);
+            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tl-export-test.tlib");
+            try
+            {
+                var names = TlExport.Export(new[] { push }, path);
+                CollectionAssert.AreEquivalent(new[] { "Push", "Dash" }, names, "the clip's Dash comes along");
+                using var library = TlLibrary.FromBytes(System.IO.File.ReadAllBytes(path));
+                Assert.IsTrue(library.IsLoaded);
+            }
+            finally
+            {
+                System.IO.File.Delete(path);
+            }
+        }
+
+        [Test]
         public void TheProjectSettingDefaultsToSixtyTicksPerSecond()
         {
             Assert.AreEqual(60, TlProjectSettings.DefaultTicksPerSecond);

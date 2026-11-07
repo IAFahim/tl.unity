@@ -8,6 +8,7 @@
   ],
   "autoReferenced": true,
   "defineConstraints": [
-    "UNITY_INCLUDE_TESTS"
+    "UNITY_INCLUDE_TESTS",
+    "TL_UNITY_TESTS"
   ]
 }

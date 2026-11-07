@@ -11,7 +11,6 @@ namespace Tl.Unity.CodeGen
 {
     public sealed class TypeRegistrationPostProcessor : ILPostProcessor
     {
-        const string MarkerAssembly = "Tl.Unity.Generate";
         const string RuntimeAssembly = "Tl.Unity";
         const string RegistrationNamespace = "TlUnityGenerated";
         const string RegistrationPrefix = "TlUnityTypeRegistration_";
@@ -29,7 +28,7 @@ namespace Tl.Unity.CodeGen
             foreach (var reference in compiledAssembly.References)
             {
                 var name = Path.GetFileNameWithoutExtension(reference);
-                if (name == MarkerAssembly || name == RuntimeAssembly)
+                if (name == RuntimeAssembly)
                     return true;
             }
             return false;

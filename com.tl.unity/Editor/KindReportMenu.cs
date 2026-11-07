@@ -26,7 +26,7 @@ namespace Tl.Unity.Editor
                     Debug.Log(text);
             }
             if (shown == 0)
-                Debug.Log("Tl Kind Report: no world has entities with kinds. Open a scene whose subscene bakes Timeline Players, or enter Play mode.");
+                Debug.Log("Tl Kind Report: no world has entities with kinds. Open a SubScene with a Playable Director that plays Tl tracks, or enter Play mode.");
         }
     }
 }

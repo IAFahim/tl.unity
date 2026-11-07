@@ -50,8 +50,8 @@ namespace Tl.Unity.Bake
             return new TlKindCatalog(catalog, knobs);
         }
 
-        public static byte[] KindBytes(string name, byte[] tlb, TlKindCatalog catalog)
-            => TlKindBytes.Write(KindTimeline.Analyze(name, tlb, catalog.Value), catalog);
+        public static byte[] KindBytes(string name, byte[] timelineBytes, TlKindCatalog catalog)
+            => TlKindBytes.Write(KindTimeline.Analyze(name, timelineBytes, catalog.Value), catalog);
 
         static int GamePulses(List<Assembly> assemblies, string fullName)
         {
@@ -69,8 +69,8 @@ namespace Tl.Unity.Bake
             return 0;
         }
 
-        public static TlKindAnalysis Analyze(string name, byte[] tlb, TlKindCatalog catalog)
-            => new TlKindAnalysis(KindTimeline.Analyze(name, tlb, catalog.Value));
+        public static TlKindAnalysis Analyze(string name, byte[] timelineBytes, TlKindCatalog catalog)
+            => new TlKindAnalysis(KindTimeline.Analyze(name, timelineBytes, catalog.Value));
     }
 
     public sealed class TlKindCatalog

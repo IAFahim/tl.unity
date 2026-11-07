@@ -16,13 +16,14 @@ namespace DirectGame
         public readonly Entity[] Rows;
         readonly SystemHandle _tick;
         readonly SystemHandle _apply;
+        readonly TlLibrary _library;
 
         public DirectWorld(int count)
         {
             World = new World("TlDirect");
             Entities = World.EntityManager;
-            TimelineLibraryBootstrap.Use("direct.tlib", DirectLibraryBytes.Bytes());
-            World.CreateSystem<TimelineLibrarySystem>().Update(World.Unmanaged);
+            _library = TlLibrary.FromBytes(DirectLibraryBytes.Bytes());
+            _library.Publish(Entities);
             _tick = World.CreateSystem<TimelineKindTickSystem>();
             _apply = World.CreateSystem<TlKindSystem<TlAuto_Tl_Unity_Direct_Jobs>>();
             Rows = new Entity[count];
@@ -61,9 +62,9 @@ namespace DirectGame
         public void Dispose()
         {
             Entities.CompleteAllTrackedJobs();
-            TimelineLibraryBootstrap.Release();
             if (World.IsCreated)
                 World.Dispose();
+            _library.Dispose();
         }
     }
 }

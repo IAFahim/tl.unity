@@ -4,7 +4,6 @@
   "references": [
     "Tl.Core",
     "Tl.Unity",
-    "Tl.Unity.Authoring",
     "Unity.Collections",
     "Unity.Entities",
     "Unity.Entities.Hybrid"

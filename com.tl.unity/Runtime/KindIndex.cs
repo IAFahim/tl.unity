@@ -67,9 +67,9 @@ namespace Tl.Unity
             var name = Sec.NameOf(kind);
             var row = Sec.Kinds[kind];
             if (row.ValueBytes != (uint)descriptor.ValueBytes)
-                throw new InvalidOperationException("Kind '" + name + "' is " + descriptor.ValueBytes + " bytes in code but " + row.ValueBytes + " in the loaded library; rebake the library with tlb.");
+                throw new InvalidOperationException("Kind '" + name + "' is " + descriptor.ValueBytes + " bytes in code but " + row.ValueBytes + " in the loaded library; the timelines were baked for other code, let the SubScene rebake after the compile.");
             if (row.EntryBytes != (uint)descriptor.EntryBytes || UnsafeUtility.SizeOf(descriptor.Entry) != descriptor.EntryBytes)
-                throw new InvalidOperationException("Kind '" + name + "' entry is " + UnsafeUtility.SizeOf(descriptor.Entry) + " bytes in code but " + row.EntryBytes + " in the loaded library; rebake the library with tlb.");
+                throw new InvalidOperationException("Kind '" + name + "' entry is " + UnsafeUtility.SizeOf(descriptor.Entry) + " bytes in code but " + row.EntryBytes + " in the loaded library; the timelines were baked for other code, let the SubScene rebake after the compile.");
             var have = new System.Text.StringBuilder();
             for (var f = 0; f < Sec.FeederCount; f++)
             {
@@ -78,7 +78,7 @@ namespace Tl.Unity
                 have.Append(Sec.Text(Sec.Feeders[f].ConsumerOffset, Sec.Feeders[f].ConsumerLength)).Append('.').Append(Sec.Text(Sec.Feeders[f].MethodOffset, Sec.Feeders[f].MethodLength)).Append(':').Append(Sec.Feeders[f].Trigger);
             }
             if (have.ToString() != descriptor.Signature)
-                throw new InvalidOperationException("Kind '" + name + "' feeders in the loaded library differ from the compiled game; rebake the library with tlb.\nlibrary: " + have.ToString().Replace('\n', ' ') + "\ncode:    " + descriptor.Signature.Replace('\n', ' '));
+                throw new InvalidOperationException("Kind '" + name + "' feeders in the loaded library differ from the compiled game; the timelines were baked for other code, let the SubScene rebake after the compile.\nlibrary: " + have.ToString().Replace('\n', ' ') + "\ncode:    " + descriptor.Signature.Replace('\n', ' '));
         }
 
         public static int IdOf(string name)

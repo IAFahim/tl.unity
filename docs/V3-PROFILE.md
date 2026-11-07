@@ -16,7 +16,7 @@ The gate builds the pinned generator and baker, checks every fixture word agains
 Use `samples/Game.Domain/Game.Domain.csproj` as the portable domain template. Keep its .NET Standard 2.1 target, runtime reference, pinned `TlGenAssembly` and `CompileGeneratedBindings` target. Add ordinary unmanaged structs and `ITrack` consumers. The CLI's `unity-entities` backend emits bindings automatically. Package the compiled domain with a new version and install it through NuGetForUnity. Bake against the corresponding .NET game domain assembly, or the portable assembly with the pinned baker; field layouts are checked at preparation. The Studio worker runs game code out of the editor service process.
 
 ```csharp
-using var asset = TimelineAsset.LoadOwned(tlbBytes);
+using var asset = TimelineAsset.LoadOwned(libraryBytes);
 var view = Timeline<RecoilTrack, RecoilClip>.Prepare(asset);
 var columns = new ColumnSet();
 columns.Add<RecoilFx>(effects);

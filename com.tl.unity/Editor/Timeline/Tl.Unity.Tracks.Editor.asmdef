@@ -4,7 +4,6 @@
   "references": [
     "Tl.Core",
     "Tl.Unity",
-    "Tl.Unity.Authoring",
     "Tl.Unity.Bake",
     "Tl.Unity.Editor",
     "Tl.Unity.Tracks",

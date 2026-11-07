@@ -1,0 +1,9 @@
+{
+  "name": "Tl.Unity.Generate.Plain",
+  "rootNamespace": "Tl.Unity.Generate",
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "noEngineReferences": true
+}

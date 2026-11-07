@@ -104,7 +104,7 @@ namespace Tl.Gen.Unity
                 context.AddSource(UnityRegistrationEmitter.FileName, SourceText.From(UnityRegistrationEmitter.Emit(components, id), System.Text.Encoding.UTF8));
             if (kinds.Count != 0)
             {
-                context.AddSource("TlUnity.Kinds.g.cs", SourceText.From(UnityKindEmitter.EmitKinds(assignments, kinds, new List<string>(events), id), System.Text.Encoding.UTF8));
+                context.AddSource("TlUnity.KindTypes.g.cs", SourceText.From(UnityKindEmitter.EmitKinds(assignments, kinds, new List<string>(events), id), System.Text.Encoding.UTF8));
             }
             foreach (var model in models)
             {

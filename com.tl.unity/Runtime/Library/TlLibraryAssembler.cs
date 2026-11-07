@@ -48,32 +48,32 @@ namespace Tl.Unity
             return Emit(parts, tlbs, tickRate, KindSection(parts, tlbs, settings));
         }
 
-        public static uint ChannelOf(byte[] tlb)
+        public static uint ChannelOf(byte[] timelineBytes)
         {
-            return tlb.Length >= TlbHeaderBytes && U32(tlb, 4) == TlbVersionWithHeader ? U32(tlb, TlbChannelAt) : 0u;
+            return timelineBytes.Length >= TlbHeaderBytes && U32(timelineBytes, 4) == TlbVersionWithHeader ? U32(timelineBytes, TlbChannelAt) : 0u;
         }
 
-        public static uint NextOf(byte[] tlb)
+        public static uint NextOf(byte[] timelineBytes)
         {
-            return tlb.Length >= TlbHeaderBytes && U32(tlb, 4) == TlbVersionWithHeader ? U32(tlb, TlbNextAt) : 0u;
+            return timelineBytes.Length >= TlbHeaderBytes && U32(timelineBytes, 4) == TlbVersionWithHeader ? U32(timelineBytes, TlbNextAt) : 0u;
         }
 
         static byte[] Patched(TlLibraryPart part, int count)
         {
             if (part.Tlb == null || part.Tlb.Length == 0)
                 throw new InvalidOperationException("Tl: timeline '" + part.Name + "' has no TLB bytes.");
-            var tlb = (byte[])part.Tlb.Clone();
-            if (tlb.Length >= TlbHeaderBytes && U32(tlb, 4) == TlbVersionWithHeader && U32(tlb, TlbNextAt) != 0)
-                BinaryPrimitives.WriteUInt32LittleEndian(tlb.AsSpan(TlbNextAt), part.Next <= count ? part.Next : 0u);
+            var timelineBytes = (byte[])part.Tlb.Clone();
+            if (timelineBytes.Length >= TlbHeaderBytes && U32(timelineBytes, 4) == TlbVersionWithHeader && U32(timelineBytes, TlbNextAt) != 0)
+                BinaryPrimitives.WriteUInt32LittleEndian(timelineBytes.AsSpan(TlbNextAt), part.Next <= count ? part.Next : 0u);
             if (part.Refs != null)
                 for (var i = 0; i + 1 < part.Refs.Length; i += 2)
                 {
                     var at = (int)part.Refs[i];
-                    if (at < 0 || at + 2 > tlb.Length)
+                    if (at < 0 || at + 2 > timelineBytes.Length)
                         throw new InvalidOperationException("Tl: timeline '" + part.Name + "' has a timeline reference outside its data; rebake it.");
-                    BinaryPrimitives.WriteUInt16LittleEndian(tlb.AsSpan(at), part.Refs[i + 1] <= count ? (ushort)part.Refs[i + 1] : (ushort)0);
+                    BinaryPrimitives.WriteUInt16LittleEndian(timelineBytes.AsSpan(at), part.Refs[i + 1] <= count ? (ushort)part.Refs[i + 1] : (ushort)0);
                 }
-            return tlb;
+            return timelineBytes;
         }
 
         static byte[] KindSection(IReadOnlyList<TlLibraryPart> parts, byte[][] tlbs, TlLibrarySettings settings)

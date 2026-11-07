@@ -71,6 +71,7 @@ namespace KindGame
         public readonly Entity[] Rows;
         readonly EntityQuery _step;
         readonly bool _events;
+        readonly TlLibrary _library;
         bool _forward = true;
 
         public KindWorld(int count, bool events = false) : this(count, events, null)
@@ -84,9 +85,8 @@ namespace KindGame
             Entities = World.EntityManager;
             if (library == null)
             {
-                TimelineLibraryBootstrap.Use("kinds.tlib", KindLibraryBytes.Bytes());
-                LibraryHandle = World.CreateSystem<TimelineLibrarySystem>();
-                LibraryHandle.Update(World.Unmanaged);
+                _library = TlLibrary.FromBytes(KindLibraryBytes.Bytes());
+                _library.Publish(Entities);
             }
             else
                 LibraryHandle = library(World);
@@ -223,9 +223,9 @@ namespace KindGame
         public void Dispose()
         {
             Entities.CompleteAllTrackedJobs();
-            TimelineLibraryBootstrap.Release();
             if (World.IsCreated)
                 World.Dispose();
+            _library?.Dispose();
         }
     }
 }

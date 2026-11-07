@@ -22,7 +22,7 @@ sources_hash() {
   } | git hash-object --stdin
 }
 
-dll_path() { case "${1##*:}" in Runtime) printf '%s/com.tl.unity/Runtime/%s.dll' "$root" "${1%%:*}" ;; *) printf '%s/com.tl.unity/Generators/%s/%s.dll' "$root" "${1##*:}" "${1%%:*}" ;; esac; }
+dll_path() { case "${1##*:}" in Runtime) printf '%s/com.tl.unity/Runtime/%s.dll' "$root" "${1%%:*}" ;; *) printf '%s/com.tl.unity/Tests/Plain/Generator/%s.dll' "$root" "${1%%:*}" ;; esac; }
 
 stamp_text() {
   printf 'tl-kinds=%s\n' "$commit"

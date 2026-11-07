@@ -9,17 +9,17 @@ namespace Tl.Unity
 {
     public static unsafe class TlTimelineBlobs
     {
-        public static BlobAssetReference<TlTimelineBlob> Create(Hash128 asset, uint tickRate, string name, byte[] tlb, byte[] kinds, Hash128[] nextAssets)
+        public static BlobAssetReference<TlTimelineBlob> Create(Hash128 asset, uint tickRate, string name, byte[] timelineBytes, byte[] kinds, Hash128[] nextAssets)
         {
-            return Create(asset, tickRate, name, tlb, kinds, nextAssets, null);
+            return Create(asset, tickRate, name, timelineBytes, kinds, nextAssets, null);
         }
 
-        public static BlobAssetReference<TlTimelineBlob> Create(Hash128 asset, uint tickRate, string name, byte[] tlb, byte[] kinds, Hash128[] nextAssets, uint[] refSites)
+        public static BlobAssetReference<TlTimelineBlob> Create(Hash128 asset, uint tickRate, string name, byte[] timelineBytes, byte[] kinds, Hash128[] nextAssets, uint[] refSites)
         {
             if (string.IsNullOrEmpty(name))
                 throw new ArgumentException("A timeline blob needs a name.", nameof(name));
-            if (tlb == null || tlb.Length == 0)
-                throw new ArgumentException("Timeline '" + name + "' has no TLB bytes.", nameof(tlb));
+            if (timelineBytes == null || timelineBytes.Length == 0)
+                throw new ArgumentException("Timeline '" + name + "' has no TLB bytes.", nameof(timelineBytes));
             if (tickRate == 0)
                 throw new ArgumentException("Timeline '" + name + "' has tick rate 0.", nameof(tickRate));
             kinds ??= Array.Empty<byte>();
@@ -33,7 +33,7 @@ namespace Tl.Unity
                 root.Asset = asset;
                 root.TickRate = tickRate;
                 Copy(ref builder, ref root.Name, nameBytes);
-                Copy(ref builder, ref root.Tlb, tlb);
+                Copy(ref builder, ref root.Tlb, timelineBytes);
                 Copy(ref builder, ref root.Kinds, kinds);
                 var next = builder.Allocate(ref root.NextAssets, nextAssets.Length);
                 for (var i = 0; i < nextAssets.Length; i++)
@@ -41,7 +41,7 @@ namespace Tl.Unity
                 var sites = builder.Allocate(ref root.RefSites, refSites.Length);
                 for (var i = 0; i < refSites.Length; i++)
                     sites[i] = refSites[i];
-                root.Content = ContentOf(tickRate, nameBytes, tlb, kinds, nextAssets, refSites);
+                root.Content = ContentOf(tickRate, nameBytes, timelineBytes, kinds, nextAssets, refSites);
                 return builder.CreateBlobAssetReference<TlTimelineBlob>(Allocator.Persistent);
             }
             finally
@@ -72,12 +72,12 @@ namespace Tl.Unity
                     UnsafeUtility.MemCpy(array.GetUnsafePtr(), from, source.Length);
         }
 
-        static Hash128 ContentOf(uint tickRate, byte[] name, byte[] tlb, byte[] kinds, Hash128[] next, uint[] sites)
+        static Hash128 ContentOf(uint tickRate, byte[] name, byte[] timelineBytes, byte[] kinds, Hash128[] next, uint[] sites)
         {
             using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             sha.AppendData(BitConverter.GetBytes(tickRate));
             Feed(sha, name);
-            Feed(sha, tlb);
+            Feed(sha, timelineBytes);
             Feed(sha, kinds);
             foreach (var asset in next)
                 Feed(sha, Encoding.ASCII.GetBytes(asset.ToString()));

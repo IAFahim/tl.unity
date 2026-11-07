@@ -24,6 +24,8 @@ namespace Tl
 
         public Entity Entity => _entity;
 
+        public bool IsActive => _baker != null;
+
         public void AddComponent<T>() where T : unmanaged, IComponentData
         {
             if (_added.Add(ComponentType.ReadWrite<T>()))

@@ -4,7 +4,6 @@
   "references": [
     "Tl.Core",
     "Tl.Unity",
-    "Tl.Unity.Generate",
     "Tl.Unity.Kinds",
     "Unity.Burst",
     "Unity.Collections",

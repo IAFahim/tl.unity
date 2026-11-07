@@ -121,7 +121,7 @@ namespace Tl.Unity
             {
                 if (!_published.IsEmptyIgnoreFilter)
                 {
-                    errors.Add("Tl: this world already has a timeline library from TimelineLibraryBootstrap; the timelines baked into SubScenes are not used. Remove the old library setup.");
+                    errors.Add("Tl: this world already has a timeline library made by other code; the timelines baked into SubScenes are not used.");
                     return false;
                 }
                 manager.AddComponentData(holder, new TimelineStep { Forward = true });

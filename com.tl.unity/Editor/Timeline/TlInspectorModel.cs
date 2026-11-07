@@ -57,13 +57,18 @@ namespace Tl.Unity.Editor
 
         public static List<TimelineAsset> Plays(PlayableDirector director, TlAlsoPlays alsoPlays)
         {
-            var result = new List<TimelineAsset>();
-            var queue = new Queue<TimelineAsset>();
+            var roots = new List<TimelineAsset>();
             if (director.playableAsset is TimelineAsset first)
-                queue.Enqueue(first);
+                roots.Add(first);
             if (alsoPlays != null)
-                foreach (var other in alsoPlays.Timelines)
-                    queue.Enqueue(other);
+                roots.AddRange(alsoPlays.Timelines);
+            return Closure(roots);
+        }
+
+        public static List<TimelineAsset> Closure(IEnumerable<TimelineAsset> roots)
+        {
+            var result = new List<TimelineAsset>();
+            var queue = new Queue<TimelineAsset>(roots);
             while (queue.Count > 0)
             {
                 var timeline = queue.Dequeue();

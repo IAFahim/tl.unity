@@ -2,7 +2,7 @@
   "name": "com.tl.unity",
   "version": "0.2.0-preview.1",
   "displayName": "Tl Unity Playback",
-  "description": "Tl 4 playback-model runtime for Unity ECS with Burst: playback buffers, library singleton, simulation systems, and generated system jobs. Compiles against Tl.Core netstandard2.1 (P3+). Editor authoring is P6.",
+  "description": "Tl timelines for Unity ECS with Burst. Designers build timelines in Unity's Timeline window with Tl tracks; a Playable Director in a SubScene bakes them, and Burst ISystems play them. Coders write a clip struct, a kind and a track; no extra files, assets or steps.",
   "unity": "7000.0",
   "author": {
     "name": "IAFahim",
@@ -22,23 +22,13 @@
     },
     {
       "displayName": "Kinds IL2CPP player",
-      "description": "Runs the 600-step kind script on a Linux IL2CPP player and prints whether its hash equals the .NET hash.",
+      "description": "Runs the 600-step kind script and the events script in an IL2CPP or CoreCLR player and prints whether both hashes equal the .NET hashes. Needs the package tests (testables).",
       "path": "Samples~/KindsIL2CPP"
     },
     {
       "displayName": "Bullets IL2CPP player",
-      "description": "Sums game-code Damage pulses with timeline hit pulses into one Health write and prints whether its hash equals the .NET hash.",
+      "description": "Sums game-code Damage pulses with timeline hit pulses into one Health write in a player and prints whether its hash equals the .NET hash. Needs the package tests (testables).",
       "path": "Samples~/BulletsIL2CPP"
-    },
-    {
-      "displayName": "ECS demo",
-      "description": "The USING-ECS demo: a walker that runs, dashes and takes damage, a dummy that only takes damage, two cues and an exact rewind, as Burst ISystems, with an editor setup script and a PlayMode test.",
-      "path": "Samples~/EcsDemo"
-    },
-    {
-      "displayName": "Plain C# host",
-      "description": "Plays Tl timelines from a MonoBehaviour with no ECS: a managed host, a library loaded from game.bytes, and a Transform driven from FixedUpdate.",
-      "path": "Samples~/PlainCSharp"
     }
   ]
 }

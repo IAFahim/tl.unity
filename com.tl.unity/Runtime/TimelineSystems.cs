@@ -11,38 +11,6 @@ namespace Tl.Unity
     {
     }
 
-    [UpdateInGroup(typeof(InitializationSystemGroup))]
-    public partial struct TimelineLibrarySystem : ISystem
-    {
-        EntityQuery _blobLibrary;
-
-        public void OnCreate(ref SystemState state)
-        {
-            _blobLibrary = state.GetEntityQuery(ComponentType.ReadOnly<TlLibraryHandle>());
-            TlGeneratedBootstrap.InstallAll();
-            TimelineLibraryBootstrap.LoadSource(state.EntityManager);
-        }
-
-        public void OnUpdate(ref SystemState state)
-        {
-            if (!_blobLibrary.IsEmptyIgnoreFilter)
-                return;
-            var loaded = TimelineLibraryBootstrap.LoadSource(state.EntityManager);
-#if UNITY_EDITOR
-            if (loaded)
-                TimelineLibraryBootstrap.PollReload(state.EntityManager);
-#else
-            if (loaded)
-                state.Enabled = false;
-#endif
-        }
-
-        public void OnDestroy(ref SystemState state)
-        {
-            TimelineLibraryBootstrap.Forget(state.EntityManager);
-        }
-    }
-
     [BurstCompile]
     [UpdateInGroup(typeof(TimelineSimulationGroup))]
     public partial struct TimelineRequestSystem : ISystem

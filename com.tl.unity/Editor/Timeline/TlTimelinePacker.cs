@@ -63,7 +63,8 @@ namespace Tl.Unity.Editor
                     var end = Math.Max(start + 1, Ticks(clip.end, tickRate));
                     try
                     {
-                        data.Bake(ref baker);
+                        if (baker.IsActive)
+                            data.Bake(ref baker);
                     }
                     catch (Exception error)
                     {
@@ -84,12 +85,12 @@ namespace Tl.Unity.Editor
             for (var i = 0; i < names.Length; i++)
                 names[i] = i == 0 && typed.Next != null ? typed.Next : "~" + i;
             var manifest = TlBake.Manifest(names, channels, tickRate);
-            var tlb = Bake(typed, manifest, written, refs, 0);
+            var timelineBytes = Bake(typed, manifest, written, refs, 0);
             uint[] sites = null;
             if (written.Any(w => TlDirectorTimelines.IdFields(w.data).Any()))
-                sites = Sites(tlb, Bake(typed, manifest, written, refs, Marker), refs.Count);
-            kindMask = TlBake.Analyze(name, tlb, catalog).KindMask;
-            return TlTimelineBlobs.Create(AssetOf(timeline), tickRate, name, tlb, TlBake.KindBytes(name, tlb, catalog), refs.Select(AssetOf).ToArray(), sites);
+                sites = Sites(timelineBytes, Bake(typed, manifest, written, refs, Marker), refs.Count);
+            kindMask = TlBake.Analyze(name, timelineBytes, catalog).KindMask;
+            return TlTimelineBlobs.Create(AssetOf(timeline), tickRate, name, timelineBytes, TlBake.KindBytes(name, timelineBytes, catalog), refs.Select(AssetOf).ToArray(), sites);
         }
 
         const ushort Marker = 0x8000;
