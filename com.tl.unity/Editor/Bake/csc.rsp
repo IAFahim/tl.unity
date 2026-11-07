@@ -1,0 +1,3 @@
+-langversion:latest
+-nullable:enable
+-nowarn:UAL0010,UAL0013,UAC0005

@@ -10,6 +10,7 @@ probe="${TL_UNITY_PROBE:-${XDG_CACHE_HOME:-$HOME/.cache}/tl-unity-probe-$version
 out="$root/artifacts/com-tl-unity"
 bash "$root/eng/sync-tl-core.sh" --check || exit 1
 bash "$root/eng/build-generators.sh" --check || exit 1
+bash "$root/eng/sync-tl-bake.sh" --check || exit 1
 if [ "$windows" = 1 ]; then
   open="$(powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='Unity.exe'\" | ForEach-Object { \$_.CommandLine }" | tr -d '\r' | grep -F -i -- "$(native "$probe")" || true)"
 else

@@ -1,0 +1,13 @@
+{
+  "name": "Tl.Unity.Bake",
+  "rootNamespace": "Tl.Unity.Bake",
+  "references": [
+    "Tl.Core"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "allowUnsafeCode": true,
+  "autoReferenced": false,
+  "noEngineReferences": true
+}
