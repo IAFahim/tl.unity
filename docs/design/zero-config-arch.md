@@ -619,3 +619,38 @@ tlb, runs the same B shape as the K bench. Same process, Burst on, 100000 entiti
 The direct rows do one kind and one apply system where the K bench does four kinds in two systems, so they are lower, not slower. Both pinned
 hashes are unchanged (`KindHashTests` green). Open: tlb and `Tl.Gen.Tlb` read `[TimelineKind]` only, so the S6 fixture uses
 `[TimelineKind]`; the phase 1 packer must accept `TlKind` and `ITlTrack` feeders before phase 4.
+
+## 8. Phase 1 results and S2
+
+Built on 7000.0.0a16. tl changes on IAFahim/tl main: e016d753 (`TimelineBaker.BakeTyped(TypedTimeline)`, AVX2 paths and
+`System.Threading.Lock` behind `#if NET`, .NET-only BCL calls through `NetCompat`, `Tl.Core` grants internals to `Tl.Unity.Bake`) and
+f9ce66cf (`[TlKind]` read like `[TimelineKind]`, its `Inline` sets the kind section capacity; feeders on `ITlTrack<TClip>` consumers are
+found through the inherited `ITrack<TlNoSettings<TClip>, TClip>`). `dotnet test tl.slnx -c Release`: 893/893.
+
+- `eng/sync-tl-bake.sh [--check]` copies `tools/Tl.Gen.Tlb` from the `external/tl-kinds` pin into `com.tl.unity/Editor/Bake/Tlb`
+  (without the CLI-only `BakeCacheKey.cs`, `TlbInspection.cs`, `TlbReport.cs`) and writes `Tools~/tl-bake.stamp` (pin + source hash).
+  `--check` builds nothing; `eng/test-com-tl-unity.sh` runs it next to the Core and generator checks.
+- `Tl.Unity.Bake` (Editor only, `noEngineReferences`, `-langversion:latest`): `TlBake.BakeTyped(TypedTimeline, LibraryManifest?)` is the
+  entry point for `TlDirectorBaker`; `TlBake.Manifest`, `TlBake.Catalog(assemblies)` and `TlBake.Analyze(name, tlb, catalog)` give the
+  per-timeline kind analysis. The track `Type` of an `ITlTrack<TClip>` clip is `TlNoSettings<TClip>`.
+- F7 understated the work: with the missing `System.Runtime.Intrinsics` namespace fixed, Unity's compiler reported 24 errors from .NET-only calls
+  (`Utf8.IsValid`, `Rune`, `Stopwatch.GetElapsedTime`, `SHA256.HashData`, `Convert.ToHexString`, `CreateDelegate<T>`, `BitOperations`,
+  `OperatingSystem`). Unity a16 does not define `NET`.
+- `PacksTheKindGameFixtureLikeTlb`: the nine fixture timelines packed in process (20 rounds, `PATH` and `TL_TLB` cleared, a 1 ms child
+  process poll running) equal the per-timeline TLB bytes inside `tlb`'s `game.tlib`, with no child process. 0.06 s for the whole test.
+- Full run: EditMode and PlayMode green, 0 `error CS`, 0 warnings; both pinned hashes unchanged; K bench A 7.8, B 1.9, B0 0.6 ns/entity,
+  0 B warm.
+
+**S2 (passed with one condition).**
+
+| Question | Result |
+|---|---|
+| Per-timeline TLB + `KindTimeline.Analyze`, assembled in process in `tlb`'s order (`LibraryPack.Emit` + `KindLayout.Section`), equals `game.tlib`? | **Yes**, byte for byte, with the fixture's `library.json` kind settings (`Damage: gamePulses 8, maxInlineBytes 132`) and 2 channels |
+| Same without those settings? | Differs in exactly one field: the `Damage` kind row `Capacity` (kind table row offset 16). Nothing else, digest aside |
+| Which runtime code reads kind-section capacities? | Only `Tl.Core` `KindStore` (`KindTable.Create(..., row.Capacity / row.GroupCapacity, ...)`, the managed `TimelineWorld` kind tables of the plain C# host). The ECS path never reads them; it uses `[InternalBufferCapacity]` from the generator. `KindSection` only range-checks them |
+| What else a per-timeline blob cannot know | TLB header `Next` (offset 52), `Channel` (56) and any `TimelineId` clip field hold library-wide ids from the manifest |
+
+Fix for phase 3: the assembler takes `gamePulses` and the inline budget from the kind catalog (`[TlKind(Inline = n)]` is read since
+f9ce66cf; `GamePulses` still needs a `TlKind` property), with `channelCount` and `stackDepth` from project settings, so no `library.json`
+is needed; and it patches `Next`, `Channel` and `TimelineId` fields after assigning ids (or bakes against a manifest built from the sorted
+`Asset` set, as the test does with names).
