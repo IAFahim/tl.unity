@@ -8,6 +8,163 @@ The promise, in one sentence: **add one git URL, open Unity's Timeline window, d
 
 ---
 
+## 0. Centerpiece: the Force track (owner's acceptance contract)
+
+The owner's contract (issue #22 comment of 2026-11-07): a coder writes five files, a designer adds a **Force** track in the Timeline window, the
+bake adds everything the track needs to the entity, and on Play the object is pushed. The plan fails if the coder needs any file, attribute, asset
+or step beyond the code below. Everything in this document serves this path; the Walk/Hit demo of section 4 is built the same way.
+
+### 0.1 Designer journey, step by step (no code, nothing typed)
+
+1. A coder has dropped the five files below into `Assets/` (any folder, no asmdef). Unity compiles once.
+2. Dana selects a GameObject with a mesh inside a SubScene (or uses `GameObject > Tl > Timeline Object`, which makes one).
+3. `Assets > Create > Tl > Timeline`, name it `Push`. Double-click: Unity's Timeline window opens.
+4. Timeline window: `+` (and right-click on the empty track area) shows **Tl > Force**. Click it. A track named **Force** appears.
+5. Right-click the track > **Add Force Clip**. A 1 s clip labelled `Force` appears. She drags its edges to 2 s.
+6. With the clip selected the Inspector shows Unity's clip header and below it:
+
+```
+Force Clip
+  Direction    X [ 1 ]  Y [ 0 ]  Z [ 0 ]
+  Strength     [ 4   ]
+  Falloff      [ curve preview ~~~\__ ]   (click: Unity's curve editor, time 0..1 across the clip)
+```
+
+7. She drags `Push.playable` from the Project window onto the GameObject in the Hierarchy. Unity adds a Playable Director with Push assigned and
+   Play On Awake on. The Tl foldout under it reads: `Bakes: Force, Force Log (from the Force track).`
+8. Press Play. In the Game view (the scene camera framing the object) the object slides along +X for 2 s, fast at first, slowing as the curve
+   falls, then stops.
+9. Still in Play mode she raises Strength to 10: the next run of the clip (Wrap Mode Loop) pushes further. `Window > Tl > Monitor` shows
+   `Cube  Push  playing 1.2 / 2.0 s   Force +3.1 X`.
+
+What she never did: add a component, pick a "kind", fill a library, type a name, open a terminal.
+
+### 0.2 Coder-side code, corrected final form (target API)
+
+Five files, Assembly-CSharp or any asmdef that references nothing extra (the Tl assemblies are auto-referenced). Not compiled yet: this is the
+contract the implementation must meet, proven by acceptance test A (section 7). Names already reconciled with the owner's sketch; changes
+listed in 0.3.
+
+`ForceClip.cs`
+```csharp
+using Tl;
+using Unity.Mathematics;
+
+[TlClip("Force")]
+public struct ForceClip
+{
+    public float3 Direction;
+    public float Strength;
+    public TlCurve Falloff;
+}
+```
+
+`ForceData.cs`
+```csharp
+using Unity.Entities;
+using Unity.Mathematics;
+
+public struct Force : IComponentData
+{
+    public float3 Value;
+}
+
+public struct ForceLog : IBufferElementData
+{
+    public float3 Value;
+    public int Tick;
+}
+
+public struct ForceFalloff : IComponentData
+{
+    public BlobAssetReference<TlCurveBlob> Curve;
+}
+```
+
+`ForceKind.cs`
+```csharp
+using Tl;
+using Unity.Mathematics;
+
+[TlKind]
+public struct ForceKind
+{
+    public static void Combine(ref float3 total, in float3 next) => total += next;
+    public static void Apply(in float3 total, ref Force force) => force.Value += total;
+}
+
+public struct ForceTrack : ITlTrack<ForceClip>
+{
+    [Feeds(typeof(ForceKind))]
+    public static float3 Evaluate(in TlFrame<ForceClip> frame)
+        => frame.Clip.Direction * frame.Clip.Strength * frame.Clip.Falloff.Evaluate(frame.Progress);
+}
+```
+
+`ForceBaking.cs`
+```csharp
+using Tl;
+
+public struct ForceBaking : ITlBaker<ForceClip>
+{
+    public void Bake(ref TlBaker baker, in ForceClip clip)
+    {
+        baker.AddComponent<Force>();
+        baker.AddBuffer<ForceLog>();
+        baker.AddBlob(new ForceFalloff { Curve = baker.CreateCurve(clip.Falloff) });
+    }
+}
+```
+
+`ForceSystem.cs`
+```csharp
+using Tl;
+using Unity.Burst;
+using Unity.Entities;
+using Unity.Transforms;
+
+[BurstCompile]
+[UpdateInGroup(typeof(TlSimulationGroup), OrderLast = true)]
+public partial struct ForceSystem : ISystem
+{
+    [BurstCompile]
+    public void OnUpdate(ref SystemState state)
+    {
+        new ApplyForce { DeltaTime = SystemAPI.Time.DeltaTime }.ScheduleParallel();
+    }
+}
+
+[BurstCompile]
+public partial struct ApplyForce : IJobEntity
+{
+    public float DeltaTime;
+
+    void Execute(ref LocalTransform transform, ref Force force)
+    {
+        transform.Position += force.Value * DeltaTime;
+        force.Value = default;
+    }
+}
+```
+
+### 0.3 What changed from the owner's sketch, and what the package must therefore do
+
+| # | Sketch | Final | Why |
+|---|---|---|---|
+| 1 | `[UpdateAfter(typeof(TlSimulationGroup))]` | `[UpdateInGroup(typeof(TlSimulationGroup), OrderLast = true)]` | Tl's group runs inside `FixedStepSimulationSystemGroup` (`Runtime/TimelineSystems.cs`). A system without `UpdateInGroup` lands in `SimulationSystemGroup`, where `UpdateAfter` a group in another parent is ignored with a warning, and `Force` would be applied once per frame while the kind adds once per fixed tick. Inside Tl's group, last: it runs every tick after the kind applied, and `SystemAPI.Time.DeltaTime` is the fixed step. One attribute either way. Package must: rename/alias `TimelineSimulationGroup` to `TlSimulationGroup`, and never mark its own systems `OrderLast`. |
+| 2 | `ForceSystem.cs` without `using Tl;` | adds `using Tl;` | `TlSimulationGroup` lives in `Tl`. |
+| 3 | `TlCurve` in a clip, `Falloff.Evaluate` in Burst | unchanged in code | Package must make `TlCurve` an unmanaged, inline, fixed-size curve (sampled from the designer's `AnimationCurve` at bake, time 0..1) with a Burst-safe `Evaluate`, drawn in the Inspector as Unity's curve field. |
+| 4 | `ForceBaking` per clip | unchanged in code | Package must define: `Bake` runs once per clip on the entity that plays it; `AddComponent`/`AddBuffer` are idempotent; `AddBlob` deduplicates equal blobs. Two clips that give the same entity *different* `ForceFalloff` blobs cannot both fit one component: the bake keeps the first and the second clip's Inspector says `Another Force clip on Cube already sets Force Falloff with a different curve. Only the first is kept on the object; the clip's own Falloff still drives the push.` (Runtime push uses the inline `TlCurve`, so the demo is correct either way.) |
+| 5 | `Force` added by `ForceBaking` | also added automatically | `ForceKind.Apply` writes `ref Force`, so the generator already knows the entity needs `Force`; the `AddComponent<Force>()` line is legal and harmless. `ForceBaking` is optional for components a kind writes and required only for extras (`ForceLog`, blobs). |
+| 6 | Unity-side `TrackAsset`/`PlayableAsset` classes | none written by the coder | Package ships one concrete `TlTrackAsset` and one `TlClipAsset`. Each holds the clip as `[SerializeReference]` to a generated `[Serializable]` mirror class (`ForceClip` fields, `TlCurve` shown as `AnimationCurve`). Plain serializable classes need no same-named file, so the generator can emit them; the Inspector is native `SerializedProperty` (Undo, prefab-safe, curve editor). The Timeline menu entry `Tl > Force` comes from generated editor-only `TimelineAction`/menu code. See open question 3. |
+| 7 | `ForceLog.Tick` | unchanged | Nothing writes `ForceLog` in this contract; it proves buffer baking. The Monitor shows `Force Log (0 entries)`. |
+| 8 | "PlayableDirector or a Tl Player" | PlayableDirector only | One way to assign; no second authoring component on the designer path. |
+
+Forbidden extras (each one fails the contract): an asmdef edit, a `[RequiresKinds]`, a library/bridge asset, a JSON file, a menu command, a
+generated file the coder must commit, a `Timelines.g.cs` constant, an external tool, a restart.
+
+---
+
 ## 1. Personas and journeys
 
 | Persona | Who | Never wants to see |
@@ -32,8 +189,8 @@ The promise, in one sentence: **add one git URL, open Unity's Timeline window, d
 
 ### Gabe
 
-- **60 seconds.** Same import. Opens `Samples/Hello Tl/Scripts`. Sees four short files: data, one track, one system, one "press key to dash"
-  system. No `.json`, no generated file checked in.
+- **60 seconds.** Same import. Opens `Samples/Hello Tl/Scripts`. Sees `Force/` with the five files of section 0.2, plus the Walk/Hit files
+  built the same way. No `.json`, no generated file checked in.
 - **10 minutes.** Adds a new clip type: one file, about ten lines (section 2.9). Returns to Unity: after the normal compile, `Tl > Spin` is in the
   Timeline window's add-track menu with a typed Inspector. Adds an authoring field `public TimelineAsset Dash;`, drags the asset in, and starts it from
   a Burst system with `requests.Play(dash)` (section 2.11).
@@ -123,34 +280,29 @@ Nothing else. No .NET SDK, no clone, no `tlb`, no install script, no asmdef mark
 
 ### 2.9 A coder adds a new clip type (a few lines)
 
-Target shape (one file, no asmdef edit, no menu to run, no file to regenerate):
+Same shapes as the Force contract (section 0.2), nothing else. A clip that feeds a kind that already exists is two declarations:
 
 ```csharp
 using Tl;
 using UnityEngine;
 
-namespace Game
+[TlClip("Movement/Spin")]
+public struct SpinClip
 {
-    public struct SpinClip
-    {
-        [Tooltip("Degrees per second.")] public float Speed;
-    }
+    [Tooltip("Degrees per second.")] public float Speed;
+}
 
-    [TimelineTrack("Movement/Spin", Color = 0x4CAF50)]
-    public struct Spin : ITrack<SpinClip>
-    {
-        [Feeds(typeof(Turning))]
-        public static float Evaluate(in Frame<SpinClip> f) => f.Direction * f.Clip.Speed;
-    }
+public struct SpinTrack : ITlTrack<SpinClip>
+{
+    [Feeds(typeof(TurnKind))]
+    public static float Evaluate(in TlFrame<SpinClip> frame) => frame.Clip.Speed;
 }
 ```
 
-What Gabe sees: save, Unity compiles once, `Tl/Movement/Spin` appears in the Timeline window `+` menu with a green color, its clip Inspector shows
-**Speed** with the tooltip. No new asset, no library field, no rebake button. If the track needs a component the object does not have, baking adds
-it with default values (section 3).
-
-Requirements this puts on the architecture: track blend (`IBlend`) and a separate track-data struct become optional; the Unity-side
-`TrackAsset`/`PlayableAsset` classes are produced for him or are a one-line class he can copy (see open question 3).
+What Gabe sees: save, Unity compiles once, `Tl > Movement > Spin` appears in the Timeline window menu, its clip Inspector shows **Speed** with
+the tooltip. No new asset, no library field, no rebake button. Components the kind writes are added by the bake (section 0.3 row 5); extras go in
+an `ITlBaker<SpinClip>`. The `[TlClip]` string is the menu path and the default track name; it is the only text a coder writes, and designers never
+type it.
 
 ### 2.10 Add a gameplay system
 
@@ -318,6 +470,8 @@ Scene contents:
   - **Walker**: orange capsule. Playable Director: `Walker Moves` (Play On Awake, Loop): walks right 2 s, walks left 2 s, a `Hit` clip at 1.5 s. Also
     Plays: `Dash`.
   - **Dummy**: grey cube with a world-space health bar. Takes the Walker's hits.
+  - **Crate**: blue cube pushed by the `Push` timeline (one Force track, Strength 4, falling curve, Loop with a 1 s pause clip gap). Its
+    scripts are exactly the five files of section 0.2, in `Samples/Hello Tl/Force/`, so the sample *is* the acceptance contract.
 - Screen overlay (UI Toolkit), large readable text, top-left:
 
 ```
@@ -425,11 +579,33 @@ Expected: `TL-ACCEPT PASS import=ok compileErrors=0 sample=ok entitiesPlaying>=1
 8. [ ] Stop Play. `File > New Scene`, `GameObject > Tl > Timeline Object`, in the Timeline window `+ > Tl > Walk`, add a clip, Speed 3. Press Play:
        the new capsule moves.
 9. [ ] `Window > Tl > Monitor` in Play mode lists both objects and what they play, in words.
-10. [ ] Drop the `SpinClip` file from section 2.9 into `Assets/` (copied from the sample's `Extras`): after compile, `Tl/Movement/Spin` is in the
-        Timeline `+` menu.
+10. [ ] Test A (Force from scratch, below) passes.
 11. [ ] `File > Build And Run` (Windows): the sample scene runs the same in the player.
 
 Fail = any step needs a typed name, a path, a terminal command, a second package, or reading docs.
+
+### Test A: build the Force demo from scratch (owner's contract, about 5 minutes)
+
+Same fresh project as above, package installed, no sample imported.
+
+1. [ ] Copy the five files of section 0.2 into `Assets/Force/` exactly as written (no asmdef). Console: 0 errors, 0 Tl warnings, no
+       "Ignoring invalid [UpdateAfter]" line.
+2. [ ] `File > New Scene`. `GameObject > Tl > Timeline Object`. The scene now has a camera, a light, a SubScene and a capsule in it.
+3. [ ] `Assets > Create > Tl > Timeline`, name `Push`. Open it. Timeline menu shows `Tl > Force`. Add the track, add a clip, stretch it to 2 s.
+4. [ ] Select the clip: Inspector shows **Direction** (three number fields), **Strength** (number), **Falloff** (curve field that opens Unity's curve
+       editor). Set Direction 1,0,0, Strength 4, draw a falling curve.
+5. [ ] Drag `Push` onto the capsule. Playable Director appears with Push, Play On Awake on. Tl foldout says it bakes Force and Force Log. No other
+       component was added by hand.
+6. [ ] Press Play: in the Game view the capsule moves to +X, fast then slowing, and stops after 2 s.
+7. [ ] Entities Hierarchy (Unity) on the capsule's entity: `Force`, `ForceLog` buffer, `ForceFalloff` with a valid blob are present.
+8. [ ] In Play mode set Strength 10: the next loop pushes further, no exit from Play.
+9. [ ] Add a second Force track (Direction 0,1,0) overlapping the first: the capsule moves diagonally while both play (kind `Combine` adds).
+10. [ ] Delete `ForceBaking.cs`: after compile the capsule still moves (Force is added because `ForceKind` writes it); `ForceLog` and `ForceFalloff`
+        are gone. Restore the file.
+
+Automated twin: `Tl.Unity.Editor.Acceptance.RunForce` (architecture owns it) writes the same five files into a temp folder of the scratch project,
+builds the scene and timeline through Editor APIs, enters Play, and prints
+`TL-ACCEPT-FORCE PASS compileErrors=0 components=Force,ForceLog,ForceFalloff movedX>0.5 diagonal=yes`.
 
 ---
 
@@ -445,7 +621,7 @@ Honest table. "BL" = `com.bovinelabs.timeline` 2.0.0-pre.7; "Vex" = vex-studio t
 | Start playing | BL: `SetComponentEnabled<TimelineActive>(entity, true)` from code; sample uses a builder + UI. Vex: Play On Awake / Wrap Mode / Initial Time read from the director, which is very intuitive. | Typed names in Timeline Player. | Vex-style: director fields mean what they say, plus drag-in Also Plays, `TimelineRef`. |
 | Edit preview | BL: `EditorTimelineSystem` drives the Editor world from the Timeline window playhead: scrub and see. Vex adds a scrub driver, a debugger window and a bake "Doctor". | None. | Required (2.7, 2.12). Until shipped, **BL/Vex are better.** |
 | Sample | BL: one sample, scene + UI Toolkit panel, menu `BovineLabs > Samples > Timeline Play`; generated assets via a builder script. Rich but large (custom tracks, nesting, cues, crossings), aimed at engineers. | No camera; JSON; bytes. | Smaller and designer-first; BL's generator approach copied. |
-| Custom track | BL: two classes (`DOTSClip` + `DOTSTrack`) plus a system with `TrackBlendImpl` and a job: about 60 lines for a float3 track. | Data structs + 3 one-line Unity classes + Bridge asset + rebake. | About 10 lines (2.9). **Better than BL** if the generator delivers. |
+| Custom track | BL: two classes (`DOTSClip` + `DOTSTrack`) plus a system with `TrackBlendImpl` and a job: about 60 lines for a float3 track. | Data structs + 3 one-line Unity classes + Bridge asset + rebake. | Force contract: five small files, about 70 lines including a kind, a baker and a Burst job; a clip feeding an existing kind is about 12 lines (2.9). BL's clip `Bake` adds components with Unity's own `Baker`, which is just as direct as our `ITlBaker`. **Even** on lines; better than BL in setup if the generator delivers (no `TrackAsset` class). |
 | Runtime model | Entity per clip/track, timers, mixers. Flexible, heavier. | No entity per clip; kinds reduce per entity; Burst. | Unchanged. Our strength; not a UX selling point to designers. |
 | Docs | Overview 66 lines; getting started is 3 steps. | USING-ECS 1190 lines, 10 steps. | Getting started under 40 lines, the section 2 path. |
 
@@ -475,3 +651,8 @@ literally at bake; a "Doctor" that explains mismatches on the director; a debugg
     the sample need URP?
 11. Tick rate as a project setting: where is it stored and baked?
 12. Editor-world scrub preview: which world and system group, and how to restore authoring state when the Timeline window loses focus?
+13. Force contract: confirm the `[SerializeReference]` mirror-class route (0.3 row 6) works for clips inside a `.playable` sub-asset, survives
+    domain reload and renames (`[MovedFrom]`), and that Timeline's track menu can list `Tl > Force` without a per-type `TrackAsset` class.
+14. Force contract: `TlCurve` inline size (samples) and accuracy; `TlFrame.Progress` = clip-local 0..1; `ITlBaker` per-clip semantics and
+    `AddBlob` dedupe (0.3 row 4); kinds whose `Apply` targets an `IComponentData` the coder owns (`Force`).
+15. Force contract: Tl assemblies must be auto-referenced and the generator must run on Assembly-CSharp, so the five files need no asmdef.
