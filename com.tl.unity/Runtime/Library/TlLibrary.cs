@@ -52,10 +52,13 @@ namespace Tl.Unity
 
         public IEnumerable<KeyValuePair<Hash128, ushort>> Ids => _ids;
 
+        public List<ushort> Swapped { get; } = new List<ushort>();
+
         public bool Add(IReadOnlyList<BlobAssetReference<TlTimelineBlob>> blobs, List<string> errors)
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(TlLibrary));
+            Swapped.Clear();
             var incoming = Collect(blobs, errors);
             if (incoming.Count == 0)
                 return false;
@@ -63,6 +66,7 @@ namespace Tl.Unity
             var tickRate = TickRate;
             var added = new List<Entry>();
             var replaced = false;
+            var swapped = new List<ushort>();
             foreach (var entry in incoming)
             {
                 if (tickRate == 0)
@@ -74,6 +78,12 @@ namespace Tl.Unity
                 }
                 if (_ids.TryGetValue(entry.Asset, out var id))
                 {
+                    if (!SameLayout(entries[id - 1], entry))
+                    {
+                        errors.Add("Tl: the change to timeline '" + entry.Name + "' adds or removes a type of track, or a script changed. That cannot be swapped in while the game runs, so the earlier version of '" + entry.Name + "' keeps playing. Stop and press Play again to use the change.");
+                        continue;
+                    }
+                    swapped.Add(id);
                     entry.Stored = entries[id - 1].Stored;
                     entries[id - 1] = entry;
                     replaced = true;
@@ -108,6 +118,7 @@ namespace Tl.Unity
                 _ids[_entries[i].Asset] = (ushort)(i + 1);
             TickRate = tickRate;
             Bytes = bytes;
+            Swapped.AddRange(swapped);
             Generation++;
             return true;
         }
@@ -209,6 +220,23 @@ namespace Tl.Unity
             _world = world;
             _kinds = kinds;
             return true;
+        }
+
+        static bool SameLayout(Entry before, Entry after)
+        {
+            TlKindPayload a, b;
+            try
+            {
+                a = TlKindPayload.Read(before.Kinds, before.Name);
+                b = TlKindPayload.Read(after.Kinds, after.Name);
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+            if (a == null || b == null)
+                return (a == null || a.KindMask == 0) && (b == null || b.KindMask == 0);
+            return a.KindMask == b.KindMask && a.SameCatalog(b);
         }
 
         static string StoredName(string previous, string name)

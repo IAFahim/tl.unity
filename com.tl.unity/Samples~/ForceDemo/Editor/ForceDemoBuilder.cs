@@ -98,8 +98,8 @@ public static class ForceDemoBuilder
         AssetDatabase.DeleteAsset(path);
         var timeline = TlTimelines.CreateAsset();
         AssetDatabase.CreateAsset(timeline, path);
-        var stub = timeline.CreateTrack<ForceClip_TlMenu>(null, "Force");
-        var track = TlTrackSwap.Replace(stub);
+        var track = timeline.CreateTrack<TlTrack>(null, "Force");
+        track.Template = new ForceClip_TlData();
         var clip = track.CreateClip<TlClip>();
         clip.start = 0;
         clip.duration = 2;

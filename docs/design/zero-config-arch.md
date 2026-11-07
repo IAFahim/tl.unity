@@ -751,3 +751,30 @@ owner's [3-minute check](../FORCE-DEMO-CHECK.md).
 
 Open for phase 5: `TlBaker.AddBlob` warns on every second clip even when the value is equal (two Force clips print "Another clip ... already
 sets ForceFalloff"); live edit and the tick-kept swap; the settings Inspector section and the director foldout.
+
+## 11. Phase 5 results (live edit, Edit-mode preview, Inspector)
+
+Built on 7000.0.0a16. Design notes, what was taken from BovineLabs Timeline and TweenPlayables, and what preview cannot show:
+[live-preview.md](live-preview.md).
+
+| Name | Where | What |
+|---|---|---|
+| `TlTimelineRegisterSystem` | `Runtime/Library` | also re-registers sets whose buffer changed and holds id 0 (a live-baking patch); change filter, 0 B per frame |
+| `TlLibrary.Swapped`, layout check | same | a known timeline keeps its id; a version that reaches other kinds, or another kind catalog, is refused with one console error and the old one keeps playing |
+| `TlTimelineSwapJob`, `KindCursor.Purge` | same, `Runtime/KindTick.cs` | Burst job run once per swap: each playback of a swapped timeline keeps its tick (clamped), its kind entries are dropped and rebuilt at that tick |
+| `TlBaker.AddBlob` | `Runtime/Api` | warns only when a later clip sets a different value (byte compare); two equal curves are one blob |
+| `TlPreviewMixer`, `TlPreviewHook`, `TlTrack.CreateTrackMixer/GatherProperties` | `Authoring/Timeline` | Timeline's own scrub calls into Tl; the director object's Transform is restored when preview ends |
+| `TlPreview` | `Editor/Timeline` | bakes the director object (cached by dirty counts), steps a private world with Tl's systems and every `TlSimulationGroup` system to the playhead tick, writes `LocalTransform` back under `AnimationMode` |
+| `TlAlsoPlays` | `Authoring/Timeline` | list of extra timelines, edited in the Tl foldout (component hidden in the Inspector); baked after the Playable, before the Next closure |
+| `TlDirectorEditor` (Tl foldout under Unity's Playable Director), `TlTimelineSection` (Tl section under the Timeline asset header), `TlInspectorModel` | `Editor/Timeline` | Also Plays, what the object plays, plain messages (no timeline, not in a SubScene, no Tl tracks); Channel, When it ends, Play next, status, frame rate hint with a fix button; the settings marker is made on the first change, with Undo |
+
+| Acceptance | Result |
+|---|---|
+| Edit Strength in Play (`ForceDemoLiveEditTests`, demo project, real live baking of the open SubScene) | patched and re-registered in 0.037 to 0.040 s, id 1 kept, tick 46 kept, push speed 3.85 to 12.97 |
+| Swap in a hand-built world (`ALiveEditSwapsTheTimelineAndKeepsEachPlaybacksTick`) | same id, one reload, tick kept, one Force span, keeps playing |
+| Adding or removing a track type in Play (`ALiveEditThatChangesTheTrackTypesIsRejectedWithAMessage`) | one console error, no reload, the old version keeps playing |
+| Edit-mode scrub (`ForceDemoPreviewTests`, no Play) | ticks 30/60/90: 1.8083/3.0500/3.7917 in preview and in Play; end 4.0333 both; Strength 8 previews 8.0667; Undo back to 4.0333; cube restored to x 0; SubScene not dirty; [picture](phase5/force-preview-end.png) |
+| Two equal clips | no warning; a different curve warns once |
+
+Not verifiable headless: the real Timeline window scrub, the foldout and section drawn in a real Inspector, Ctrl+Z in the window. Those are
+lines 14 to 19 of [FORCE-DEMO-CHECK.md](../FORCE-DEMO-CHECK.md).

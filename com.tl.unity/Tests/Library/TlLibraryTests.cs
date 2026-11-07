@@ -63,12 +63,18 @@ namespace Tl.Unity.Library.Tests
             var errors = new List<string>();
             Assert.IsTrue(library.Add(blobs.Blobs, errors));
             var id = library.IdOf(blobs.Assets[2]);
-            var changed = TlTimelineBlobs.Create(blobs.Assets[2], blobs.TickRate, blobs.Names[2], Tlb(blobs, 2), Array.Empty<byte>(), Array.Empty<Hash128>());
+            var changed = TlTimelineBlobs.Create(blobs.Assets[2], blobs.TickRate, blobs.Names[2], Tlb(blobs, 2), TlTimelineBlobs.ToArray(ref blobs.Blobs[2].Value.Kinds), new[] { new Hash128(1, 2, 3, 4) });
+            var relaid = TlTimelineBlobs.Create(blobs.Assets[2], blobs.TickRate, blobs.Names[2], Tlb(blobs, 2), Array.Empty<byte>(), Array.Empty<Hash128>());
             try
             {
                 Assert.AreNotEqual(blobs.Blobs[2].Value.Content, changed.Value.Content);
                 Assert.IsTrue(library.Add(new[] { changed }, errors), string.Join("\n", errors));
                 Assert.AreEqual(id, library.IdOf(blobs.Assets[2]));
+                CollectionAssert.AreEqual(new[] { id }, library.Swapped);
+                Assert.IsFalse(library.Add(new[] { relaid }, errors), "a version that reaches other kinds is not swapped in");
+                Assert.AreEqual(1, errors.Count);
+                StringAssert.Contains("adds or removes a type of track", errors[0]);
+                errors.Clear();
                 Assert.AreEqual(blobs.Names.Count, library.Count);
                 Assert.IsFalse(library.Add(new[] { faster.Blobs[0] }, errors));
                 Assert.AreEqual(1, errors.Count);
@@ -77,6 +83,7 @@ namespace Tl.Unity.Library.Tests
             finally
             {
                 changed.Dispose();
+                relaid.Dispose();
             }
         }
 

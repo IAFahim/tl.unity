@@ -432,6 +432,30 @@ namespace Tl.Unity
             return (global::Tl.KindEntry*)entry;
         }
 
+        public void Purge(int row, byte slot, ushort timeline)
+        {
+            for (var kind = 0; kind < Index.KindCount; kind++)
+            {
+                if ((Reach & (1ul << kind)) == 0) continue;
+                var stride = (int)Index.Sec.Kinds[kind].EntryBytes;
+                var buffer = Buffer(kind);
+                var length = buffer->GetBufferLength(row);
+                if (length == 0) continue;
+                var data = (byte*)buffer->GetUnsafePtr(row);
+                var kept = 0;
+                for (var i = 0; i < length; i++)
+                {
+                    var e = (global::Tl.KindEntry*)(data + (long)i * stride);
+                    if (e->Slot == slot && e->Timeline == timeline) continue;
+                    if (kept != i) UnsafeUtility.MemCpy(data + (long)kept * stride, e, stride);
+                    kept++;
+                }
+                if (kept == length) continue;
+                buffer->ResizeUninitialized(row, kept);
+                if (kept == 0) Chunk.SetComponentEnabled(ref *KindHandleSet.Active(Handles, kind), row, false);
+            }
+        }
+
         public bool RemoveSpan(int row, int kind, byte slot, ushort timeline, ushort step)
         {
             if ((Reach & (1ul << kind)) == 0) return false;

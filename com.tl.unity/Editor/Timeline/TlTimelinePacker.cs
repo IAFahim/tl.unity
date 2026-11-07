@@ -12,6 +12,9 @@ using EntitiesHash = Unity.Entities.Hash128;
 
 namespace Tl.Unity.Editor
 {
+#if UNITY_7000_0_OR_NEWER
+    [global::Unity.Scripting.LifecycleManagement.NoAutoStaticsCleanup]
+#endif
     public static class TlTimelinePacker
     {
         static TlKindCatalog s_Catalog;

@@ -12,7 +12,7 @@ namespace Tl.Unity.Editor
         {
             if (GetComponent<TimelinePlayerAuthoring>() != null)
                 return;
-            var timelines = TlDirectorTimelines.Collect(this, director);
+            var timelines = TlDirectorTimelines.Collect(this, director, GetComponent<TlAlsoPlays>());
             if (timelines.Count == 0)
                 return;
             var entity = GetEntity(TransformUsageFlags.Dynamic);

@@ -7,7 +7,7 @@ namespace Tl.Unity.Editor
 {
     public static class TlDirectorTimelines
     {
-        public static List<TimelineAsset> Collect(IBaker baker, PlayableDirector director)
+        public static List<TimelineAsset> Collect(IBaker baker, PlayableDirector director, TlAlsoPlays alsoPlays = null)
         {
             var result = new List<TimelineAsset>();
             var visited = new HashSet<TimelineAsset>();
@@ -15,6 +15,13 @@ namespace Tl.Unity.Editor
             baker.DependsOn(director.playableAsset);
             if (director.playableAsset is TimelineAsset first)
                 queue.Enqueue(first);
+            if (alsoPlays != null)
+                foreach (var other in alsoPlays.Timelines)
+                    if (other != null)
+                    {
+                        baker.DependsOn(other);
+                        queue.Enqueue(other);
+                    }
             while (queue.Count > 0)
             {
                 var timeline = queue.Dequeue();

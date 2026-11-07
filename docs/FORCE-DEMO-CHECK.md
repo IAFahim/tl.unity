@@ -31,4 +31,15 @@ Editor cannot show: the real Timeline window, Undo/Redo, duplicating and draggin
 12. [ ] Project window: select `Push.playable`, **Ctrl+D**. Double-click the copy: it has the Force track and clip with the same values.
 13. [ ] Close Unity, open the project again, open Push in the Timeline window: the clip still shows Strength 4 and the curve.
 
+14. [ ] Open `Push` in the Timeline window (Cube selected, SubScene open). Drag the playhead: the cube moves in the Scene view while you drag,
+        without Play, and stands about 4 m to the right at the end. Click away from the Timeline window or close it: the cube is back at the start
+        and the scene title shows no `*`.
+15. [ ] With the playhead at the end, change Strength to 8 in the clip Inspector: the cube jumps to about 8 m. **Ctrl+Z**: back to about 4 m.
+16. [ ] Press **Play**. While the cube is moving, change Strength to 10: the cube speeds up within a second and Play does not restart. Stop Play.
+17. [ ] Select `Push.playable` in the Project window. Under Unity's header there is a **Tl** section: Channel, When it ends, Status
+        `OK. 1 Tl track, 1 clip.`. Set When it ends to Loop, then **Ctrl+Z**.
+18. [ ] Select Cube. Below the Playable Director there is a **Tl** foldout with **Also Plays** and **Plays: Push**. No other Tl component is
+        visible.
+19. [ ] Drag the Cube out of the SubScene into the main scene: the foldout says it is not in a SubScene. **Ctrl+Z**.
+
 Report on issue #22: the numbers of any unticked lines and what you saw instead.

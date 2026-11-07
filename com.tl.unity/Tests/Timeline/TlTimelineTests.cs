@@ -11,6 +11,8 @@ using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Playables;
+using UnityEngine.TestTools;
+using System.Text.RegularExpressions;
 using UnityEngine.Timeline;
 
 namespace Tl.Unity.Tracks.Tests
@@ -178,6 +180,189 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
+        public void TwoClipsWithTheSameCurveBakeWithoutAWarning()
+        {
+            var timeline = Timeline("Push");
+            var track = ForceTrack(timeline);
+            Clip(track, 0, 1, 4f);
+            Clip(track, 1, 1, 2f);
+            using var baked = new Baked(Director("Cube", timeline).gameObject);
+            LogAssert.NoUnexpectedReceived();
+        }
+
+        [Test]
+        public void TwoClipsWithDifferentCurvesWarnOnce()
+        {
+            var timeline = Timeline("Push");
+            var track = ForceTrack(timeline);
+            Clip(track, 0, 1, 4f);
+            Clip(track, 1, 1, 2f).Falloff = AnimationCurve.Constant(0f, 1f, 0.5f);
+            LogAssert.Expect(LogType.Warning, new Regex("already sets ForceFalloff with a different value"));
+            using var baked = new Baked(Director("Cube", timeline).gameObject);
+        }
+
+        [Test]
+        public void AlsoPlaysAddsItsTimelinesAfterThePlayable()
+        {
+            var push = Timeline("Push");
+            Clip(ForceTrack(push), 0, 1, 4f);
+            var dash = Timeline("Dash");
+            Clip(ForceTrack(dash), 0, 1, 8f);
+            var director = Director("Cube", push);
+            var also = director.gameObject.AddComponent<TlAlsoPlays>();
+            also.Timelines.Add(dash);
+            also.Timelines.Add(null);
+            using var baked = new Baked(director.gameObject);
+            var set = baked.World.EntityManager.GetBuffer<TlTimelineSet>(baked.Single<TlTimelineSet>());
+            Assert.AreEqual(2, set.Length);
+            var first = set[0].Blob;
+            var second = set[1].Blob;
+            Assert.AreEqual("Push", TlTimelineBlobs.NameOf(ref first.Value));
+            Assert.AreEqual("Dash", TlTimelineBlobs.NameOf(ref second.Value));
+            CollectionAssert.AreEqual(new[] { push, dash }, TlInspectorModel.Plays(director, also));
+        }
+
+        [Test]
+        public void TheTimelineSectionWritesTheSettingsMarkerOnTheFirstChange()
+        {
+            var push = Timeline("Push");
+            Assert.AreEqual(TlInspectorModel.NoTlTracks, TlInspectorModel.Status(push));
+            TlInspectorModel.SetSettings(push, TlEnd.Stop, null, 0);
+            Assert.IsNull(TlDirectorTimelines.Settings(push), "no change, no marker");
+            var run = Timeline("Run");
+            TlInspectorModel.SetSettings(push, TlEnd.Next, run, 3);
+            var settings = TlDirectorTimelines.Settings(push);
+            Assert.IsNotNull(settings);
+            Assert.AreEqual(TlEnd.Next, settings.End);
+            Assert.AreEqual(run, settings.Next);
+            Assert.AreEqual(3, settings.Channel);
+            TlInspectorModel.SetSettings(push, TlEnd.Loop, null, 0);
+            Assert.AreEqual(1, push.markerTrack.GetMarkers().Count(), "the marker is reused");
+            Assert.AreEqual(TlEnd.Loop, TlDirectorTimelines.Settings(push).End);
+            Clip(ForceTrack(push), 0, 1, 4f);
+            Assert.AreEqual("OK. 1 Tl track, 1 clip.", TlInspectorModel.Status(push));
+            var sixty = TlTimelines.CreateAsset();
+            _made.Add(sixty);
+            Assert.IsNull(TlInspectorModel.FrameRateHint(sixty, 60));
+            Assert.IsNotNull(TlInspectorModel.FrameRateHint(sixty, 50));
+        }
+
+        [Test]
+        public void TheDirectorFoldoutSaysWhatIsMissing()
+        {
+            var director = Director("Cube", null);
+            CollectionAssert.AreEqual(new[] { TlInspectorModel.NoTimeline }, TlInspectorModel.DirectorMessages(director, null));
+            var push = Timeline("Push");
+            Clip(ForceTrack(push), 0, 1, 4f);
+            director.playableAsset = push;
+            CollectionAssert.Contains(TlInspectorModel.DirectorMessages(director, null), TlInspectorModel.NotInSubScene);
+        }
+
+        [Test]
+        public void ALiveEditSwapsTheTimelineAndKeepsEachPlaybacksTick()
+        {
+            var timeline = Timeline("Push");
+            var track = ForceTrack(timeline);
+            var data = Clip(track, 0, 2, 4f);
+            var director = Director("Cube", timeline);
+            using var baked = new Baked(director.gameObject);
+            var live = new LiveWorld(baked.World);
+            live.Step(10);
+            var entities = baked.World.EntityManager;
+            var entity = baked.Single<TlTimelineSet>();
+            var id = entities.GetBuffer<TlTimelineSet>(entity)[0].Id;
+            var before = entities.GetBuffer<Playback>(entity)[0];
+            Assert.AreEqual(id, before.Timeline);
+            Assert.Greater(before.Tick, 0);
+            var generation = live.Generation;
+
+            data.Strength = 9f;
+            using var edited = new Baked(director.gameObject);
+            Patch(entities, entity, edited.World.EntityManager.GetBuffer<TlTimelineSet>(edited.Single<TlTimelineSet>())[0].Blob);
+            live.Step(1);
+
+            Assert.AreEqual(id, entities.GetBuffer<TlTimelineSet>(entity)[0].Id, "the edited timeline keeps its id");
+            Assert.AreEqual(generation + 1, live.Generation, "the library reloaded once");
+            var after = entities.GetBuffer<Playback>(entity)[0];
+            Assert.AreEqual(id, after.Timeline);
+            Assert.AreEqual(before.Tick, after.Tick, "the playback keeps its tick across the swap");
+            Assert.AreEqual(1, entities.GetBuffer<TlUnityGenerated.ForceKindEntry>(entity).Length, "one Force span, not a stale copy");
+            live.Step(1);
+            Assert.AreEqual(before.Tick + 1, entities.GetBuffer<Playback>(entity)[0].Tick, "and keeps playing");
+        }
+
+        [Test]
+        public void ALiveEditThatChangesTheTrackTypesIsRejectedWithAMessage()
+        {
+            var timeline = Timeline("Push");
+            var track = ForceTrack(timeline);
+            Clip(track, 0, 2, 4f);
+            var director = Director("Cube", timeline);
+            using var baked = new Baked(director.gameObject);
+            var live = new LiveWorld(baked.World);
+            live.Step(10);
+            var entities = baked.World.EntityManager;
+            var entity = baked.Single<TlTimelineSet>();
+            var id = entities.GetBuffer<TlTimelineSet>(entity)[0].Id;
+            var tick = entities.GetBuffer<Playback>(entity)[0].Tick;
+            var generation = live.Generation;
+
+            foreach (var clip in track.GetClips().ToList())
+                timeline.DeleteClip(clip);
+            using var edited = new Baked(director.gameObject);
+            Patch(entities, entity, edited.World.EntityManager.GetBuffer<TlTimelineSet>(edited.Single<TlTimelineSet>())[0].Blob);
+            LogAssert.Expect(LogType.Error, new Regex("adds or removes a type of track.*earlier version of 'Push' keeps playing"));
+            live.Step(1);
+
+            Assert.AreEqual(id, entities.GetBuffer<TlTimelineSet>(entity)[0].Id, "the old version stays registered");
+            Assert.AreEqual(generation, live.Generation, "no reload");
+            Assert.AreEqual(tick + 1, entities.GetBuffer<Playback>(entity)[0].Tick, "the old version keeps playing");
+        }
+
+        static void Patch(EntityManager entities, Entity entity, BlobAssetReference<TlTimelineBlob> blob)
+        {
+            var set = entities.GetBuffer<TlTimelineSet>(entity);
+            set[0] = new TlTimelineSet { Blob = blob };
+        }
+
+        sealed class LiveWorld
+        {
+            readonly World _world;
+            readonly SystemHandle[] _systems;
+
+            public LiveWorld(World world)
+            {
+                _world = world;
+                _systems = new[]
+                {
+                    world.CreateSystem<TlLibrarySystem>(),
+                    world.CreateSystem<TlTimelineRegisterSystem>(),
+                    world.CreateSystem<TlPlayOnAwakeSystem>(),
+                    world.CreateSystem<TimelineKindTickSystem>(),
+                };
+            }
+
+            public uint Generation
+            {
+                get
+                {
+                    using var query = _world.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<TimelineLibrary>());
+                    return query.GetSingleton<TimelineLibrary>().Generation;
+                }
+            }
+
+            public void Step(int count)
+            {
+                for (var i = 0; i < count; i++)
+                {
+                    foreach (var system in _systems)
+                        system.Update(_world.Unmanaged);
+                    _world.EntityManager.CompleteAllTrackedJobs();
+                }
+            }
+        }
+
+        [Test]
         public void TheProjectSettingDefaultsToSixtyTicksPerSecond()
         {
             Assert.AreEqual(60, TlProjectSettings.DefaultTicksPerSecond);
@@ -197,7 +382,7 @@ namespace Tl.Unity.Tracks.Tests
             return TlTrackSwap.Replace(timeline.CreateTrack<TestForceMenu>(null, "Force"));
         }
 
-        static void Clip(TlTrack track, double start, double duration, float strength)
+        static ForceClip_TlData Clip(TlTrack track, double start, double duration, float strength)
         {
             var clip = track.CreateClip<TlClip>();
             clip.start = start;
@@ -205,6 +390,7 @@ namespace Tl.Unity.Tracks.Tests
             var data = (ForceClip_TlData)((TlClip)clip.asset).Data;
             data.Direction = new float3(1f, 0f, 0f);
             data.Strength = strength;
+            return data;
         }
 
         PlayableDirector Director(string name, TimelineAsset timeline)
