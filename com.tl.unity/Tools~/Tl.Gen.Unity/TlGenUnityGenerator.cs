@@ -21,11 +21,39 @@ namespace Tl.Gen.Unity
             context.RegisterSourceOutput(combined, static (production, pair) => Generate(production, pair.Left, pair.Right));
         }
 
-        static void Generate(SourceProductionContext context, ImmutableArray<UnitySystemModel?> models, Compilation compilation)
+        static readonly string[] Markers = { "TimelineSystem", "TimelineKind", "TlKind", "TlClip", "Feeds", "Pulse", "ITrack", "ITlTrack", "IMarker" };
+
+        static bool Relevant(CSharpCompilation compilation)
         {
-            var read = compilation is CSharpCompilation csharp
-                ? SystemReader.Read(csharp)
-                : ((IReadOnlyList<SystemDecl>)new List<SystemDecl>(), (IReadOnlyList<SystemAssignment>)new List<SystemAssignment>(), (IReadOnlyList<DeclarationDiagnostic>)new List<DeclarationDiagnostic>());
+            if (compilation.AssemblyName == "Tl.Unity" || compilation.AssemblyName == "Tl.Core")
+                return false;
+            foreach (var tree in compilation.SyntaxTrees)
+            {
+                var name = System.IO.Path.GetFileName(tree.FilePath ?? "");
+                if (name.StartsWith("TlUnity.", StringComparison.Ordinal) && name.EndsWith(".g.cs", StringComparison.Ordinal))
+                    return false;
+            }
+            foreach (var tree in compilation.SyntaxTrees)
+            {
+                var text = tree.GetText().ToString();
+                foreach (var marker in Markers)
+                    if (text.IndexOf(marker, StringComparison.Ordinal) >= 0)
+                        return true;
+            }
+            return false;
+        }
+
+        static void Generate(SourceProductionContext context, ImmutableArray<UnitySystemModel?> found, Compilation compilation)
+        {
+            if (compilation is not CSharpCompilation csharp || !Relevant(csharp))
+                return;
+            var id = Sanitize(compilation.AssemblyName ?? "Game");
+            UnityMirrorEmitter.Emit(context, csharp);
+            var analysis = UnityNewStyle.Prepare(csharp, id);
+            var models = new List<UnitySystemModel?>(found);
+            if (analysis.Auto is not null)
+                models.Add(analysis.Auto);
+            var read = SystemReader.Read(analysis.Compilation);
             var assignments = read.Item2;
             var failed = false;
             foreach (var diagnostic in read.Item3)
@@ -47,7 +75,7 @@ namespace Tl.Gen.Unity
             }
             if (failed)
                 return;
-            var kinds = UnityKindPlan.Plan(compilation, assignments, models, context);
+            var kinds = UnityKindPlan.Plan(compilation, assignments, models, analysis.Inline, context);
             var events = new SortedSet<string>(StringComparer.Ordinal);
             foreach (var model in models)
             {
@@ -59,7 +87,6 @@ namespace Tl.Gen.Unity
                 foreach (var evented in model.Events)
                     events.Add(evented.TypeName);
             }
-            var id = Sanitize(compilation.AssemblyName ?? "Game");
             var components = new SortedSet<string>(StringComparer.Ordinal);
             foreach (var element in events)
                 components.Add("global::Tl.Unity.TimelineEvent<" + element + ">");
@@ -71,7 +98,7 @@ namespace Tl.Gen.Unity
             }
             foreach (var model in models)
                 if (model is not null)
-                    foreach (var column in UnityKindJobEmitter.ColumnsOf(model))
+                    foreach (var column in UnityKindJobEmitter.OwnedColumnsOf(model))
                         components.Add(column);
             if (components.Count != 0)
                 context.AddSource(UnityRegistrationEmitter.FileName, SourceText.From(UnityRegistrationEmitter.Emit(components, id), System.Text.Encoding.UTF8));
@@ -92,8 +119,10 @@ namespace Tl.Gen.Unity
                                 own.Add(info);
                 var text = own.Count == 0
                     ? UnitySystemEmitter.Emit(model)
-                    : UnityKindJobEmitter.Emit(model, assignments[index], index, own);
+                    : UnityKindJobEmitter.Emit(model, assignments[index], index, own, analysis.TlFrameFeeders);
                 context.AddSource(UnitySystemEmitter.FileName(model), SourceText.From(text, System.Text.Encoding.UTF8));
+                if (ReferenceEquals(model, analysis.Auto) && own.Count != 0)
+                    context.AddSource(UnityAutoSystemEmitter.FileName, SourceText.From(UnityAutoSystemEmitter.Emit(model), System.Text.Encoding.UTF8));
             }
         }
 

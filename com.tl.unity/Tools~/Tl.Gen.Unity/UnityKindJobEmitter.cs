@@ -20,15 +20,33 @@ namespace Tl.Gen.Unity
 
         static string ComponentName(UnitySystemModel model, UnityColumn column)
         {
-            return model.SystemTypeName + "_" + column.Name + "Data";
+            return column.Direct ? column.ElementTypeName : model.SystemTypeName + "_" + column.Name + "Data";
         }
 
         internal static IReadOnlyList<string> ColumnsOf(UnitySystemModel model)
         {
+            return ColumnsOf(model, true);
+        }
+
+        internal static IReadOnlyList<string> OwnedColumnsOf(UnitySystemModel model)
+        {
+            return ColumnsOf(model, false);
+        }
+
+        static IReadOnlyList<string> ColumnsOf(UnitySystemModel model, bool direct)
+        {
             var ns = model.Namespace.StartsWith("global::") ? model.Namespace.Substring(8) : model.Namespace;
             var names = new SortedSet<string>(StringComparer.Ordinal);
             foreach (var column in model.Columns)
+            {
+                if (column.Direct)
+                {
+                    if (direct)
+                        names.Add(column.ElementTypeName);
+                    continue;
+                }
                 names.Add("global::" + ns + "." + ComponentName(model, column));
+            }
             return new List<string>(names);
         }
 
@@ -129,7 +147,7 @@ namespace Tl.Gen.Unity
             return args.ToString();
         }
 
-        internal static string Emit(UnitySystemModel model, SystemAssignment assignment, int assignmentIndex, IReadOnlyList<UnityKindInfo> kinds)
+        internal static string Emit(UnitySystemModel model, SystemAssignment assignment, int assignmentIndex, IReadOnlyList<UnityKindInfo> kinds, ISet<string> tlFrames)
         {
             var ns = model.Namespace.StartsWith("global::") ? model.Namespace.Substring(8) : model.Namespace;
             var shape = ShapeOf(model, assignment, kinds);
@@ -142,7 +160,8 @@ namespace Tl.Gen.Unity
             W(writer, "namespace " + ns);
             W(writer, "{");
             foreach (var column in model.Columns)
-                W(writer, "public struct " + ComponentName(model, column) + " : IComponentData { public " + column.ElementTypeName + " Value; }");
+                if (!column.Direct)
+                    W(writer, "public struct " + ComponentName(model, column) + " : IComponentData { public " + column.ElementTypeName + " Value; }");
             W(writer, "[BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]");
             W(writer, "public unsafe partial struct " + model.SystemTypeName + "ChunkJob : IJobChunk");
             W(writer, "{");
@@ -203,7 +222,7 @@ namespace Tl.Gen.Unity
                 W(writer, "if (__l" + k + ") Kind_" + k + "(chunk, __playbacks" + ColumnArgs(shape, false) + ");");
             W(writer, "}");
             for (var k = 0; k < kinds.Count; k++)
-                EmitKind(writer, shape, assignment, assignmentIndex, kinds[k], k);
+                EmitKind(writer, shape, assignment, assignmentIndex, kinds[k], k, tlFrames);
             if (events.Count != 0)
                 EmitEvents(writer, events, eventConsumers, assignmentIndex);
             W(writer, "}");
@@ -267,7 +286,7 @@ namespace Tl.Gen.Unity
             W(writer, "}");
         }
 
-        static void EmitKind(StringBuilder writer,Shape shape, SystemAssignment assignment, int assignmentIndex, UnityKindInfo info, int ordinal)
+        static void EmitKind(StringBuilder writer, Shape shape, SystemAssignment assignment, int assignmentIndex, UnityKindInfo info, int ordinal, ISet<string> tlFrames)
         {
             var kind = info.Decl;
             var feeders = new List<(int consumer, FeederDecl feeder)>();
@@ -360,7 +379,13 @@ namespace Tl.Gen.Unity
                     EmitMaterialize(writer, consumer, assignmentIndex, c);
                     if (FoldOf(consumer) != null)
                         EmitFeeds(writer, consumer, c);
-                    W(writer, "__v = " + consumer.ConsumerTypeName + "." + feeder.MethodName + "(" + CallArgs(shape, feeder.Method.Params, "__f" + c, "__row", "__fd" + c + "_") + ");");
+                    var frameVar = "__f" + c;
+                    if (tlFrames.Contains(UnityNewStyle.FeederKey(consumer.ConsumerTypeName, feeder.MethodName)))
+                    {
+                        frameVar = "__tf" + c;
+                        W(writer, "var " + frameVar + " = new global::Tl.TlFrame<" + consumer.ClipTypeName + ">(in __f" + c + ");");
+                    }
+                    W(writer, "__v = " + consumer.ConsumerTypeName + "." + feeder.MethodName + "(" + CallArgs(shape, feeder.Method.Params, frameVar, "__row", "__fd" + c + "_") + ");");
                 }
                 W(writer, "__ok = true;");
                 W(writer, "break;");

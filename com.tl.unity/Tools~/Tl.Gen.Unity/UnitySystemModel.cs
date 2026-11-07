@@ -18,16 +18,18 @@ namespace Tl.Gen.Unity
 
     public sealed class UnityColumn
     {
-        public UnityColumn(string name, string elementTypeName, bool readOnly)
+        public UnityColumn(string name, string elementTypeName, bool readOnly, bool direct = false)
         {
             Name = name;
             ElementTypeName = elementTypeName;
             ReadOnly = readOnly;
+            Direct = direct;
         }
 
         public readonly string Name;
         public readonly string ElementTypeName;
         public readonly bool ReadOnly;
+        public readonly bool Direct;
     }
 
     public sealed class UnityContext

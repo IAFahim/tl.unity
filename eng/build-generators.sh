@@ -7,7 +7,7 @@ case "$(uname -s)" in MINGW* | MSYS* | CYGWIN*) windows=1 ;; *) windows=0 ;; esa
 native() { if [ "$windows" = 1 ]; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
 [ -f "$root/external/tl-kinds/src/Tl.Gen.CSharp/Tl.Gen.CSharp.csproj" ] || { echo "external/tl-kinds is empty: git submodule update --init external/tl-kinds" >&2; exit 1; }
 commit="$(git -C "$root/external/tl-kinds" rev-parse HEAD)"
-projects=("Tl.Gen.Unity:Ecs" "Tl.Gen.Plain:Plain")
+projects=("Tl.Gen.Unity:Runtime" "Tl.Gen.Plain:Plain")
 
 sources_hash() {
   {
@@ -22,7 +22,7 @@ sources_hash() {
   } | git hash-object --stdin
 }
 
-dll_path() { printf '%s/com.tl.unity/Generators/%s/%s.dll' "$root" "${1##*:}" "${1%%:*}"; }
+dll_path() { case "${1##*:}" in Runtime) printf '%s/com.tl.unity/Runtime/%s.dll' "$root" "${1%%:*}" ;; *) printf '%s/com.tl.unity/Generators/%s/%s.dll' "$root" "${1##*:}" "${1%%:*}" ;; esac; }
 
 stamp_text() {
   printf 'tl-kinds=%s\n' "$commit"

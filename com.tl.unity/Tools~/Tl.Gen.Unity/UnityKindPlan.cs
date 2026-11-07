@@ -49,7 +49,9 @@ namespace Tl.Gen.Unity
             return new List<string>();
         }
 
-        internal static IReadOnlyList<UnityKindInfo> Plan(Compilation compilation, IReadOnlyList<SystemAssignment> assignments, IReadOnlyList<UnitySystemModel?> models, SourceProductionContext context)
+        internal const int InlineBudgetBytes = 128;
+
+        internal static IReadOnlyList<UnityKindInfo> Plan(Compilation compilation, IReadOnlyList<SystemAssignment> assignments, IReadOnlyList<UnitySystemModel?> models, IReadOnlyDictionary<string, int> inline, SourceProductionContext context)
         {
             var byName = new SortedDictionary<string, KindDecl>(StringComparer.Ordinal);
             foreach (var assignment in assignments)
@@ -87,13 +89,15 @@ namespace Tl.Gen.Unity
                     continue;
                 }
                 var entryBytes = kind.Accepts == 0 ? 8 : 8 + UnityLayout.Round(valueBytes, 4);
-                infos.Add(new UnityKindInfo(kind,valueBytes, entryBytes, Capacity(compilation, kind, context), UnityKindEmitter.NamespaceOf(kind.TypeName), UnityKindEmitter.Signature(assignments, kind), ColumnsOf(assignments, models, kind)));
+                infos.Add(new UnityKindInfo(kind,valueBytes, entryBytes, Capacity(compilation, kind, entryBytes, inline), (UnityKindEmitter.NamespaceOf(kind.TypeName) is { Length: > 0 } space ? space : "TlUnityGenerated"), UnityKindEmitter.Signature(assignments, kind), ColumnsOf(assignments, models, kind)));
             }
             return infos;
         }
 
-        static string Capacity(Compilation compilation, KindDecl kind, SourceProductionContext context)
+        static string Capacity(Compilation compilation, KindDecl kind, int entryBytes, IReadOnlyDictionary<string, int> inline)
         {
+            if (inline.TryGetValue(kind.TypeName, out var pinned))
+                return pinned.ToString(System.Globalization.CultureInfo.InvariantCulture);
             foreach (var symbol in compilation.GetSymbolsWithName("KindCapacity", SymbolFilter.Type))
             {
                 if (symbol is not INamedTypeSymbol type)
@@ -102,10 +106,8 @@ namespace Tl.Gen.Unity
                     if (member is IFieldSymbol { IsConst: true })
                         return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + kind.Name;
             }
-            context.ReportDiagnostic(Diagnostic.Create(
-                new DiagnosticDescriptor("TLUNITY9103", "Kind capacity missing", "KindCapacity.{0} does not exist yet; inline capacity falls back to 0. Bake the library with tlb to write Kinds.g.cs.", "Tl.Unity", DiagnosticSeverity.Warning, true),
-                Location.None, kind.Name));
-            return "0";
+            var computed = InlineBudgetBytes / entryBytes;
+            return (computed < 1 ? 1 : computed).ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
     }
 }
