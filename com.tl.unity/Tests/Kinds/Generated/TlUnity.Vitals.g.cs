@@ -127,19 +127,44 @@ if (__buf.Capacity > global::KindGame.KindCapacity.Damage && __buf.Length <= glo
 }
 public static partial class TimelineJobs
 {
-public static JobHandle Vitals(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward, JobHandle dependsOn)
+public struct Vitals
 {
+EntityQuery _query;
+BufferTypeHandle<global::Tl.Unity.Playback> _PlaybackHandle;
+ComponentTypeHandle<Vitals_HealthData> _HealthHandle;
+BufferTypeHandle<global::KindGame.DamageEntry> _DamageEntryHandle;
+ComponentTypeHandle<global::KindGame.DamageActive> _DamageActiveHandle;
+ComponentTypeHandle<global::KindGame.DamageEnabled> _DamageEnabledHandle;
+public static Vitals Create(ref SystemState state)
+{
+var jobs = default(Vitals);
 var builder = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.Playback>();
 builder = builder.WithAllRW<Vitals_HealthData>();
-var query = state.GetEntityQuery(builder);
+jobs._query = builder.Build(ref state);
 builder.Dispose();
-var job = new VitalsChunkJob { View = view, Index = index, Forward = forward, PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true)
-, HealthHandle = state.GetComponentTypeHandle<Vitals_HealthData>(false)
-, DamageEntryHandle = state.GetBufferTypeHandle<global::KindGame.DamageEntry>(false)
-, DamageActiveHandle = state.GetComponentTypeHandle<global::KindGame.DamageActive>(false)
-, DamageEnabledHandle = state.GetComponentTypeHandle<global::KindGame.DamageEnabled>(true)
+jobs._PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true);
+jobs._HealthHandle = state.GetComponentTypeHandle<Vitals_HealthData>(false);
+jobs._DamageEntryHandle = state.GetBufferTypeHandle<global::KindGame.DamageEntry>(false);
+jobs._DamageActiveHandle = state.GetComponentTypeHandle<global::KindGame.DamageActive>(false);
+jobs._DamageEnabledHandle = state.GetComponentTypeHandle<global::KindGame.DamageEnabled>(true);
+return jobs;
+}
+public JobHandle Schedule(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward, JobHandle dependsOn)
+{
+_PlaybackHandle.Update(ref state);
+_HealthHandle.Update(ref state);
+_DamageEntryHandle.Update(ref state);
+_DamageActiveHandle.Update(ref state);
+_DamageEnabledHandle.Update(ref state);
+var job = new VitalsChunkJob { View = view, Index = index, Forward = forward
+, PlaybackHandle = _PlaybackHandle
+, HealthHandle = _HealthHandle
+, DamageEntryHandle = _DamageEntryHandle
+, DamageActiveHandle = _DamageActiveHandle
+, DamageEnabledHandle = _DamageEnabledHandle
  };
-return job.ScheduleParallel(query, dependsOn);
+return job.ScheduleParallel(_query, dependsOn);
+}
 }
 }
 }

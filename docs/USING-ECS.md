@@ -429,11 +429,14 @@ namespace Demo
     [UpdateAfter(typeof(TimelineKindTickSystem))]
     public partial struct MovementSystem : ISystem
     {
+        TimelineJobs.Movement _jobs;
+
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<TimelineLibrary>();
             state.RequireForUpdate<TimelineStep>();
+            _jobs = TimelineJobs.Movement.Create(ref state);
         }
 
         [BurstCompile]
@@ -441,7 +444,7 @@ namespace Demo
         {
             var library = SystemAPI.GetSingleton<TimelineLibrary>();
             var step = SystemAPI.GetSingleton<TimelineStep>();
-            state.Dependency = TimelineJobs.Movement(ref state, library.View, library.Kinds, step.Forward, state.Dependency);
+            state.Dependency = _jobs.Schedule(ref state, library.View, library.Kinds, step.Forward, state.Dependency);
         }
     }
 
@@ -450,11 +453,14 @@ namespace Demo
     [UpdateAfter(typeof(TimelineKindTickSystem))]
     public partial struct VitalsSystem : ISystem
     {
+        TimelineJobs.Vitals _jobs;
+
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<TimelineLibrary>();
             state.RequireForUpdate<TimelineStep>();
+            _jobs = TimelineJobs.Vitals.Create(ref state);
         }
 
         [BurstCompile]
@@ -462,11 +468,16 @@ namespace Demo
         {
             var library = SystemAPI.GetSingleton<TimelineLibrary>();
             var step = SystemAPI.GetSingleton<TimelineStep>();
-            state.Dependency = TimelineJobs.Vitals(ref state, library.View, library.Kinds, step.Forward, state.Dependency);
+            state.Dependency = _jobs.Schedule(ref state, library.View, library.Kinds, step.Forward, state.Dependency);
         }
     }
 }
 ```
+
+`TimelineJobs.Movement` is a struct the generator writes per system. `Create`
+builds its query and type handles once in `OnCreate`; `Schedule` only updates
+the handles and schedules the job, so no query is built per update and
+Entities logs no warning.
 
 `TimelineSimulationGroup` runs in the fixed-step group. `TimelineLibrary` holds
 the `View` of the library, the `KindIndex` in `Kinds`, and a `Generation` that
@@ -765,6 +776,7 @@ as a field and updates it each step:
 public partial struct MovementSystem : ISystem
 {
     ComponentLookup<Anchor> _anchors;
+    TimelineJobs.Movement _jobs;
 
     [BurstCompile]
     public void OnCreate(ref SystemState state)
@@ -772,6 +784,7 @@ public partial struct MovementSystem : ISystem
         state.RequireForUpdate<TimelineLibrary>();
         state.RequireForUpdate<TimelineStep>();
         _anchors = state.GetComponentLookup<Anchor>(true);
+        _jobs = TimelineJobs.Movement.Create(ref state);
     }
 
     [BurstCompile]
@@ -781,13 +794,13 @@ public partial struct MovementSystem : ISystem
         var step = SystemAPI.GetSingleton<TimelineStep>();
         _anchors.Update(ref state);
         var anchors = new AnchorLookup { Anchors = _anchors };
-        state.Dependency = TimelineJobs.Movement(ref state, library.View, library.Kinds, step.Forward, anchors, state.Dependency);
+        state.Dependency = _jobs.Schedule(ref state, library.View, library.Kinds, step.Forward, anchors, state.Dependency);
     }
 }
 ```
 
 The baker adds the new column: `AddComponent<Movement_TargetData>(entity);`.
-The generated entry point changes with the system when Unity recompiles.
+The generated `Schedule` changes with the system when Unity recompiles.
 
 ## 5. Presentation events
 
@@ -1112,7 +1125,7 @@ API on one page:
 | Stop it | `TimelineRequest.Stop(0, id)`, `StopChannel(0, channel)`, `StopAll(0)` |
 | Game pulse | `var s = tick.BeginPulses(1); var w = s.Writer; w.Begin(0); DamageKind.Pulses(w).To(entity, v); w.End();` |
 | Rewind | `SystemAPI.SetSingleton(new TimelineStep { Forward = false })` |
-| Schedule a system | `TimelineJobs.Movement(ref state, library.View, library.Kinds, step.Forward, state.Dependency)` |
+| Schedule a system | `_jobs = TimelineJobs.Movement.Create(ref state)` in `OnCreate`, `_jobs.Schedule(ref state, library.View, library.Kinds, step.Forward, state.Dependency)` in `OnUpdate` |
 | Read other entities | `ComponentLookup` in a context struct on the `[TimelineSystem]`, passed to the job |
 | Presentation event | `Events<T>` read from `DynamicBuffer<TimelineEvent<T>>` after the group, or an `Each`-mode pulse kind that writes a cue column |
 | Dropped counts | `TimelineKindTick.DroppedPulses`, `DroppedStarts` |

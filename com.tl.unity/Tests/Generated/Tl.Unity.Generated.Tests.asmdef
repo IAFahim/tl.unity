@@ -5,9 +5,11 @@
     "Tl.Core",
     "Tl.Unity",
     "Tl.Unity.Generate",
+    "Tl.Unity.Kinds",
     "Unity.Burst",
     "Unity.Collections",
     "Unity.Entities",
+    "Unity.Mathematics",
     "UnityEngine.TestRunner"
   ],
   "includePlatforms": [],

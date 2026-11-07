@@ -27,8 +27,9 @@ namespace Tl.Unity
         public ComponentType* EntryTypes;
         public ComponentType* ActiveTypes;
         public ulong Bound;
-        public int* RegistryToLibrary;
-        public int RegistryCount;
+        public int* IdKeys;
+        public int* IdKinds;
+        public int IdCount;
 
         public bool IsCreated => Timelines != null || KindCount == 0 && Closure != null;
 
@@ -80,24 +81,61 @@ namespace Tl.Unity
                 throw new InvalidOperationException("Kind '" + name + "' feeders in the loaded library differ from the compiled game; rebake the library with tlb.\nlibrary: " + have.ToString().Replace('\n', ' ') + "\ncode:    " + descriptor.Signature.Replace('\n', ' '));
         }
 
+        public static int IdOf(string name)
+        {
+            var hash = 2166136261u;
+            foreach (var c in name)
+            {
+                hash ^= c;
+                hash *= 16777619u;
+            }
+            return unchecked((int)hash);
+        }
+
+        public int KindOf(int id)
+        {
+            int low = 0, high = IdCount - 1;
+            while (low <= high)
+            {
+                var mid = (low + high) >> 1;
+                var key = IdKeys[mid];
+                if (key == id) return IdKinds[mid];
+                if (key < id) low = mid + 1;
+                else high = mid - 1;
+            }
+            return -1;
+        }
+
         public void Bind(KindRegistry registry)
         {
             EntryTypes = Zeroed<ComponentType>(Math.Max(1, KindCount));
             ActiveTypes = Zeroed<ComponentType>(Math.Max(1, KindCount));
-            RegistryCount = registry.Count;
-            RegistryToLibrary = Zeroed<int>(Math.Max(1, registry.Count));
+            IdKeys = Zeroed<int>(Math.Max(1, KindCount));
+            IdKinds = Zeroed<int>(Math.Max(1, KindCount));
+            IdCount = 0;
             Bound = 0;
-            for (var r = 0; r < registry.Count; r++) RegistryToLibrary[r] = -1;
+            var ids = new SortedDictionary<int, int>();
             for (var k = 0; k < KindCount; k++)
             {
-                var r = registry.IndexOf(Sec.NameOf(k));
+                var name = Sec.NameOf(k);
+                var id = IdOf(name);
+                if (ids.TryGetValue(id, out var other))
+                    throw new InvalidOperationException("Kinds '" + Sec.NameOf(other) + "' and '" + name + "' have the same kind id " + id + "; rename one of the kinds.");
+                ids.Add(id, k);
+                var r = registry.IndexOf(name);
                 if (r < 0) continue;
                 var d = registry[r];
                 Verify(k, in d);
-                RegistryToLibrary[r] = k;
                 EntryTypes[k] = ComponentType.ReadWrite(d.Entry);
                 ActiveTypes[k] = ComponentType.ReadWrite(d.Active);
                 Bound |= 1ul << k;
+            }
+            foreach (var pair in ids)
+            {
+                if ((Bound & (1ul << pair.Value)) == 0) continue;
+                IdKeys[IdCount] = pair.Key;
+                IdKinds[IdCount] = pair.Value;
+                IdCount++;
             }
         }
 
@@ -211,7 +249,8 @@ namespace Tl.Unity
             Free(MarkerValues);
             Free(EntryTypes);
             Free(ActiveTypes);
-            Free(RegistryToLibrary);
+            Free(IdKeys);
+            Free(IdKinds);
             this = default;
         }
 

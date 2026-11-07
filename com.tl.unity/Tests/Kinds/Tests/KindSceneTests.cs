@@ -45,6 +45,7 @@ namespace KindGame
         [UnityTest]
         public IEnumerator TheRunnerSceneBakesExactKindSetsAndPlaysThemInTheDefaultWorld()
         {
+            using var scan = new LogScan();
             yield return EditorSceneManager.LoadSceneAsyncInPlayMode(Scene, new LoadSceneParameters(LoadSceneMode.Single));
             var world = World.DefaultGameObjectInjectionWorld;
             var entities = world.EntityManager;
@@ -104,6 +105,7 @@ namespace KindGame
             Assert.AreEqual(1, rows.Find(r => r.Kinds == "Lift+Locomotion+StatChange").Entities);
             Assert.AreEqual(1, rows.Find(r => r.Kinds == "Damage").Entities);
             CollectionAssert.IsEmpty(KindReport.Warnings(rows));
+            Assert.AreEqual("", scan.Report(), "warnings or errors logged during the steps");
         }
     }
 }

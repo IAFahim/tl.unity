@@ -6,10 +6,10 @@ namespace Tl.Gen.Unity
 {
     internal sealed class UnityKindInfo
     {
-        public UnityKindInfo(KindDecl decl, int registry, int valueBytes, int entryBytes, string capacity, string ns, string signature, IReadOnlyList<string> columns)
+        public UnityKindInfo(KindDecl decl, int valueBytes, int entryBytes, string capacity, string ns, string signature, IReadOnlyList<string> columns)
         {
             Decl = decl;
-            Registry = registry;
+            Id = KindId(decl.Name);
             ValueBytes = valueBytes;
             EntryBytes = entryBytes;
             Capacity = capacity;
@@ -19,7 +19,7 @@ namespace Tl.Gen.Unity
         }
 
         public readonly KindDecl Decl;
-        public readonly int Registry;
+        public readonly int Id;
         public readonly int ValueBytes;
         public readonly int EntryBytes;
         public readonly string Capacity;
@@ -32,6 +32,17 @@ namespace Tl.Gen.Unity
         public string Active => "global::" + Namespace + "." + Decl.Name + "Active";
         public string Enabled => "global::" + Namespace + "." + Decl.Name + "Enabled";
         public bool Pulses => Decl.Accepts != 0;
+
+        internal static int KindId(string name)
+        {
+            var hash = 2166136261u;
+            foreach (var c in name)
+            {
+                hash ^= c;
+                hash *= 16777619u;
+            }
+            return unchecked((int)hash);
+        }
     }
 
     internal static class UnityKindEmitter
@@ -136,7 +147,7 @@ namespace Tl.Gen.Unity
                     W(writer, "public struct " + kind.Name + "Enabled : IComponentData, IEnableableComponent { }");
                     W(writer, "public static class " + kind.Name + "Kind");
                     W(writer, "{");
-                    W(writer, "public const int Id = " + kind.Registry + ";");
+                    W(writer, "public const int Id = " + kind.Id + ";");
                     W(writer, "public const int InlineCapacity = " + kind.Capacity + ";");
                     W(writer, "public static global::Unity.Entities.ComponentType[] Types { get { return new global::Unity.Entities.ComponentType[] { typeof(" + kind.Name + "Entry), typeof(" + kind.Name + "Active), typeof(" + kind.Name + "Enabled) }; } }");
                     W(writer, "public static void Init(global::Unity.Entities.EntityManager entities, global::Unity.Entities.Entity entity) { entities.SetComponentEnabled<" + kind.Name + "Active>(entity, false); }");
@@ -250,7 +261,7 @@ namespace Tl.Gen.Unity
 
         static void EmitFrames(StringBuilder writer, IReadOnlyList<SystemAssignment> assignments)
         {
-            W(writer, "public static unsafe class TlUnityFrames");
+            W(writer, "internal static unsafe class TlUnityFrames");
             W(writer, "{");
             for (var a = 0; a < assignments.Count; a++)
                 for (var c = 0; c < assignments[a].Consumers.Count; c++)

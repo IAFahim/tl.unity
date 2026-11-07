@@ -426,35 +426,93 @@ break;
 }
 public static partial class TimelineJobs
 {
-public static JobHandle Movement(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward, global::KindGame.AnchorLookup Anchors, JobHandle dependsOn)
+public struct Movement
 {
+EntityQuery _query;
+BufferTypeHandle<global::Tl.Unity.Playback> _PlaybackHandle;
+ComponentTypeHandle<Movement_MotionData> _MotionHandle;
+ComponentTypeHandle<Movement_WalkStatData> _WalkStatHandle;
+ComponentTypeHandle<Movement_JumpPowerData> _JumpPowerHandle;
+ComponentTypeHandle<Movement_TargetData> _TargetHandle;
+ComponentTypeHandle<Movement_StaminaData> _StaminaHandle;
+BufferTypeHandle<global::Tl.Unity.TimelineEvent<global::KindGame.Cue>> _CuesEventHandle;
+BufferTypeHandle<global::KindGame.LiftEntry> _LiftEntryHandle;
+ComponentTypeHandle<global::KindGame.LiftActive> _LiftActiveHandle;
+ComponentTypeHandle<global::KindGame.LiftEnabled> _LiftEnabledHandle;
+BufferTypeHandle<global::KindGame.LocomotionEntry> _LocomotionEntryHandle;
+ComponentTypeHandle<global::KindGame.LocomotionActive> _LocomotionActiveHandle;
+ComponentTypeHandle<global::KindGame.LocomotionEnabled> _LocomotionEnabledHandle;
+BufferTypeHandle<global::KindGame.StatChangeEntry> _StatChangeEntryHandle;
+ComponentTypeHandle<global::KindGame.StatChangeActive> _StatChangeActiveHandle;
+ComponentTypeHandle<global::KindGame.StatChangeEnabled> _StatChangeEnabledHandle;
+public static Movement Create(ref SystemState state)
+{
+var jobs = default(Movement);
 var builder = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.Playback>();
 builder = builder.WithAllRW<Movement_MotionData>();
 builder = builder.WithAll<Movement_WalkStatData>();
 builder = builder.WithAll<Movement_JumpPowerData>();
 builder = builder.WithAll<Movement_TargetData>();
 builder = builder.WithAllRW<Movement_StaminaData>();
-var query = state.GetEntityQuery(builder);
+jobs._query = builder.Build(ref state);
 builder.Dispose();
-var job = new MovementChunkJob { View = view, Index = index, Forward = forward, PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true)
-, MotionHandle = state.GetComponentTypeHandle<Movement_MotionData>(false)
-, WalkStatHandle = state.GetComponentTypeHandle<Movement_WalkStatData>(true)
-, JumpPowerHandle = state.GetComponentTypeHandle<Movement_JumpPowerData>(true)
-, TargetHandle = state.GetComponentTypeHandle<Movement_TargetData>(true)
-, StaminaHandle = state.GetComponentTypeHandle<Movement_StaminaData>(false)
+jobs._PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true);
+jobs._MotionHandle = state.GetComponentTypeHandle<Movement_MotionData>(false);
+jobs._WalkStatHandle = state.GetComponentTypeHandle<Movement_WalkStatData>(true);
+jobs._JumpPowerHandle = state.GetComponentTypeHandle<Movement_JumpPowerData>(true);
+jobs._TargetHandle = state.GetComponentTypeHandle<Movement_TargetData>(true);
+jobs._StaminaHandle = state.GetComponentTypeHandle<Movement_StaminaData>(false);
+jobs._CuesEventHandle = state.GetBufferTypeHandle<global::Tl.Unity.TimelineEvent<global::KindGame.Cue>>(false);
+jobs._LiftEntryHandle = state.GetBufferTypeHandle<global::KindGame.LiftEntry>(false);
+jobs._LiftActiveHandle = state.GetComponentTypeHandle<global::KindGame.LiftActive>(false);
+jobs._LiftEnabledHandle = state.GetComponentTypeHandle<global::KindGame.LiftEnabled>(true);
+jobs._LocomotionEntryHandle = state.GetBufferTypeHandle<global::KindGame.LocomotionEntry>(false);
+jobs._LocomotionActiveHandle = state.GetComponentTypeHandle<global::KindGame.LocomotionActive>(false);
+jobs._LocomotionEnabledHandle = state.GetComponentTypeHandle<global::KindGame.LocomotionEnabled>(true);
+jobs._StatChangeEntryHandle = state.GetBufferTypeHandle<global::KindGame.StatChangeEntry>(false);
+jobs._StatChangeActiveHandle = state.GetComponentTypeHandle<global::KindGame.StatChangeActive>(false);
+jobs._StatChangeEnabledHandle = state.GetComponentTypeHandle<global::KindGame.StatChangeEnabled>(true);
+return jobs;
+}
+public JobHandle Schedule(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward, global::KindGame.AnchorLookup Anchors, JobHandle dependsOn)
+{
+_PlaybackHandle.Update(ref state);
+_MotionHandle.Update(ref state);
+_WalkStatHandle.Update(ref state);
+_JumpPowerHandle.Update(ref state);
+_TargetHandle.Update(ref state);
+_StaminaHandle.Update(ref state);
+_CuesEventHandle.Update(ref state);
+_LiftEntryHandle.Update(ref state);
+_LiftActiveHandle.Update(ref state);
+_LiftEnabledHandle.Update(ref state);
+_LocomotionEntryHandle.Update(ref state);
+_LocomotionActiveHandle.Update(ref state);
+_LocomotionEnabledHandle.Update(ref state);
+_StatChangeEntryHandle.Update(ref state);
+_StatChangeActiveHandle.Update(ref state);
+_StatChangeEnabledHandle.Update(ref state);
+var job = new MovementChunkJob { View = view, Index = index, Forward = forward
+, PlaybackHandle = _PlaybackHandle
+, MotionHandle = _MotionHandle
+, WalkStatHandle = _WalkStatHandle
+, JumpPowerHandle = _JumpPowerHandle
+, TargetHandle = _TargetHandle
+, StaminaHandle = _StaminaHandle
+, CuesEventHandle = _CuesEventHandle
+, LiftEntryHandle = _LiftEntryHandle
+, LiftActiveHandle = _LiftActiveHandle
+, LiftEnabledHandle = _LiftEnabledHandle
+, LocomotionEntryHandle = _LocomotionEntryHandle
+, LocomotionActiveHandle = _LocomotionActiveHandle
+, LocomotionEnabledHandle = _LocomotionEnabledHandle
+, StatChangeEntryHandle = _StatChangeEntryHandle
+, StatChangeActiveHandle = _StatChangeActiveHandle
+, StatChangeEnabledHandle = _StatChangeEnabledHandle
 , Anchors = Anchors
-, CuesEventHandle = state.GetBufferTypeHandle<global::Tl.Unity.TimelineEvent<global::KindGame.Cue>>(false)
-, LiftEntryHandle = state.GetBufferTypeHandle<global::KindGame.LiftEntry>(false)
-, LiftActiveHandle = state.GetComponentTypeHandle<global::KindGame.LiftActive>(false)
-, LiftEnabledHandle = state.GetComponentTypeHandle<global::KindGame.LiftEnabled>(true)
-, LocomotionEntryHandle = state.GetBufferTypeHandle<global::KindGame.LocomotionEntry>(false)
-, LocomotionActiveHandle = state.GetComponentTypeHandle<global::KindGame.LocomotionActive>(false)
-, LocomotionEnabledHandle = state.GetComponentTypeHandle<global::KindGame.LocomotionEnabled>(true)
-, StatChangeEntryHandle = state.GetBufferTypeHandle<global::KindGame.StatChangeEntry>(false)
-, StatChangeActiveHandle = state.GetComponentTypeHandle<global::KindGame.StatChangeActive>(false)
-, StatChangeEnabledHandle = state.GetComponentTypeHandle<global::KindGame.StatChangeEnabled>(true)
  };
-return job.ScheduleParallel(query, dependsOn);
+return job.ScheduleParallel(_query, dependsOn);
+}
 }
 }
 }

@@ -57,43 +57,37 @@ namespace Tl.Gen.Unity
             writer.Append("}\n}\n}\n");
             writer.Append("partial void RunStep(int row, int slotIndex);\n");
             writer.Append("}\n");
+            var name = model.SystemTypeName;
             writer.Append("public static partial class TimelineJobs\n{\n");
-            writer.Append("public static JobHandle ");
-            writer.Append(model.SystemTypeName);
-            writer.Append("(ref SystemState state, global::Tl.LibraryView view");
-            for (var i = 0; i < model.Contexts.Count; i++)
-            {
-                writer.Append(", ");
-                writer.Append(model.Contexts[i].TypeName);
-                writer.Append(" ");
-                writer.Append(model.Contexts[i].Name);
-            }
+            writer.Append("public struct ").Append(name).Append("\n{\n");
+            writer.Append("EntityQuery _query;\n");
+            writer.Append("BufferTypeHandle<global::Tl.Unity.Playback> _PlaybackHandle;\n");
+            foreach (var column in model.Columns)
+                writer.Append("ComponentTypeHandle<").Append(ComponentName(model, column)).Append("> _").Append(column.Name).Append("Handle;\n");
+            writer.Append("public static ").Append(name).Append(" Create(ref SystemState state)\n{\n");
+            writer.Append("var jobs = default(").Append(name).Append(");\n");
+            writer.Append("var builder = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.Playback>();\n");
+            foreach (var column in model.Columns)
+                writer.Append("builder = builder.").Append(column.ReadOnly ? "WithAll<" : "WithAllRW<").Append(ComponentName(model, column)).Append(">();\n");
+            writer.Append("jobs._query = builder.Build(ref state);\n");
+            writer.Append("builder.Dispose();\n");
+            writer.Append("jobs._PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true);\n");
+            foreach (var column in model.Columns)
+                writer.Append("jobs._").Append(column.Name).Append("Handle = state.GetComponentTypeHandle<").Append(ComponentName(model, column)).Append(">(").Append(column.ReadOnly ? "true" : "false").Append(");\n");
+            writer.Append("return jobs;\n}\n");
+            writer.Append("public JobHandle Schedule(ref SystemState state, global::Tl.LibraryView view");
+            foreach (var context in model.Contexts)
+                writer.Append(", ").Append(context.TypeName).Append(" ").Append(context.Name);
             writer.Append(", JobHandle dependsOn)\n{\n");
-            writer.Append("var query = state.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<global::Tl.Unity.Playback>()");
-            for (var i = 0; i < model.Columns.Count; i++)
-            {
-                writer.Append(", ");
-                writer.Append(model.Columns[i].ReadOnly ? "ComponentType.ReadOnly<" : "ComponentType.ReadWrite<");
-                writer.Append(ComponentName(model, model.Columns[i]));
-                writer.Append(">()");
-            }
-            writer.Append(");\n");
-            writer.Append("var job = new ");
-            writer.Append(model.SystemTypeName);
-            writer.Append("ChunkJob { View = view, PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true)");
-            for (var i = 0; i < model.Columns.Count; i++)
-            {
-                writer.Append(", ");
-                writer.Append(model.Columns[i].Name);
-                writer.Append("Handle = state.GetComponentTypeHandle<");
-                writer.Append(ComponentName(model, model.Columns[i]));
-                writer.Append(">(");
-                writer.Append(model.Columns[i].ReadOnly ? "true" : "false");
-                writer.Append(")");
-            }
+            writer.Append("_PlaybackHandle.Update(ref state);\n");
+            foreach (var column in model.Columns)
+                writer.Append("_").Append(column.Name).Append("Handle.Update(ref state);\n");
+            writer.Append("var job = new ").Append(name).Append("ChunkJob { View = view, PlaybackHandle = _PlaybackHandle");
+            foreach (var column in model.Columns)
+                writer.Append(", ").Append(column.Name).Append("Handle = _").Append(column.Name).Append("Handle");
             writer.Append(" };\n");
-            writer.Append("return job.ScheduleParallel(query, dependsOn);\n");
-            writer.Append("}\n}\n}\n");
+            writer.Append("return job.ScheduleParallel(_query, dependsOn);\n");
+            writer.Append("}\n}\n}\n}\n");
             return writer.ToString().Replace("\r\n", "\n");
         }
 

@@ -12,6 +12,7 @@ namespace KindGame
     public partial struct MovementSystem : ISystem
     {
         ComponentLookup<Anchor> _anchors;
+        TimelineJobs.Movement _jobs;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -19,6 +20,7 @@ namespace KindGame
             state.RequireForUpdate<TimelineLibrary>();
             state.RequireForUpdate<TimelineStep>();
             _anchors = state.GetComponentLookup<Anchor>(true);
+            _jobs = TimelineJobs.Movement.Create(ref state);
         }
 
         [BurstCompile]
@@ -28,7 +30,7 @@ namespace KindGame
             var step = SystemAPI.GetSingleton<TimelineStep>();
             _anchors.Update(ref state);
             var anchors = new AnchorLookup { Anchors = _anchors };
-            state.Dependency = TimelineJobs.Movement(ref state, library.View, library.Kinds, step.Forward, anchors, state.Dependency);
+            state.Dependency = _jobs.Schedule(ref state, library.View, library.Kinds, step.Forward, anchors, state.Dependency);
         }
     }
 
@@ -37,11 +39,14 @@ namespace KindGame
     [UpdateAfter(typeof(TimelineKindTickSystem))]
     public partial struct VitalsSystem : ISystem
     {
+        TimelineJobs.Vitals _jobs;
+
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<TimelineLibrary>();
             state.RequireForUpdate<TimelineStep>();
+            _jobs = TimelineJobs.Vitals.Create(ref state);
         }
 
         [BurstCompile]
@@ -49,7 +54,7 @@ namespace KindGame
         {
             var library = SystemAPI.GetSingleton<TimelineLibrary>();
             var step = SystemAPI.GetSingleton<TimelineStep>();
-            state.Dependency = TimelineJobs.Vitals(ref state, library.View, library.Kinds, step.Forward, state.Dependency);
+            state.Dependency = _jobs.Schedule(ref state, library.View, library.Kinds, step.Forward, state.Dependency);
         }
     }
 

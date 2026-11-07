@@ -8,9 +8,11 @@ namespace KindGame
         [Test]
         public void SixHundredStepKindScriptHashesLikeDotNet()
         {
+            using (var scan = new LogScan())
             using (var game = new KindWorld(KindScript.Rows))
             {
                 var hash = KindScript.Play(game, KindScript.Steps);
+                Assert.AreEqual("", scan.Report(), "warnings or errors logged during the steps");
                 Assert.AreEqual(KindScript.Pinned, hash);
                 Assert.AreEqual(0, game.Tick.DroppedPulses);
                 Assert.AreEqual(0, game.Tick.DroppedStarts);
@@ -20,9 +22,11 @@ namespace KindGame
         [Test]
         public void EventScriptRaisesTheSameCuesAsThePlainHost()
         {
+            using (var scan = new LogScan())
             using (var game = new KindWorld(KindScript.Rows, true))
             {
                 var hash = KindScript.PlayEvents(game, KindScript.Steps);
+                Assert.AreEqual("", scan.Report(), "warnings or errors logged during the steps");
                 Assert.AreEqual(KindScript.EventsPinned, hash);
                 Assert.AreEqual(0, game.Tick.DroppedStarts);
             }

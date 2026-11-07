@@ -77,6 +77,8 @@ namespace Tl.Unity
             for (var i = 0; i < _kinds.Count; i++)
                 if (_kinds[i].Name == descriptor.Name)
                     throw new ArgumentException("Kind '" + descriptor.Name + "' is registered twice: by assembly '" + _sources[i] + "' and by assembly '" + _source + "'. Kind names must be unique across assemblies; rename one of the kinds.");
+                else if (KindIndex.IdOf(_kinds[i].Name) == KindIndex.IdOf(descriptor.Name))
+                    throw new ArgumentException("Kinds '" + _kinds[i].Name + "' (assembly '" + _sources[i] + "') and '" + descriptor.Name + "' (assembly '" + _source + "') have the same kind id " + KindIndex.IdOf(descriptor.Name) + "; rename one of the kinds.");
             _kinds.Add(descriptor);
             _sources.Add(_source);
         }

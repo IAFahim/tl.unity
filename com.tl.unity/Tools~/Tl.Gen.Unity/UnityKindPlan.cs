@@ -75,7 +75,6 @@ namespace Tl.Gen.Unity
                         }
             }
             var infos = new List<UnityKindInfo>();
-            var registry = 0;
             foreach (var pair in byName)
             {
                 var kind = pair.Value;
@@ -88,7 +87,7 @@ namespace Tl.Gen.Unity
                     continue;
                 }
                 var entryBytes = kind.Accepts == 0 ? 8 : 8 + UnityLayout.Round(valueBytes, 4);
-                infos.Add(new UnityKindInfo(kind, registry++, valueBytes, entryBytes, Capacity(compilation, kind, context), UnityKindEmitter.NamespaceOf(kind.TypeName), UnityKindEmitter.Signature(assignments, kind), ColumnsOf(assignments, models, kind)));
+                infos.Add(new UnityKindInfo(kind,valueBytes, entryBytes, Capacity(compilation, kind, context), UnityKindEmitter.NamespaceOf(kind.TypeName), UnityKindEmitter.Signature(assignments, kind), ColumnsOf(assignments, models, kind)));
             }
             return infos;
         }

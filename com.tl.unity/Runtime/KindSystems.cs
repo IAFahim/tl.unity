@@ -11,12 +11,19 @@ namespace Tl.Unity
         [NativeDisableUnsafePtrRestriction] internal UnsafeList<KindPulseSender>* Senders;
         [NativeDisableUnsafePtrRestriction] internal UnsafeList<JobHandle>* Writers;
         [NativeDisableUnsafePtrRestriction] internal int* Counters;
+        [NativeDisableUnsafePtrRestriction] internal JobHandle* Last;
 
         public bool IsCreated => Counters != null;
 
-        public int DroppedPulses => Counters[KindCounter.DroppedPulses];
+        public int DroppedPulses => Counter(KindCounter.DroppedPulses);
 
-        public int DroppedStarts => Counters[KindCounter.DroppedStarts];
+        public int DroppedStarts => Counter(KindCounter.DroppedStarts);
+
+        int Counter(int index)
+        {
+            Last->Complete();
+            return Counters[index];
+        }
 
         public KindPulseSender BeginPulses(int foreachCount)
         {
@@ -38,6 +45,8 @@ namespace Tl.Unity
             var bytes = KindCounter.Count * sizeof(int);
             tick.Counters = (int*)UnsafeUtility.Malloc(bytes, 16, Allocator.Persistent);
             UnsafeUtility.MemClear(tick.Counters, bytes);
+            tick.Last = (JobHandle*)UnsafeUtility.Malloc(sizeof(JobHandle), 16, Allocator.Persistent);
+            *tick.Last = default;
             return tick;
         }
 
@@ -50,6 +59,7 @@ namespace Tl.Unity
             UnsafeList<KindPulseSender>.Destroy(Senders);
             UnsafeList<JobHandle>.Destroy(Writers);
             UnsafeUtility.Free(Counters, Allocator.Persistent);
+            UnsafeUtility.Free(Last, Allocator.Persistent);
             this = default;
         }
     }
@@ -156,8 +166,6 @@ namespace Tl.Unity
                     {
                         Reader = stream.AsReader(),
                         ForEachCount = stream.ForEachCount,
-                        RegistryToLibrary = index.RegistryToLibrary,
-                        RegistryCount = index.RegistryCount,
                         Storage = storage,
                         Handles = handles,
                         Counters = counters,
@@ -168,6 +176,7 @@ namespace Tl.Unity
                 }
                 senders->Clear();
             }
+            *_tick.Last = dependency;
             state.Dependency = dependency;
         }
     }

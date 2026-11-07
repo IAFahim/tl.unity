@@ -207,42 +207,67 @@ namespace Tl.Gen.Unity
             if (events.Count != 0)
                 EmitEvents(writer, events, eventConsumers, assignmentIndex);
             W(writer, "}");
+            EmitEntry(writer, model, events, kinds);
+            W(writer, "}");
+            return writer.ToString().Replace("\r\n", "\n");
+        }
+
+        static void EmitEntry(StringBuilder writer, UnitySystemModel model, List<UnityContext> events, IReadOnlyList<UnityKindInfo> kinds)
+        {
+            var handles = new List<(string field, string type, string getter, bool readOnly)>();
+            handles.Add(("PlaybackHandle", "BufferTypeHandle<global::Tl.Unity.Playback>", "GetBufferTypeHandle<global::Tl.Unity.Playback>", true));
+            foreach (var column in model.Columns)
+                handles.Add((column.Name + "Handle", "ComponentTypeHandle<" + ComponentName(model, column) + ">", "GetComponentTypeHandle<" + ComponentName(model, column) + ">", column.ReadOnly));
+            foreach (var evented in events)
+                handles.Add((evented.Name + "EventHandle", "BufferTypeHandle<global::Tl.Unity.TimelineEvent<" + evented.TypeName + ">>", "GetBufferTypeHandle<global::Tl.Unity.TimelineEvent<" + evented.TypeName + ">>", false));
+            foreach (var kind in kinds)
+            {
+                handles.Add((kind.Name + "EntryHandle", "BufferTypeHandle<" + kind.Entry + ">", "GetBufferTypeHandle<" + kind.Entry + ">", false));
+                handles.Add((kind.Name + "ActiveHandle", "ComponentTypeHandle<" + kind.Active + ">", "GetComponentTypeHandle<" + kind.Active + ">", false));
+                handles.Add((kind.Name + "EnabledHandle", "ComponentTypeHandle<" + kind.Enabled + ">", "GetComponentTypeHandle<" + kind.Enabled + ">", true));
+            }
+            var name = model.SystemTypeName;
             W(writer, "public static partial class TimelineJobs");
             W(writer, "{");
+            W(writer, "public struct " + name);
+            W(writer, "{");
+            W(writer, "EntityQuery _query;");
+            foreach (var handle in handles)
+                W(writer, handle.type + " _" + handle.field + ";");
+            W(writer, "public static " + name + " Create(ref SystemState state)");
+            W(writer, "{");
+            W(writer, "var jobs = default(" + name + ");");
+            W(writer, "var builder = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.Playback>();");
+            foreach (var column in model.Columns)
+                W(writer, column.ReadOnly ? "builder = builder.WithAll<" + ComponentName(model, column) + ">();" : "builder = builder.WithAllRW<" + ComponentName(model, column) + ">();");
+            W(writer, "jobs._query = builder.Build(ref state);");
+            W(writer, "builder.Dispose();");
+            foreach (var handle in handles)
+                W(writer, "jobs._" + handle.field + " = state." + handle.getter + "(" + (handle.readOnly ? "true" : "false") + ");");
+            W(writer, "return jobs;");
+            W(writer, "}");
             var signature = new StringBuilder();
-            signature.Append("public static JobHandle " + model.SystemTypeName + "(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward");
+            signature.Append("public JobHandle Schedule(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward");
             foreach (var context in model.Contexts)
                 signature.Append(", " + context.TypeName + " " + context.Name);
             signature.Append(", JobHandle dependsOn)");
             W(writer, signature.ToString());
             W(writer, "{");
-            W(writer, "var builder = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.Playback>();");
-            foreach (var column in model.Columns)
-                W(writer, column.ReadOnly ? "builder = builder.WithAll<" + ComponentName(model, column) + ">();" : "builder = builder.WithAllRW<" + ComponentName(model, column) + ">();");
-            W(writer, "var query = state.GetEntityQuery(builder);");
-            W(writer, "builder.Dispose();");
-            W(writer, "var job = new " + model.SystemTypeName + "ChunkJob { View = view, Index = index, Forward = forward, PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true)");
-            foreach (var column in model.Columns)
-                W(writer, ", " + column.Name + "Handle = state.GetComponentTypeHandle<" + ComponentName(model, column) + ">(" + (column.ReadOnly ? "true" : "false") + ")");
+            foreach (var handle in handles)
+                W(writer, "_" + handle.field + ".Update(ref state);");
+            W(writer, "var job = new " + name + "ChunkJob { View = view, Index = index, Forward = forward");
+            foreach (var handle in handles)
+                W(writer, ", " + handle.field + " = _" + handle.field);
             foreach (var context in model.Contexts)
                 W(writer, ", " + context.Name + " = " + context.Name);
-            foreach (var evented in events)
-                W(writer, ", " + evented.Name + "EventHandle = state.GetBufferTypeHandle<global::Tl.Unity.TimelineEvent<" + evented.TypeName + ">>(false)");
-            foreach (var kind in kinds)
-            {
-                W(writer, ", " + kind.Name + "EntryHandle = state.GetBufferTypeHandle<" + kind.Entry + ">(false)");
-                W(writer, ", " + kind.Name + "ActiveHandle = state.GetComponentTypeHandle<" + kind.Active + ">(false)");
-                W(writer, ", " + kind.Name + "EnabledHandle = state.GetComponentTypeHandle<" + kind.Enabled + ">(true)");
-            }
             W(writer, " };");
-            W(writer, "return job.ScheduleParallel(query, dependsOn);");
+            W(writer, "return job.ScheduleParallel(_query, dependsOn);");
             W(writer, "}");
             W(writer, "}");
             W(writer, "}");
-            return writer.ToString().Replace("\r\n", "\n");
         }
 
-        static void EmitKind(StringBuilder writer, Shape shape, SystemAssignment assignment, int assignmentIndex, UnityKindInfo info, int ordinal)
+        static void EmitKind(StringBuilder writer,Shape shape, SystemAssignment assignment, int assignmentIndex, UnityKindInfo info, int ordinal)
         {
             var kind = info.Decl;
             var feeders = new List<(int consumer, FeederDecl feeder)>();

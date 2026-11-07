@@ -57,11 +57,14 @@ also as Burst `ISystem`s:
 [UpdateAfter(typeof(TimelineKindTickSystem))]
 public partial struct VitalsSystem : ISystem
 {
+    TimelineJobs.Vitals _jobs;
+
     [BurstCompile]
     public void OnCreate(ref SystemState state)
     {
         state.RequireForUpdate<TimelineLibrary>();
         state.RequireForUpdate<TimelineStep>();
+        _jobs = TimelineJobs.Vitals.Create(ref state);
     }
 
     [BurstCompile]
@@ -69,7 +72,7 @@ public partial struct VitalsSystem : ISystem
     {
         var library = SystemAPI.GetSingleton<TimelineLibrary>();
         var step = SystemAPI.GetSingleton<TimelineStep>();
-        state.Dependency = TimelineJobs.Vitals(ref state, library.View, library.Kinds, step.Forward, state.Dependency);
+        state.Dependency = _jobs.Schedule(ref state, library.View, library.Kinds, step.Forward, state.Dependency);
     }
 }
 ```
@@ -284,6 +287,15 @@ a `Damage` kind fail at load with `Kind 'Damage' is registered twice: by
 assembly 'A' and by assembly 'B'.` The package's own test game
 (`Tests/Kinds`, assembly `Tl.Unity.Kinds`) compiles only when the package is
 listed in `testables`, so it never collides with your kinds.
+
+A kind's id (`DamageKind.Id`, the key a pulse carries) is the 32-bit FNV-1a
+hash of its name, `KindIndex.IdOf("Damage")`, so it does not depend on how
+many assemblies declare kinds or on the order they load. The library stores
+kind names, and the runtime maps each id to the library's kind when it binds
+the library. Two names with the same id fail at load with `Kinds 'A' and 'B'
+have the same kind id`. The package tests prove it with a second kind-bearing
+assembly (`Tests/Generated`, kind `Gust`) loaded next to `Tl.Unity.Kinds`: the
+600-step and events hashes do not change.
 
 ## Sizing
 

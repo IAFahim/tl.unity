@@ -15,7 +15,7 @@ public struct DamageActive : IComponentData, IEnableableComponent { }
 public struct DamageEnabled : IComponentData, IEnableableComponent { }
 public static class DamageKind
 {
-public const int Id = 0;
+public const int Id = 771216480;
 public const int InlineCapacity = global::KindGame.KindCapacity.Damage;
 public static global::Unity.Entities.ComponentType[] Types { get { return new global::Unity.Entities.ComponentType[] { typeof(DamageEntry), typeof(DamageActive), typeof(DamageEnabled) }; } }
 public static void Init(global::Unity.Entities.EntityManager entities, global::Unity.Entities.Entity entity) { entities.SetComponentEnabled<DamageActive>(entity, false); }
@@ -31,7 +31,7 @@ public struct LiftActive : IComponentData, IEnableableComponent { }
 public struct LiftEnabled : IComponentData, IEnableableComponent { }
 public static class LiftKind
 {
-public const int Id = 1;
+public const int Id = 1995782556;
 public const int InlineCapacity = global::KindGame.KindCapacity.Lift;
 public static global::Unity.Entities.ComponentType[] Types { get { return new global::Unity.Entities.ComponentType[] { typeof(LiftEntry), typeof(LiftActive), typeof(LiftEnabled) }; } }
 public static void Init(global::Unity.Entities.EntityManager entities, global::Unity.Entities.Entity entity) { entities.SetComponentEnabled<LiftActive>(entity, false); }
@@ -46,7 +46,7 @@ public struct LocomotionActive : IComponentData, IEnableableComponent { }
 public struct LocomotionEnabled : IComponentData, IEnableableComponent { }
 public static class LocomotionKind
 {
-public const int Id = 2;
+public const int Id = 1989750836;
 public const int InlineCapacity = global::KindGame.KindCapacity.Locomotion;
 public static global::Unity.Entities.ComponentType[] Types { get { return new global::Unity.Entities.ComponentType[] { typeof(LocomotionEntry), typeof(LocomotionActive), typeof(LocomotionEnabled) }; } }
 public static void Init(global::Unity.Entities.EntityManager entities, global::Unity.Entities.Entity entity) { entities.SetComponentEnabled<LocomotionActive>(entity, false); }
@@ -61,7 +61,7 @@ public struct StatChangeActive : IComponentData, IEnableableComponent { }
 public struct StatChangeEnabled : IComponentData, IEnableableComponent { }
 public static class StatChangeKind
 {
-public const int Id = 3;
+public const int Id = 1633184051;
 public const int InlineCapacity = global::KindGame.KindCapacity.StatChange;
 public static global::Unity.Entities.ComponentType[] Types { get { return new global::Unity.Entities.ComponentType[] { typeof(StatChangeEntry), typeof(StatChangeActive), typeof(StatChangeEnabled) }; } }
 public static void Init(global::Unity.Entities.EntityManager entities, global::Unity.Entities.Entity entity) { entities.SetComponentEnabled<StatChangeActive>(entity, false); }
@@ -121,7 +121,7 @@ registry.Add(new global::Tl.Unity.KindDescriptor("Locomotion", typeof(global::Ki
 registry.Add(new global::Tl.Unity.KindDescriptor("StatChange", typeof(global::KindGame.StatChangeEntry), typeof(global::KindGame.StatChangeActive), typeof(global::KindGame.StatChangeEnabled), 4, 12, "KindGame.ChangeStat.Start:1\nKindGame.Steps.OnStep:3", new global::System.Type[] { typeof(global::KindGame.Movement_JumpPowerData), typeof(global::KindGame.Movement_MotionData), typeof(global::KindGame.Movement_StaminaData), typeof(global::KindGame.Movement_TargetData), typeof(global::KindGame.Movement_WalkStatData) }));
 }
 }
-public static unsafe class TlUnityFrames
+internal static unsafe class TlUnityFrames
 {
 public static void Frame_0_0(byte* trackPtr, byte* firstPtr, byte* secondPtr, float blend, ushort tick, ushort windowLength, ushort withinClip, ushort trackIndex, ushort duration, sbyte direction, global::Tl.FrameFlags extra, out global::KindGame.StatTrack track, out global::KindGame.StatClip clip, out global::Tl.Frame<global::KindGame.StatTrack, global::KindGame.StatClip> frame)
 {
