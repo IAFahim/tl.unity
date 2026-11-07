@@ -416,7 +416,7 @@ namespace Tl.Unity.Tracks.Tests
             var site = (int)pushBlob.Value.RefSites[0];
             Assert.AreEqual(1, tlb[site] | (tlb[site + 1] << 8));
             Assert.IsTrue(entities.HasComponent<ThenPlay>(entity));
-            Assert.AreEqual(TlTimelinePacker.AssetOf(dash), entities.GetComponentData<ThenPlay>(entity).Timeline.Asset, "the TlTimeline field bakes to the Dash asset");
+            Assert.AreEqual(TlTimelinePacker.AssetOf(dash).ToAssetId(), entities.GetComponentData<ThenPlay>(entity).Timeline.Asset, "the TlTimeline field bakes to the Dash asset");
 
             var live = new LiveWorld(baked.World);
             live.Step(1);
@@ -477,7 +477,7 @@ namespace Tl.Unity.Tracks.Tests
             var entity = baked.Single<TlTimelineSet>();
             var live = new LiveWorld(baked.World, true);
             live.Step(2);
-            var stranger = new TlTimeline { Asset = new global::Unity.Entities.Hash128(9, 9, 9, 9) };
+            var stranger = new TlTimeline { Asset = new TlAssetId(9, 9, 9, 9) };
             entities.GetBuffer<TimelineRequest>(entity).Start(stranger);
             LogAssert.Expect(LogType.Warning, new Regex("cannot play. Drag that timeline into Also Plays"));
             live.Step(2);

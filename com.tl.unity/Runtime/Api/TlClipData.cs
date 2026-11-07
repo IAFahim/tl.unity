@@ -20,7 +20,7 @@ namespace Tl.Unity
 
         public static TlTimeline TimelineOf(UnityEngine.Object timeline)
         {
-            return timeline == null || AssetResolver == null ? default : new TlTimeline { Asset = AssetResolver(timeline) };
+            return timeline == null || AssetResolver == null ? default : new TlTimeline { Asset = AssetResolver(timeline).ToAssetId() };
         }
 
         public static global::Tl.TimelineId IdOf(UnityEngine.Object timeline)
