@@ -578,3 +578,44 @@ listed commands and reads back the result, not a claim.
 Risks: Timeline's `OnCreate` swap breaks with a Timeline update (mitigation: fall back to the single `Tl Track` + type dropdown, data format
 unchanged); SerializeReference + missing types behaviour on future editors (S3 checks it); `Tl.Gen.Tlb` drifts from Unity's API surface
 (the sync script compiles it with Unity's references in CI, as F7 did); several SubScenes with different tick rates (rejected with a message).
+
+## 7. Phase 2 results and S6
+
+Built on 7000.0.0a16, Entities 6.7.0. Proven by `eng/test-com-tl-unity.sh` (EditMode 65/65, PlayMode 49/49, 0 `error CS`, 0 warnings)
+and a fresh project (package from a local path, no testables, no marker asmdef, no Library asset) with the five Force files in `Assets/`:
+0 `error CS`, 0 warnings, and `Type.GetType` finds `Tl.Generated.ForceClip_TlData`, `TlUnityGenerated.ForceKindEntry`,
+`Tl.Generated.TlAuto_Assembly_CSharp_Jobs` and the apply job in `Assembly-CSharp`.
+
+| Name | Where | Notes |
+|---|---|---|
+| `TlClipAttribute(string menu)`, `TlKindAttribute` (`Accepts`, `Mode`, `Order`, `Group`, `FoldsPulses`, `Inline`) | `Tl.Unity` runtime, namespace `Tl` | `[TimelineKind]` still works |
+| `ITlTrack<TClip>` | same | `: ITrack<TlNoSettings<TClip>, TClip>`; `TlNoSettings<TClip> : IBlend<TClip>` keeps the first clip |
+| `TlFrame<TClip>` | same | built from `Frame<TlNoSettings<TClip>, TClip>`: `Clip`, `Tick`, `ClipLength`, `WithinClip`, `Direction`, `Progress` |
+| `TlCurve` | same | 16 inline `float` samples (64 B), linear `Evaluate(progress)`, Burst-safe |
+| `TlCurveBlob` | same assembly, **global namespace** | `ForceData.cs` has no `using Tl;`, so the blob type must resolve without it |
+| `ITlBaker<TClip>`, `TlBaker` (ref struct), `TlBakeReport` | same, namespace `Tl` | `Tl.Unity` now references `Unity.Entities.Hybrid` for `IBaker` |
+| `TlSimulationGroup` | same, namespace `Tl` | in `FixedStepSimulationSystemGroup`; `TimelineSimulationGroup` now runs inside it, so `OrderLast` systems see every kind applied |
+| `TlClipData`, `TlCurveAuthoring`, `TlClipBytes` | `Tl.Unity` runtime, namespace `Tl.Unity` | base of the generated mirror; phase 4 adds `TlTrack`/`TlClip` on top |
+| `TlKindSystem<TJobs>`, `ITlKindJobs` | same | generic `ISystem` in `TlSimulationGroup` after `TimelineSimulationGroup`; each assembly registers its instance |
+
+Generator: `Tl.Gen.Unity.dll` moved to `com.tl.unity/Runtime/` (F3). It skips `Tl.Unity`, `Tl.Core`, assemblies with no Tl marker text and
+assemblies that carry checked-in `TlUnity.*.g.cs` output (the KindGame fixture). `Tl.Unity.Generate*.asmdef` stay as empty markers until
+phase 7. The type-registration ILPostProcessor now also processes every assembly that references `Tl.Unity`. In one analysis pass the
+generator rewrites `[TlKind]` to `[TimelineKind]` and `TlFrame<T>` to `Frame<TlNoSettings<T>, T>`, then gives every kind whose `Apply`
+writes only unmanaged `IComponentData` types (and no `[TimelineSystem]` column) to a generated system `Tl.Generated.TlAuto_<assembly>`. Its
+columns are the coder's own components (no `_Data` wrapper). Per `[TlClip]` struct it emits `Tl.Generated.<Clip>_TlData : TlClipData`
+(`[Serializable]`, `TlCurve` fields as `AnimationCurve`, `ToClip`, `WriteClip`, `Bake` calling every `ITlBaker<Clip>`). Inline capacity:
+`[TlKind(Inline = n)]`, else a legacy `KindCapacity` constant, else `128 / entry bytes`. There is no `Kinds.g.cs` and no warning.
+
+**S6 (passed).** `Tests/Generated/Direct`: a kind applying straight into `Stride : IComponentData` through the generated system, packed with
+tlb, runs the same B shape as the K bench. Same process, Burst on, 100000 entities:
+
+| Row | K bench | S6 direct |
+|---|---|---|
+| A all playing | 7.4 ns, 0 B | 6.8 ns, 0 B |
+| B tenth playing | 1.9 ns | 1.1 ns |
+| B0 none playing | 0.6 ns | 0.2 ns |
+
+The direct rows do one kind and one apply system where the K bench does four kinds in two systems, so they are lower, not slower. Both pinned
+hashes are unchanged (`KindHashTests` green). Open: tlb and `Tl.Gen.Tlb` read `[TimelineKind]` only, so the S6 fixture uses
+`[TimelineKind]`; the phase 1 packer must accept `TlKind` and `ITlTrack` feeders before phase 4.
