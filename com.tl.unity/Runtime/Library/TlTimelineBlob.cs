@@ -11,5 +11,6 @@ namespace Tl.Unity
         public BlobArray<byte> Tlb;
         public BlobArray<byte> Kinds;
         public BlobArray<Hash128> NextAssets;
+        public BlobArray<uint> RefSites;
     }
 }

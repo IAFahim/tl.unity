@@ -25,8 +25,7 @@ namespace Tl.Unity.Editor
         {
             var name = timeline.name;
             var typed = new TypedTimeline { Name = name, Duration = Ticks(timeline.duration, tickRate) };
-            var next = Array.Empty<string>();
-            var nextAssets = Array.Empty<EntitiesHash>();
+            var refs = new List<TimelineAsset>();
             var channels = Array.Empty<string>();
             var settings = TlDirectorTimelines.Settings(timeline);
             if (settings != null)
@@ -36,8 +35,7 @@ namespace Tl.Unity.Editor
                 if (settings.End == TlEnd.Next && settings.Next != null)
                 {
                     typed.Next = settings.Next.name;
-                    next = new[] { settings.Next.name };
-                    nextAssets = new[] { AssetOf(settings.Next) };
+                    refs.Add(settings.Next);
                 }
                 if (settings.Channel > 0)
                 {
@@ -45,6 +43,8 @@ namespace Tl.Unity.Editor
                     typed.Channel = channels[channels.Length - 1];
                 }
             }
+            var written = new List<(TypedClip clip, TlClipData data)>();
+            TlClipData.AssetResolver = AssetResolver;
             foreach (var track in timeline.GetOutputTracks())
             {
                 if (!(track is TlTrack tl) || tl.mutedInHierarchy || tl.Template == null)
@@ -70,18 +70,67 @@ namespace Tl.Unity.Editor
                         Debug.LogWarning(TlMenu.ShortName(data.MenuName) + " baking failed on the clip at " + Seconds(clip.start) + " in " + name + " (" + NameOf(context) + "): " + error.Message + " The clip is skipped.", clip.asset);
                         continue;
                     }
-                    var bytes = new byte[data.ClipSize];
-                    data.WriteClip(bytes, 0);
-                    typedTrack.Clips.Add(new TypedClip { Name = clip.displayName, Type = clipType, Start = start, End = end, Data = bytes });
+                    foreach (var target in TlDirectorTimelines.IdFields(data))
+                        if (!refs.Contains(target))
+                            refs.Add(target);
+                    var typedClip = new TypedClip { Name = clip.displayName, Type = clipType, Start = start, End = end };
+                    typedTrack.Clips.Add(typedClip);
+                    written.Add((typedClip, data));
                     typed.Duration = Math.Max(typed.Duration, end);
                 }
                 typed.Tracks.Add(typedTrack);
             }
-            var manifest = TlBake.Manifest(next, channels, tickRate);
-            var tlb = TlBake.BakeTyped(typed, manifest);
+            var names = new string[refs.Count];
+            for (var i = 0; i < names.Length; i++)
+                names[i] = i == 0 && typed.Next != null ? typed.Next : "~" + i;
+            var manifest = TlBake.Manifest(names, channels, tickRate);
+            var tlb = Bake(typed, manifest, written, refs, 0);
+            uint[] sites = null;
+            if (written.Any(w => TlDirectorTimelines.IdFields(w.data).Any()))
+                sites = Sites(tlb, Bake(typed, manifest, written, refs, Marker), refs.Count);
             kindMask = TlBake.Analyze(name, tlb, catalog).KindMask;
-            return TlTimelineBlobs.Create(AssetOf(timeline), tickRate, name, tlb, TlBake.KindBytes(name, tlb, catalog), nextAssets);
+            return TlTimelineBlobs.Create(AssetOf(timeline), tickRate, name, tlb, TlBake.KindBytes(name, tlb, catalog), refs.Select(AssetOf).ToArray(), sites);
         }
+
+        const ushort Marker = 0x8000;
+
+        static byte[] Bake(TypedTimeline typed, LibraryManifest manifest, List<(TypedClip clip, TlClipData data)> written, List<TimelineAsset> refs, ushort marker)
+        {
+            TlClipData.LocalIdResolver = asset => asset is TimelineAsset target && refs.IndexOf(target) is var index && index >= 0 ? (ushort)((index + 1) | marker) : (ushort)0;
+            try
+            {
+                foreach (var (clip, data) in written)
+                {
+                    clip.Data = new byte[data.ClipSize];
+                    data.WriteClip(clip.Data, 0);
+                }
+            }
+            finally
+            {
+                TlClipData.LocalIdResolver = null;
+            }
+            return TlBake.BakeTyped(typed, manifest);
+        }
+
+        static uint[] Sites(byte[] plain, byte[] marked, int count)
+        {
+            var sites = new List<uint>();
+            if (plain.Length != marked.Length)
+                throw new InvalidOperationException("the timeline references could not be located");
+            for (var i = 0; i + 1 < plain.Length; i++)
+            {
+                var a = plain[i] | (plain[i + 1] << 8);
+                var b = marked[i] | (marked[i + 1] << 8);
+                if (a == b || a < 1 || a > count || b != (a | Marker))
+                    continue;
+                sites.Add((uint)i);
+                sites.Add((uint)a);
+                i++;
+            }
+            return sites.ToArray();
+        }
+
+        static EntitiesHash AssetResolver(UnityEngine.Object asset) => asset is TimelineAsset timeline ? AssetOf(timeline) : default;
 
         public static uint Ticks(double seconds, uint tickRate)
         {

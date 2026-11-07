@@ -133,6 +133,16 @@ public sealed partial class TimelineWorld
                 for (var i = 0; i < players.CountOf(record.Entity); i++)
                     if (players.SlotsOf(record.Entity)[i].Timeline != 0 && (players.SlotsOf(record.Entity)[i].Flags & PlaybackFlags.Stopping) == 0 && players.SlotsOf(record.Entity)[i].Channel == (byte)record.Timeline) { players.CloseSlot(record.Entity, i); return; }
                 return;
+            case RequestOp.Pause:
+            case RequestOp.Resume:
+                for (var i = 0; i < players.CountOf(record.Entity); i++)
+                {
+                    var slot = players.SlotsOf(record.Entity) + i;
+                    if (slot->Timeline != record.Timeline || (slot->Flags & PlaybackFlags.Stopping) != 0) continue;
+                    slot->Flags = record.Op == RequestOp.Pause ? slot->Flags | PlaybackFlags.Paused : slot->Flags & ~PlaybackFlags.Paused;
+                    return;
+                }
+                return;
             default:
                 for (var i = 0; i < players.CountOf(record.Entity); i++)
                     if (players.SlotsOf(record.Entity)[i].Timeline != 0 && (players.SlotsOf(record.Entity)[i].Flags & PlaybackFlags.Stopping) == 0) players.CloseSlot(record.Entity, i);

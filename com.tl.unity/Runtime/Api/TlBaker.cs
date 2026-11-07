@@ -30,6 +30,11 @@ namespace Tl
                 _baker.AddComponent<T>(_entity);
         }
 
+        public void AddComponent<T>(T value) where T : unmanaged, IComponentData
+        {
+            AddBlob(value);
+        }
+
         public void AddBuffer<T>() where T : unmanaged, IBufferElementData
         {
             if (_added.Add(ComponentType.ReadWrite<T>()))

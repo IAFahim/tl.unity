@@ -26,6 +26,7 @@ namespace Tl.Unity
         public ushort Timeline;
         public ushort At;
         public global::Tl.RequestOp Op;
+        public Hash128 Asset;
 
         public static TimelineRequest Start(int slot, ushort timeline, ushort at = 0)
         {
@@ -45,6 +46,16 @@ namespace Tl.Unity
         public static TimelineRequest StopAll(int slot)
         {
             return new TimelineRequest { Slot = slot, Op = global::Tl.RequestOp.StopAll };
+        }
+
+        public static TimelineRequest Pause(int slot, ushort timeline)
+        {
+            return new TimelineRequest { Slot = slot, Timeline = timeline, Op = global::Tl.RequestOp.Pause };
+        }
+
+        public static TimelineRequest Resume(int slot, ushort timeline)
+        {
+            return new TimelineRequest { Slot = slot, Timeline = timeline, Op = global::Tl.RequestOp.Resume };
         }
     }
 

@@ -5,6 +5,8 @@
     "Tl.Core",
     "Tl.Unity",
     "Tl.Unity.Bake",
+    "Tl.Unity.Control",
+    "Unity.Burst",
     "Tl.Unity.Editor",
     "Tl.Unity.ForceContract",
     "Tl.Unity.Tracks",

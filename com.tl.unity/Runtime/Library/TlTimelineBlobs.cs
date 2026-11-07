@@ -11,6 +11,11 @@ namespace Tl.Unity
     {
         public static BlobAssetReference<TlTimelineBlob> Create(Hash128 asset, uint tickRate, string name, byte[] tlb, byte[] kinds, Hash128[] nextAssets)
         {
+            return Create(asset, tickRate, name, tlb, kinds, nextAssets, null);
+        }
+
+        public static BlobAssetReference<TlTimelineBlob> Create(Hash128 asset, uint tickRate, string name, byte[] tlb, byte[] kinds, Hash128[] nextAssets, uint[] refSites)
+        {
             if (string.IsNullOrEmpty(name))
                 throw new ArgumentException("A timeline blob needs a name.", nameof(name));
             if (tlb == null || tlb.Length == 0)
@@ -19,6 +24,7 @@ namespace Tl.Unity
                 throw new ArgumentException("Timeline '" + name + "' has tick rate 0.", nameof(tickRate));
             kinds ??= Array.Empty<byte>();
             nextAssets ??= Array.Empty<Hash128>();
+            refSites ??= Array.Empty<uint>();
             var nameBytes = Encoding.UTF8.GetBytes(name);
             var builder = new BlobBuilder(Allocator.Temp);
             try
@@ -32,7 +38,10 @@ namespace Tl.Unity
                 var next = builder.Allocate(ref root.NextAssets, nextAssets.Length);
                 for (var i = 0; i < nextAssets.Length; i++)
                     next[i] = nextAssets[i];
-                root.Content = ContentOf(tickRate, nameBytes, tlb, kinds, nextAssets);
+                var sites = builder.Allocate(ref root.RefSites, refSites.Length);
+                for (var i = 0; i < refSites.Length; i++)
+                    sites[i] = refSites[i];
+                root.Content = ContentOf(tickRate, nameBytes, tlb, kinds, nextAssets, refSites);
                 return builder.CreateBlobAssetReference<TlTimelineBlob>(Allocator.Persistent);
             }
             finally
@@ -63,7 +72,7 @@ namespace Tl.Unity
                     UnsafeUtility.MemCpy(array.GetUnsafePtr(), from, source.Length);
         }
 
-        static Hash128 ContentOf(uint tickRate, byte[] name, byte[] tlb, byte[] kinds, Hash128[] next)
+        static Hash128 ContentOf(uint tickRate, byte[] name, byte[] tlb, byte[] kinds, Hash128[] next, uint[] sites)
         {
             using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             sha.AppendData(BitConverter.GetBytes(tickRate));
@@ -72,6 +81,8 @@ namespace Tl.Unity
             Feed(sha, kinds);
             foreach (var asset in next)
                 Feed(sha, Encoding.ASCII.GetBytes(asset.ToString()));
+            foreach (var site in sites)
+                sha.AppendData(BitConverter.GetBytes(site));
             var digest = sha.GetHashAndReset();
             return new Hash128(BitConverter.ToUInt32(digest, 0), BitConverter.ToUInt32(digest, 4), BitConverter.ToUInt32(digest, 8), BitConverter.ToUInt32(digest, 12));
         }

@@ -778,3 +778,31 @@ Built on 7000.0.0a16. Design notes, what was taken from BovineLabs Timeline and 
 
 Not verifiable headless: the real Timeline window scrub, the foldout and section drawn in a real Inspector, Ctrl+Z in the window. Those are
 lines 14 to 19 of [FORCE-DEMO-CHECK.md](../FORCE-DEMO-CHECK.md).
+
+## 12. Phase 6 results (control from code and clips)
+
+Built on 7000.0.0a16. tl main a93a3298 adds `RequestOp.Pause`/`Resume` (`PlaybackTable.Pause/Resume`, `Requests.Pause/Resume`, plain host
+honours them; tl tests 893 + 75 green); `external/tl-kinds` moved there, Core and the in-process packer resynced, generator dlls rebuilt.
+
+| Name | Where | What |
+|---|---|---|
+| `TlTimeline { Hash128 Asset }` | `Runtime/Api`, namespace `Tl` | unmanaged reference to a Timeline asset, usable in clips, components and jobs |
+| mirror rule | `Tl.Gen.Unity` | a `TlTimeline` or `TimelineId` field of a `[TlClip]` struct is a Timeline object field in the clip Inspector (drag and drop); `TlTimeline` bakes to the asset hash, `TimelineId` to a local id that the library patches |
+| `TlRequests.Start/Stop/Pause/Resume(this DynamicBuffer<TimelineRequest>, in TlTimeline)` | `Runtime/Library` | plain buffer appends, callable from Burst `IJobEntity`/`IJob` code; `TimelineRequest.Asset` carries the reference |
+| `TlRequestResolveSystem` | same | Burst `ISystem` first in `TimelineSimulationGroup`; a Burst job turns assets into library ids through `TlLibraryIndex` (change filter, idle when nothing was requested); an asset the object cannot play is dropped with one plain warning |
+| Pause/Resume | `KindCursor.Apply`, `TimelineKernel.ApplyPause` | set and clear `PlaybackFlags.Paused`; a paused playback holds its tick and keeps its active spans, like the plain host |
+| closure | `TlDirectorTimelines.Collect`, `TlInspectorModel.Plays` | timelines named in clip fields join the object's set (after the Playable and Also Plays), with `DependsOn` |
+| `TlTimelineBlob.RefSites`, `TlLibraryPart.Refs` | `Runtime/Library` | offsets of `TimelineId` values inside the TLB with their local id; the assembler writes library ids there (and 0 until the target is loaded), like `Next` |
+| `TlBaker.AddComponent<T>(T value)` | `Runtime/Api` | value overload; same first-wins rule as `AddBlob` |
+
+The packer finds the `TimelineId` sites by baking the timeline twice with the local ids and with the ids marked (`| 0x8000`) and keeping the
+offsets where exactly those values differ; the bake is deterministic, so the sites are exact.
+
+| Acceptance | Result |
+|---|---|
+| `ClipTimelineFieldsJoinTheSetAndTimelineIdsArePatchedToLibraryIds` | set Push, Dash, Kick; one site with local id 1; the assembled library holds Push with Kick's library id; the `TlTimeline` field bakes to Dash's asset |
+| `AJobStartsPausesAndResumesATimelineFromItsTlTimelineField` | a `[BurstCompile] IJobEntity` starts Dash when a gameplay flag is set; its `[BurstDiscard]` probe never ran (Burst code); Pause holds the tick for 5 steps, Resume continues |
+| `StartingATimelineTheObjectCannotPlayWarnsAndStartsNothing` | one warning, nothing started |
+| Control demo (sample, `Dash When Far` clip + `StartDashWhenFar` Burst `IJobEntity`) | Dash starts at x 2.05, cube ends at x 4.0333, z 3.0500 |
+
+The five Force contract files are unchanged; the Control demo adds one optional file (`Control/DashWhenFar.cs`) to show the API.

@@ -180,5 +180,18 @@ namespace Tl.Unity
                 return left.Slot < right->Slot;
             return left.Sequence < right->Sequence;
         }
+
+        public static void ApplyPause(ref DynamicBuffer<Playback> playbacks, ushort timeline, bool pause)
+        {
+            for (var i = 0; i < playbacks.Length; i++)
+            {
+                var slot = playbacks[i];
+                if (timeline == 0 || slot.Timeline != timeline || (slot.Flags & global::Tl.PlaybackFlags.Stopping) != 0)
+                    continue;
+                slot.Flags = pause ? slot.Flags | global::Tl.PlaybackFlags.Paused : slot.Flags & ~global::Tl.PlaybackFlags.Paused;
+                playbacks[i] = slot;
+                return;
+            }
+        }
     }
 }

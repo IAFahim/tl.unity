@@ -57,7 +57,7 @@ namespace KindGame
                 if (group != null && group.GroupType == typeof(TimelineSimulationGroup))
                     inGroup.Add(type);
             }
-            CollectionAssert.AreEquivalent(new[] { typeof(TimelineRequestSystem), typeof(TimelineAdvanceSystem), typeof(TimelineEventSystem), typeof(TimelineKindTickSystem) }, inGroup);
+            CollectionAssert.AreEquivalent(new[] { typeof(TlRequestResolveSystem), typeof(TimelineRequestSystem), typeof(TimelineAdvanceSystem), typeof(TimelineEventSystem), typeof(TimelineKindTickSystem) }, inGroup);
             foreach (var type in inGroup)
             {
                 Assert.IsTrue(type.IsValueType && typeof(ISystem).IsAssignableFrom(type), type.Name + " is not an ISystem struct");

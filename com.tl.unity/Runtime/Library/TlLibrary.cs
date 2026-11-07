@@ -17,6 +17,7 @@ namespace Tl.Unity
             public byte[] Tlb;
             public byte[] Kinds;
             public Hash128[] Next;
+            public uint[] Sites;
             public uint TickRate;
         }
 
@@ -164,6 +165,7 @@ namespace Tl.Unity
                     Tlb = TlTimelineBlobs.ToArray(ref value.Tlb),
                     Kinds = TlTimelineBlobs.ToArray(ref value.Kinds),
                     Next = next,
+                    Sites = Sites(ref value.RefSites),
                     TickRate = value.TickRate,
                 };
             }
@@ -179,8 +181,30 @@ namespace Tl.Unity
                 ids[entries[i].Asset] = (ushort)(i + 1);
             var parts = new List<TlLibraryPart>(entries.Count);
             foreach (var entry in entries)
-                parts.Add(new TlLibraryPart { Name = entry.Stored, Tlb = entry.Tlb, Kinds = entry.Kinds, Next = NextId(entry, ids) });
+                parts.Add(new TlLibraryPart { Name = entry.Stored, Tlb = entry.Tlb, Kinds = entry.Kinds, Next = NextId(entry, ids), Refs = RefIds(entry, ids) });
             return parts;
+        }
+
+        static uint[] Sites(ref BlobArray<uint> sites)
+        {
+            var result = new uint[sites.Length];
+            for (var i = 0; i < result.Length; i++)
+                result[i] = sites[i];
+            return result;
+        }
+
+        static uint[] RefIds(Entry entry, Dictionary<Hash128, ushort> ids)
+        {
+            if (entry.Sites == null || entry.Sites.Length == 0)
+                return null;
+            var result = new uint[entry.Sites.Length];
+            for (var i = 0; i + 1 < entry.Sites.Length; i += 2)
+            {
+                var local = entry.Sites[i + 1];
+                result[i] = entry.Sites[i];
+                result[i + 1] = local >= 1 && local <= entry.Next.Length && ids.TryGetValue(entry.Next[local - 1], out var id) ? id : 0u;
+            }
+            return result;
         }
 
         static ushort NextId(Entry entry, Dictionary<Hash128, ushort> ids)

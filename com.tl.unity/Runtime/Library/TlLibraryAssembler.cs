@@ -12,6 +12,7 @@ namespace Tl.Unity
         public byte[] Tlb;
         public byte[] Kinds;
         public ushort Next;
+        public uint[] Refs;
     }
 
     public struct TlLibrarySettings
@@ -64,6 +65,14 @@ namespace Tl.Unity
             var tlb = (byte[])part.Tlb.Clone();
             if (tlb.Length >= TlbHeaderBytes && U32(tlb, 4) == TlbVersionWithHeader && U32(tlb, TlbNextAt) != 0)
                 BinaryPrimitives.WriteUInt32LittleEndian(tlb.AsSpan(TlbNextAt), part.Next <= count ? part.Next : 0u);
+            if (part.Refs != null)
+                for (var i = 0; i + 1 < part.Refs.Length; i += 2)
+                {
+                    var at = (int)part.Refs[i];
+                    if (at < 0 || at + 2 > tlb.Length)
+                        throw new InvalidOperationException("Tl: timeline '" + part.Name + "' has a timeline reference outside its data; rebake it.");
+                    BinaryPrimitives.WriteUInt16LittleEndian(tlb.AsSpan(at), part.Refs[i + 1] <= count ? (ushort)part.Refs[i + 1] : (ushort)0);
+                }
             return tlb;
         }
 

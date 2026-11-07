@@ -8,6 +8,8 @@ public enum RequestOp : byte
     Stop = 1,
     StopChannel = 2,
     StopAll = 3,
+    Pause = 4,
+    Resume = 5,
 }
 
 public readonly struct RequestRecord
@@ -179,4 +181,6 @@ public readonly unsafe struct Requests
     public void Stop(ushort timeline) => RequestQueue.Add(_queue, _entity, _slot, timeline, 0, RequestOp.Stop);
     public void StopChannel(byte channel) => RequestQueue.Add(_queue, _entity, _slot, channel, 0, RequestOp.StopChannel);
     public void StopAll() => RequestQueue.Add(_queue, _entity, _slot, 0, 0, RequestOp.StopAll);
+    public void Pause(ushort timeline) => RequestQueue.Add(_queue, _entity, _slot, timeline, 0, RequestOp.Pause);
+    public void Resume(ushort timeline) => RequestQueue.Add(_queue, _entity, _slot, timeline, 0, RequestOp.Resume);
 }

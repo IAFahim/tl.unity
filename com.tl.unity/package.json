@@ -17,7 +17,7 @@
   "samples": [
     {
       "displayName": "Force demo",
-      "description": "The Force track from five small files: a cube in a SubScene with a Playable Director and a Push timeline. Press Play and the cube is pushed along X. Includes the scene builder and a PlayMode test.",
+      "description": "The Force track from five small files: a cube in a SubScene with a Playable Director and a Push timeline. Press Play and the cube is pushed along X. Tl > Samples > Build Control Demo adds a cube whose Burst job starts a Dash timeline from a clip field. Includes the scene builders and Play and Edit mode tests.",
       "path": "Samples~/ForceDemo"
     },
     {

@@ -124,6 +124,17 @@ namespace Tl.Unity
                         }
                     }
                     return;
+                case global::Tl.RequestOp.Pause:
+                case global::Tl.RequestOp.Resume:
+                    for (var i = 0; i < slots.Length; i++)
+                    {
+                        var s = slots[i];
+                        if (request.Timeline == 0 || s.Timeline != request.Timeline || (s.Flags & global::Tl.PlaybackFlags.Stopping) != 0) continue;
+                        s.Flags = request.Op == global::Tl.RequestOp.Pause ? s.Flags | global::Tl.PlaybackFlags.Paused : s.Flags & ~global::Tl.PlaybackFlags.Paused;
+                        slots[i] = s;
+                        return;
+                    }
+                    return;
                 case global::Tl.RequestOp.StopChannel:
                     for (var i = 0; i < slots.Length; i++)
                     {

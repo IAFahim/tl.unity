@@ -8,7 +8,7 @@ namespace Tl.Unity
     {
         internal GCHandle Value;
 
-        internal TlLibrary Library => (TlLibrary)Value.Target;
+        public TlLibrary Library => (TlLibrary)Value.Target;
     }
 
     public struct TlLibraryIndex : IComponentData

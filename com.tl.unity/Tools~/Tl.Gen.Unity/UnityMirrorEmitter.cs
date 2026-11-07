@@ -17,6 +17,14 @@ namespace Tl.Gen.Unity
             var data = compilation.GetTypeByMetadataName("Tl.Unity.TlClipData");
             var baker = compilation.GetTypeByMetadataName("Tl.ITlBaker`1");
             var curve = compilation.GetTypeByMetadataName("Tl.TlCurve");
+            var timelineRef = compilation.GetTypeByMetadataName("Tl.TlTimeline");
+            var timelineId = compilation.GetTypeByMetadataName("Tl.TimelineId");
+            var timelineAsset = compilation.GetTypeByMetadataName("UnityEngine.Timeline.TimelineAsset");
+            if (timelineAsset is null)
+            {
+                timelineRef = null;
+                timelineId = null;
+            }
             var menuTrack = compilation.GetTypeByMetadataName("Tl.Unity.TlMenuTrack");
             if (clipAttribute is null || data is null || compilation.GetTypeByMetadataName("UnityEngine.AnimationCurve") is null)
                 return;
@@ -51,7 +59,7 @@ namespace Tl.Gen.Unity
             writer.Append("namespace Tl.Generated\n{\n");
             foreach (var (type, menu) in clips)
             {
-                EmitClip(writer, type, menu, bakers, baker, curve);
+                EmitClip(writer, type, menu, bakers, baker, curve, timelineRef, timelineId);
                 if (menuTrack is not null)
                     EmitMenu(writer, type, menu);
             }
@@ -59,24 +67,29 @@ namespace Tl.Gen.Unity
             context.AddSource(FileName, SourceText.From(writer.ToString(), Encoding.UTF8));
         }
 
-        static void EmitClip(StringBuilder writer, INamedTypeSymbol type, string menu, List<INamedTypeSymbol> bakers, INamedTypeSymbol? baker, INamedTypeSymbol? curve)
+        static void EmitClip(StringBuilder writer, INamedTypeSymbol type, string menu, List<INamedTypeSymbol> bakers, INamedTypeSymbol? baker, INamedTypeSymbol? curve, INamedTypeSymbol? timelineRef, INamedTypeSymbol? timelineId)
         {
             var clip = type.ToDisplayString(Full);
             var name = MirrorName(type);
-            var fields = new List<(string name, bool curve, string type)>();
+            var fields = new List<(string name, string kind, string type)>();
             foreach (var member in type.GetMembers().OfType<IFieldSymbol>())
             {
                 if (member.IsStatic || member.IsConst || member.IsReadOnly || member.IsImplicitlyDeclared || member.DeclaredAccessibility != Accessibility.Public)
                     continue;
-                var isCurve = curve is not null && SymbolEqualityComparer.Default.Equals(member.Type, curve);
-                fields.Add((member.Name, isCurve, member.Type.ToDisplayString(Full)));
+                var kind = curve is not null && SymbolEqualityComparer.Default.Equals(member.Type, curve) ? "curve"
+                    : timelineRef is not null && SymbolEqualityComparer.Default.Equals(member.Type, timelineRef) ? "ref"
+                    : timelineId is not null && SymbolEqualityComparer.Default.Equals(member.Type, timelineId) ? "id"
+                    : "";
+                fields.Add((member.Name, kind, member.Type.ToDisplayString(Full)));
             }
             writer.Append("[global::System.Serializable]\n");
             writer.Append("public sealed class ").Append(name).Append(" : global::Tl.Unity.TlClipData\n{\n");
             foreach (var field in fields)
             {
-                if (field.curve)
+                if (field.kind == "curve")
                     writer.Append("public global::UnityEngine.AnimationCurve ").Append(field.name).Append(" = global::Tl.Unity.TlCurveAuthoring.Default();\n");
+                else if (field.kind == "ref" || field.kind == "id")
+                    writer.Append("public global::UnityEngine.Timeline.TimelineAsset ").Append(field.name).Append(";\n");
                 else
                     writer.Append("public ").Append(field.type).Append(' ').Append(field.name).Append(";\n");
             }
@@ -89,7 +102,10 @@ namespace Tl.Gen.Unity
             foreach (var field in fields)
             {
                 writer.Append("clip.").Append(field.name).Append(" = ");
-                writer.Append(field.curve ? "global::Tl.Unity.TlCurveAuthoring.Sample(" + field.name + ")" : field.name).Append(";\n");
+                writer.Append(field.kind == "curve" ? "global::Tl.Unity.TlCurveAuthoring.Sample(" + field.name + ")"
+                    : field.kind == "ref" ? "global::Tl.Unity.TlClipData.TimelineOf(" + field.name + ")"
+                    : field.kind == "id" ? "global::Tl.Unity.TlClipData.IdOf(" + field.name + ")"
+                    : field.name).Append(";\n");
             }
             writer.Append("return clip;\n}\n");
             writer.Append("public override void WriteClip(byte[] destination, int offset)\n{\n");

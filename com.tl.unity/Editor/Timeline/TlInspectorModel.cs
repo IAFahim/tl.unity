@@ -73,6 +73,10 @@ namespace Tl.Unity.Editor
                 var settings = TlDirectorTimelines.Settings(timeline);
                 if (settings != null && settings.End == TlEnd.Next && settings.Next != null)
                     queue.Enqueue(settings.Next);
+                foreach (var track in timeline.GetOutputTracks().OfType<TlTrack>())
+                    foreach (var clip in track.GetClips())
+                        foreach (var target in TlDirectorTimelines.Targets((clip.asset as TlClip)?.Data))
+                            queue.Enqueue(target);
             }
             return result;
         }

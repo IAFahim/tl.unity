@@ -130,6 +130,10 @@ namespace Tl.Unity
                 case global::Tl.RequestOp.StopChannel:
                     TimelineKernel.ApplyStopChannel(ref playbacks, entity, (byte)entry.Timeline, ref closed);
                     break;
+                case global::Tl.RequestOp.Pause:
+                case global::Tl.RequestOp.Resume:
+                    TimelineKernel.ApplyPause(ref playbacks, entry.Timeline, entry.Op == global::Tl.RequestOp.Pause);
+                    break;
                 default:
                     TimelineKernel.ApplyStopAll(ref playbacks, entity, ref closed);
                     break;

@@ -1,0 +1,21 @@
+{
+  "name": "Tl.Unity.Control",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Mathematics",
+    "Unity.Timeline"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "allowUnsafeCode": false,
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "noEngineReferences": false
+}

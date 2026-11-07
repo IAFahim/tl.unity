@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using Unity.Entities;
 using UnityEngine.Playables;
 using UnityEngine.Timeline;
@@ -48,13 +49,43 @@ namespace Tl.Unity.Editor
                     for (var parent = tl.parent as TrackAsset; parent != null; parent = parent.parent as TrackAsset)
                         baker.DependsOn(parent);
                     foreach (var clip in tl.GetClips())
+                    {
                         baker.DependsOn(clip.asset);
+                        foreach (var target in Targets((clip.asset as TlClip)?.Data))
+                        {
+                            baker.DependsOn(target);
+                            queue.Enqueue(target);
+                        }
+                    }
                     tracks++;
                 }
                 if (tracks > 0)
                     result.Add(timeline);
             }
             return result;
+        }
+
+        public static IEnumerable<TimelineAsset> Targets(TlClipData data)
+        {
+            if (data == null)
+                yield break;
+            foreach (var field in data.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public))
+                if (field.FieldType == typeof(TimelineAsset) && field.GetValue(data) is TimelineAsset target && target != null)
+                    yield return target;
+        }
+
+        public static IEnumerable<TimelineAsset> IdFields(TlClipData data)
+        {
+            if (data == null)
+                yield break;
+            foreach (var field in data.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public))
+            {
+                if (field.FieldType != typeof(TimelineAsset) || !(field.GetValue(data) is TimelineAsset target) || target == null)
+                    continue;
+                var clipField = data.ClipType.GetField(field.Name, BindingFlags.Instance | BindingFlags.Public);
+                if (clipField != null && clipField.FieldType == typeof(global::Tl.TimelineId))
+                    yield return target;
+            }
         }
 
         public static TlTimelineSettings Settings(TimelineAsset timeline)

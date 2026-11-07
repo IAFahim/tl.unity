@@ -5,6 +5,7 @@ using System.Reflection;
 using NUnit.Framework;
 using Tl.Generated;
 using Tl.Unity.Editor;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -330,16 +331,22 @@ namespace Tl.Unity.Tracks.Tests
             readonly World _world;
             readonly SystemHandle[] _systems;
 
-            public LiveWorld(World world)
+            public LiveWorld(World world, bool control = false)
             {
                 _world = world;
-                _systems = new[]
+                var systems = new List<SystemHandle>
                 {
                     world.CreateSystem<TlLibrarySystem>(),
                     world.CreateSystem<TlTimelineRegisterSystem>(),
                     world.CreateSystem<TlPlayOnAwakeSystem>(),
-                    world.CreateSystem<TimelineKindTickSystem>(),
                 };
+                if (control)
+                {
+                    systems.Add(world.CreateSystem<ThenPlaySystem>());
+                    systems.Add(world.CreateSystem<TlRequestResolveSystem>());
+                }
+                systems.Add(world.CreateSystem<TimelineKindTickSystem>());
+                _systems = systems.ToArray();
             }
 
             public uint Generation
@@ -360,6 +367,145 @@ namespace Tl.Unity.Tracks.Tests
                     _world.EntityManager.CompleteAllTrackedJobs();
                 }
             }
+        }
+
+        [Test]
+        public void ClipTimelineFieldsJoinTheSetAndTimelineIdsArePatchedToLibraryIds()
+        {
+            var push = Timeline("Push");
+            Clip(ForceTrack(push), 0, 2, 4f);
+            var dash = Timeline("Dash");
+            Clip(ForceTrack(dash), 0, 1, 8f);
+            var kick = Timeline("Kick");
+            Clip(ForceTrack(kick), 0, 1, 2f);
+            ThenPlayClipOn(push, dash, kick);
+            using var baked = new Baked(Director("Cube", push).gameObject);
+            var entities = baked.World.EntityManager;
+            var entity = baked.Single<TlTimelineSet>();
+            var set = entities.GetBuffer<TlTimelineSet>(entity);
+            Assert.AreEqual(3, set.Length);
+            var pushBlob = set[0].Blob;
+            Assert.AreEqual("Push", TlTimelineBlobs.NameOf(ref pushBlob.Value));
+            var names = new List<string>();
+            for (var i = 0; i < set.Length; i++)
+                names.Add(TlTimelineBlobs.NameOf(ref set[i].Blob.Value));
+            CollectionAssert.AreEquivalent(new[] { "Push", "Dash", "Kick" }, names);
+            Assert.AreEqual(2, pushBlob.Value.RefSites.Length, "one TimelineId field");
+            Assert.AreEqual(1u, pushBlob.Value.RefSites[1], "it holds local id 1");
+            var tlb = TlTimelineBlobs.ToArray(ref pushBlob.Value.Tlb);
+            var site = (int)pushBlob.Value.RefSites[0];
+            Assert.AreEqual(1, tlb[site] | (tlb[site + 1] << 8));
+            Assert.IsTrue(entities.HasComponent<ThenPlay>(entity));
+            Assert.AreEqual(TlTimelinePacker.AssetOf(dash), entities.GetComponentData<ThenPlay>(entity).Timeline.Asset, "the TlTimeline field bakes to the Dash asset");
+
+            var live = new LiveWorld(baked.World);
+            live.Step(1);
+            var library = Library(baked.World);
+            var kickId = library.IdOf(TlTimelinePacker.AssetOf(kick));
+            Assert.AreNotEqual(0, kickId);
+            tlb[site] = (byte)kickId;
+            tlb[site + 1] = (byte)(kickId >> 8);
+            Assert.GreaterOrEqual(IndexOf(library.Bytes, tlb), 0, "the library holds Push with Kick's library id in the clip");
+        }
+
+        [Test]
+        public void AJobStartsPausesAndResumesATimelineFromItsTlTimelineField()
+        {
+            var push = Timeline("Push");
+            Clip(ForceTrack(push), 0, 2, 4f);
+            var dash = Timeline("Dash");
+            Clip(ForceTrack(dash), 0, 1, 8f);
+            ThenPlayClipOn(push, dash, null);
+            using var baked = new Baked(Director("Cube", push).gameObject);
+            var entities = baked.World.EntityManager;
+            var entity = baked.Single<TlTimelineSet>();
+            var live = new LiveWorld(baked.World, true);
+            ControlProbe.RanManaged = false;
+            live.Step(3);
+            var dashId = Library(baked.World).IdOf(TlTimelinePacker.AssetOf(dash));
+            Assert.AreNotEqual(0, dashId);
+            Assert.IsFalse(Playing(entities, entity, dashId, out _), "Dash waits for the gameplay condition");
+
+            entities.SetComponentData(entity, new Trigger { Fire = 1 });
+            live.Step(3);
+            Assert.IsTrue(Playing(entities, entity, dashId, out var started), "the job started Dash");
+            if (BurstCompiler.IsEnabled)
+                Assert.IsFalse(ControlProbe.RanManaged, "the job ran as Burst code");
+
+            entities.SetComponentData(entity, new Trigger { Hold = 1 });
+            live.Step(1);
+            Playing(entities, entity, dashId, out var held);
+            Assert.AreNotEqual(0, (int)(held.Flags & global::Tl.PlaybackFlags.Paused), "Pause sets the flag");
+            live.Step(5);
+            Playing(entities, entity, dashId, out var still);
+            Assert.AreEqual(held.Tick, still.Tick, "a paused timeline holds its tick");
+
+            entities.SetComponentData(entity, new Trigger { Release = 1 });
+            live.Step(3);
+            Playing(entities, entity, dashId, out var resumed);
+            Assert.AreEqual(0, (int)(resumed.Flags & global::Tl.PlaybackFlags.Paused));
+            Assert.Greater(resumed.Tick, still.Tick, "Resume continues");
+        }
+
+        [Test]
+        public void StartingATimelineTheObjectCannotPlayWarnsAndStartsNothing()
+        {
+            var push = Timeline("Push");
+            Clip(ForceTrack(push), 0, 2, 4f);
+            using var baked = new Baked(Director("Cube", push).gameObject);
+            var entities = baked.World.EntityManager;
+            var entity = baked.Single<TlTimelineSet>();
+            var live = new LiveWorld(baked.World, true);
+            live.Step(2);
+            var stranger = new TlTimeline { Asset = new global::Unity.Entities.Hash128(9, 9, 9, 9) };
+            entities.GetBuffer<TimelineRequest>(entity).Start(stranger);
+            LogAssert.Expect(LogType.Warning, new Regex("cannot play. Drag that timeline into Also Plays"));
+            live.Step(2);
+            Assert.AreEqual(1, entities.GetBuffer<Playback>(entity).AsNativeArray().ToArray().Count(p => p.Timeline != 0));
+        }
+
+        static TlLibrary Library(World world)
+        {
+            using var query = world.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<TlLibraryHandle>());
+            return query.GetSingleton<TlLibraryHandle>().Library;
+        }
+
+        static bool Playing(EntityManager entities, Entity entity, ushort id, out Playback playback)
+        {
+            foreach (var slot in entities.GetBuffer<Playback>(entity))
+                if (slot.Timeline == id)
+                {
+                    playback = slot;
+                    return true;
+                }
+            playback = default;
+            return false;
+        }
+
+        static int IndexOf(byte[] haystack, byte[] needle)
+        {
+            for (var i = 0; i + needle.Length <= haystack.Length; i++)
+            {
+                var j = 0;
+                while (j < needle.Length && haystack[i + j] == needle[j])
+                    j++;
+                if (j == needle.Length)
+                    return i;
+            }
+            return -1;
+        }
+
+        static void ThenPlayClipOn(TimelineAsset timeline, TimelineAsset then, TimelineAsset fallback)
+        {
+            var track = timeline.CreateTrack<TlTrack>(null, "Then Play");
+            track.Template = new ThenPlayClip_TlData();
+            var clip = track.CreateClip<TlClip>();
+            clip.start = 0;
+            clip.duration = 2;
+            var data = (ThenPlayClip_TlData)((TlClip)clip.asset).Data;
+            data.Timeline = then;
+            data.Fallback = fallback;
+            data.Gain = 1f;
         }
 
         [Test]

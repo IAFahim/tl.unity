@@ -62,7 +62,9 @@ namespace ForceDemo.Tests
                         UnityEngine.Object.Destroy(shot);
                 }
                 yield return null;
-                var playing = entities.GetBuffer<Playback>(entity).Length > 0;
+                var playing = false;
+                foreach (var playback in entities.GetBuffer<Playback>(entity))
+                    playing |= playback.Timeline != 0;
                 if (playing)
                     started = true;
                 else if (started)
@@ -95,6 +97,43 @@ namespace ForceDemo.Tests
             UnityEngine.Object.Destroy(endShot);
         }
 
+        [UnityTest]
+        public IEnumerator TheControlCubeDashesWhenAJobSeesItFarEnough()
+        {
+            var scene = ScenePath("Control Demo");
+            Assert.IsNotNull(scene, "Build the demo first: Tl > Samples > Build Control Demo.");
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode(scene, new LoadSceneParameters(LoadSceneMode.Single));
+            var entities = World.DefaultGameObjectInjectionWorld.EntityManager;
+            using var query = entities.CreateEntityQuery(ComponentType.ReadOnly(Game("DashWhenFar")), ComponentType.ReadOnly<LocalTransform>(), ComponentType.ReadOnly<Playback>());
+            var deadline = Time.realtimeSinceStartup + 120f;
+            while (query.IsEmpty && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            Assert.IsFalse(query.IsEmpty, "the Control cube appears");
+            var entity = query.GetSingletonEntity();
+            var dashAtX = float.NaN;
+            var started = false;
+            deadline = Time.realtimeSinceStartup + 60f;
+            while (Time.realtimeSinceStartup < deadline)
+            {
+                yield return null;
+                var live = 0;
+                foreach (var playback in entities.GetBuffer<Playback>(entity))
+                    if (playback.Timeline != 0)
+                        live++;
+                if (live == 2 && float.IsNaN(dashAtX))
+                    dashAtX = entities.GetComponentData<LocalTransform>(entity).Position.x;
+                if (live > 0)
+                    started = true;
+                else if (started)
+                    break;
+            }
+            var end = entities.GetComponentData<LocalTransform>(entity).Position;
+            Debug.Log(string.Format(CultureInfo.InvariantCulture, "ControlDemo result dashAtX={0:0.0000} endX={1:0.0000} endZ={2:0.0000}", dashAtX, end.x, end.z));
+            Assert.AreEqual(2f, dashAtX, 0.15f, "the job started Dash when the cube passed x 2");
+            Assert.AreEqual(ExpectedPush, end.x, Tolerance, "Push still pushes about 4 m along X");
+            Assert.AreEqual(3.05f, end.z, Tolerance, "Dash pushed about 3 m along Z");
+        }
+
         static Type Game(string name)
         {
             var type = Type.GetType(name + ", Assembly-CSharp");
@@ -102,12 +141,12 @@ namespace ForceDemo.Tests
             return type;
         }
 
-        static string ScenePath()
+        static string ScenePath(string name = "Force Demo")
         {
-            foreach (var guid in AssetDatabase.FindAssets("t:SceneAsset Force Demo"))
+            foreach (var guid in AssetDatabase.FindAssets("t:SceneAsset " + name))
             {
                 var path = AssetDatabase.GUIDToAssetPath(guid);
-                if (Path.GetFileNameWithoutExtension(path) == "Force Demo")
+                if (Path.GetFileNameWithoutExtension(path) == name)
                     return path;
             }
             return null;
