@@ -63,6 +63,13 @@ Vocabulary:
 
 ## 2. Install
 
+### Quick start
+
+One command (needs git, the .NET 10 SDK, the Unity CLI) makes a Unity 7 project with Tl ready for game code. Safe to rerun:
+```sh
+curl -fsSL https://raw.githubusercontent.com/IAFahim/tl.unity/main/eng/tl-init.sh | bash -s -- <new-project-path>
+```
+
 ### Package
 
 `Packages/manifest.json`:

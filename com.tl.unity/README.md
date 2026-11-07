@@ -7,6 +7,13 @@ step plays it on unmanaged data.
 
 Tested on the newest Unity 7 editor (tested on 7000.0.0a16).
 
+## Quick start
+
+One command (needs git, the .NET 10 SDK, the Unity CLI) makes a Unity 7 project with Tl ready for game code. Safe to rerun:
+```sh
+curl -fsSL https://raw.githubusercontent.com/IAFahim/tl.unity/main/eng/tl-init.sh | bash -s -- <new-project-path>
+```
+
 ## Install
 
 `Packages/manifest.json`:
