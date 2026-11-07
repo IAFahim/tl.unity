@@ -19,9 +19,8 @@ or step beyond the code below. Everything in this document serves this path; the
 1. A coder has dropped the five files below into `Assets/` (any folder, no asmdef). Unity compiles once.
 2. Dana selects a GameObject with a mesh inside a SubScene (or uses `GameObject > Tl > Timeline Object`, which makes one).
 3. `Assets > Create > Tl > Timeline`, name it `Push`. Double-click: Unity's Timeline window opens.
-4. Timeline window: right-click the empty track area (guaranteed; the `+` menu too if open question 13 allows) shows **Tl > Force**. Click it.
-   A track named **Force** appears.
-5. Right-click the track > **Add Force Clip** (generated track action). A 1 s clip labelled `Force` appears. She drags its edges to 2 s.
+4. Timeline window: `+` lists **Force** next to Unity's own tracks (Activation, Animation, ...). Click it. A track named **Force** appears.
+5. Right-click the track > **Add Tl Clip** (it is created as a Force clip, labelled `Force`). A 1 s clip labelled `Force` appears. She drags its edges to 2 s.
 6. With the clip selected the Inspector shows Unity's clip header and below it:
 
 ```
@@ -35,7 +34,7 @@ Force Clip
    Play On Awake on. The Tl foldout under it reads: `Bakes: Force, Force Log (from the Force track).`
 8. Press Play. In the Game view (the scene camera framing the object) the object slides along +X for 2 s, fast at first, slowing as the curve
    falls, then stops.
-9. Still in Play mode she raises Strength to 10: the next run of the clip (Wrap Mode Loop) pushes further. `Window > Tl > Monitor` shows
+9. Still in Play mode she raises Strength to 10: the next lap pushes further (the timeline's Tl section says When it ends: Loop). `Window > Tl > Monitor` shows
    `Cube  Push  playing 1.2 / 2.0 s   Force +3.1 X`.
 
 What she never did: add a component, pick a "kind", fill a library, type a name, open a terminal.
@@ -157,7 +156,7 @@ public partial struct ApplyForce : IJobEntity
 | 3 | `TlCurve` in a clip, `Falloff.Evaluate` in Burst | unchanged in code | Package must make `TlCurve` an unmanaged, inline, fixed-size curve (sampled from the designer's `AnimationCurve` at bake, time 0..1) with a Burst-safe `Evaluate`, drawn in the Inspector as Unity's curve field. |
 | 4 | `ForceBaking` per clip | unchanged in code | Package must define: `Bake` runs once per clip on the entity that plays it; `AddComponent`/`AddBuffer` are idempotent; `AddBlob` deduplicates equal blobs. Two clips that give the same entity *different* `ForceFalloff` blobs cannot both fit one component: the bake keeps the first and the second clip's Inspector says `Another Force clip on Cube already sets Force Falloff with a different curve. Only the first is kept on the object; the clip's own Falloff still drives the push.` (Runtime push uses the inline `TlCurve`, so the demo is correct either way.) |
 | 5 | `Force` added by `ForceBaking` | also added automatically | `ForceKind.Apply` writes `ref Force`, so the generator already knows the entity needs `Force`; the `AddComponent<Force>()` line is legal and harmless. `ForceBaking` is optional for components a kind writes and required only for extras (`ForceLog`, blobs). |
-| 6 | Unity-side `TrackAsset`/`PlayableAsset` classes | none written by the coder | Package ships one concrete `TlTrackAsset` and one `TlClipAsset`. Each holds the clip as `[SerializeReference]` to a generated `[Serializable]` mirror class (`ForceClip` fields, `TlCurve` shown as `AnimationCurve`). Plain serializable classes need no same-named file, so the generator can emit them; the Inspector is native `SerializedProperty` (Undo, prefab-safe, curve editor). The Timeline menu entry `Tl > Force` comes from generated editor-only `TimelineAction`/menu code. See open question 3. |
+| 6 | Unity-side `TrackAsset`/`PlayableAsset` classes | none written by the coder | Package ships one `TlTrack` and one `TlClip`; each holds the clip as `[SerializeReference]` to a generated plain `[Serializable]` mirror (native Inspector, Undo, curve editor). `Force` appears in the Timeline `+` menu through a generated menu stub that the package's track editor swaps for a real `TlTrack` (architecture F2, F6). A generated `TrackAsset` is not possible: it loses its data after an Editor restart (F1). |
 | 7 | `ForceLog.Tick` | unchanged | Nothing writes `ForceLog` in this contract; it proves buffer baking. The Monitor shows `Force Log (0 entries)`. |
 | 8 | "PlayableDirector or a Tl Player" | PlayableDirector only | One way to assign; no second authoring component on the designer path. |
 
@@ -166,313 +165,65 @@ generated file the coder must commit, a `Timelines.g.cs` constant, an external t
 
 ### 0.4 The whole baking path, from the Timeline window to the entity
 
-The coder writes only 0.2. Everything below ships in the package (B1 to B4, B6, B7) or is emitted by the generator into the coder's assembly on
-compile (B5), never as a file in `Assets/`. It is target code to be made real; type names the architecture plan changes will be renamed here.
+Canonical code: [zero-config-arch.md](zero-config-arch.md) section 3. The architecture planner checked these by spike on Unity 7:
+- a generated `TrackAsset` loses its data after a restart, but the `[SerializeReference]` mirror survives;
+- the generator runs on `Assembly-CSharp`;
+- `Baker<PlayableDirector>` reads the timeline, and the coder's `ITlBaker` adds a component, a buffer and a blob;
+- a clip edit rebakes only that SubScene;
+- `Force` shows in the `+` menu.
+
+This section tells the same path from the user's side. The names match the architecture plan.
 
 ```
-Timeline window                         SubScene bake (Unity's own, incremental)                    Entity
- .playable                               TlDirectorBaker : Baker<PlayableDirector>                    Playback, TimelineRequest
-  TlTrackAsset  (Data = ForceTrack mirror)  DependsOn(timeline, each Tl track, each clip asset)       TimelinePlaying (off)
-   TlClipAsset  (Data = ForceClip mirror)   per timeline: TlTimelineCompiler -> BlobBuilder           TlTimelineSet [blob, blob]
-PlayableDirector (Playable, Play On Awake,    per clip: mirror.ToClip -> bytes in blob,               TlDirectorSettings
- Wrap Mode, Initial Time)                               ITlBaker<ForceClip>.Bake(ref TlBaker)          ForceKind Entry/Active/Enabled
-Tl Also Plays (optional, + button)          kinds reached -> kind components + Apply targets          Force, ForceLog, ForceFalloff
-                                         TlKindEnableBakingSystem (ISystem, baking world): enable bits
-Play: TlTimelineRegisterSystem (ISystem) registers new blobs in the world library -> TimelineId -> Playback starts
+Timeline window (.playable)                  SubScene bake (Unity's own, incremental)                Entity
+ TlTrack "Force" (Template = ForceClip mirror)  TlDirectorBaker : Baker<PlayableDirector>            TlTimelineSet [slot 0: blob]
+  TlClip (Data = ForceClip mirror: Direction,    DependsOn timeline, Tl tracks, clip assets,          Playback [], TimelineRequest [Start slot 0]
+   Strength, Falloff as AnimationCurve)           settings marker                                     TimelinePlaying (off), TlUnregistered (on)
+ Tl settings marker (End, Next, Channel)        per timeline: TlTimelinePacker, in process            ForceKind entry buffer + enable bit
+PlayableDirector (Playable, Play On Awake,       per clip: mirror.Write -> ForceClip bytes            Force (Apply target), ForceLog, ForceFalloff
+ Initial Time) [+ Tl Also Plays]                 -> ForceBaking.Bake (once per clip)
+                                                 -> TLB1 bytes of the timeline -> one blob
+                                                reached kinds -> kind buffers + Apply targets
+Play: TlLibrarySystem makes the library; TlTimelineRegisterSystem adds new blobs, gives ids, starts Playback. No Library field anywhere.
 ```
 
-**B1. What the designer drops the Timeline on: Unity's `PlayableDirector`.** No Tl authoring component is required. Bakers can target any Unity
-component (BovineLabs bakes `PlayableDirector` the same way). The only optional Tl component is `Tl Also Plays`, added by the `+` button in the
-director's Tl foldout, never from Add Component:
+Step by step, what each piece is and who writes it:
 
-```csharp
-using UnityEngine;
-using UnityEngine.Timeline;
+| Piece | Written by | What it does |
+|---|---|---|
+| `PlayableDirector` | Unity (the designer drags the timeline on) | The authoring component. Playable = starts with, Play On Awake = start on spawn, Initial Time = start offset. |
+| `Tl Also Plays` | package, added by the `+` in the director's Tl foldout | Other timelines this object may play (object fields). Never in Add Component. |
+| `TlTrack`, `TlClip` | package, one real file each | The only Unity Timeline classes. Each holds the clip as `[SerializeReference]` to the generated mirror. |
+| `ForceClip_TlData` (mirror), `ForceClip_TlMenu` (menu stub) | generator, on compile, in memory | Mirror = Inspector fields (`float3`, `float`, `AnimationCurve`) and `Write`, which turns them into `ForceClip` and calls `ForceBaking.Bake`. Stub = the `Force` entry in the `+` menu; the package's track editor swaps it for a real `TlTrack` (the stub is never saved). |
+| Tl settings marker | package, made by the timeline Inspector's Tl section | When it ends, Play next, Channel. Lives inside the `.playable`, so duplicate and rename keep it. |
+| `TlDirectorBaker : Baker<PlayableDirector>` | package (Editor) | Collects the timelines (Playable, Also Plays, Play next closure), calls `DependsOn` on each timeline, track, clip and marker, and packs each timeline into one blob (same TLB1 format as `tlb`, in process, no `dotnet`). It runs `ITlBaker` per clip and adds `Playback`, `TimelineRequest` (Play On Awake), the kind buffers the timelines reach, and every `ref` type of those kinds' `Apply` (here `Force`). |
+| `ForceBaking : ITlBaker<ForceClip>` | the coder (contract) | Runs once per clip on the object that plays it. `AddComponent`/`AddBuffer` add each type only once; `AddBlob` keeps the first value. |
+| `TlLibrarySystem`, `TlTimelineRegisterSystem` | package (runtime, `ISystem`) | Build the library from the blobs that are loaded, give each timeline an id, resolve Play On Awake, and swap a changed timeline under the same id (live edit). |
 
-namespace Tl.Unity
-{
-    [AddComponentMenu("")]
-    [DisallowMultipleComponent]
-    public sealed class TlAlsoPlays : MonoBehaviour
-    {
-        public TimelineAsset[] Timelines = System.Array.Empty<TimelineAsset>();
-    }
-}
-```
-
-**B2. The Unity Timeline assets (one track class and one clip class for every Tl type).**
-
-```csharp
-using System;
-using System.ComponentModel;
-using UnityEngine;
-using UnityEngine.Timeline;
-
-namespace Tl.Unity
-{
-    [Serializable]
-    [HideInMenu]
-    [DisplayName("Tl Track")]
-    [TrackClipType(typeof(TlClipAsset))]
-    public sealed class TlTrackAsset : TrackAsset
-    {
-        [SerializeReference] public TlClipData Template;
-
-        protected override void OnCreateClip(TimelineClip clip)
-        {
-            var asset = (TlClipAsset)clip.asset;
-            asset.Data = Template.CreateDefault();
-            clip.displayName = Template.MenuName;
-        }
-    }
-}
-```
-
-```csharp
-using System;
-using UnityEngine;
-using UnityEngine.Playables;
-using UnityEngine.Timeline;
-
-namespace Tl.Unity
-{
-    [Serializable]
-    public sealed class TlClipAsset : PlayableAsset, ITimelineClipAsset
-    {
-        [SerializeReference] public TlClipData Data;
-
-        public ClipCaps clipCaps => ClipCaps.Blending;
-
-        public override Playable CreatePlayable(PlayableGraph graph, GameObject owner) => Playable.Create(graph);
-    }
-}
-```
-
-```csharp
-using System;
-
-namespace Tl.Unity
-{
-    [Serializable]
-    public abstract class TlClipData
-    {
-        public abstract string MenuName { get; }
-        public abstract ulong TypeKey { get; }
-        public abstract TlClipData CreateDefault();
-        public abstract void Write(ref TlClipWriter writer, ref TlBaker baker);
-    }
-}
-```
-
-**B3. `TlBaker`: what `ITlBaker<T>.Bake` receives.** A thin, idempotent wrapper over Unity's `IBaker` for the entity being baked:
-
-```csharp
-using System.Collections.Generic;
-using Unity.Entities;
-
-namespace Tl
-{
-    public ref struct TlBaker
-    {
-        readonly IBaker baker;
-        readonly Entity entity;
-        readonly HashSet<ComponentType> added;
-        readonly UnityEngine.Object context;
-
-        public TlBaker(IBaker baker, Entity entity, HashSet<ComponentType> added, UnityEngine.Object context)
-        {
-            this.baker = baker;
-            this.entity = entity;
-            this.added = added;
-            this.context = context;
-        }
-
-        public void AddComponent<T>() where T : unmanaged, IComponentData
-        {
-            if (added.Add(ComponentType.ReadWrite<T>()))
-                baker.AddComponent<T>(entity);
-        }
-
-        public void AddBuffer<T>() where T : unmanaged, IBufferElementData
-        {
-            if (added.Add(ComponentType.ReadWrite<T>()))
-                baker.AddBuffer<T>(entity);
-        }
-
-        public void AddBlob<T>(T component) where T : unmanaged, IComponentData
-        {
-            if (added.Add(ComponentType.ReadWrite<T>()))
-                baker.AddComponent(entity, component);
-            else
-                TlBakeReport.SecondValueIgnored<T>(context);
-        }
-
-        public BlobAssetReference<TlCurveBlob> CreateCurve(in TlCurve curve)
-        {
-            var blob = TlCurveBlob.Create(curve);
-            baker.AddBlobAsset(ref blob, out _);
-            return blob;
-        }
-    }
-}
-```
-
-**B4. The director baker: reads the TimelineAsset, its Tl tracks and clips, writes everything on the entity.** Editor assembly
-`Tl.Unity.Timeline.Editor` (bakers may live in Editor assemblies).
-
-```csharp
-using System.Collections.Generic;
-using Tl.Unity;
-using Unity.Collections;
-using Unity.Entities;
-using UnityEngine.Playables;
-using UnityEngine.Timeline;
-
-namespace Tl.Unity.Editor
-{
-    public sealed class TlDirectorBaker : Baker<PlayableDirector>
-    {
-        public override void Bake(PlayableDirector director)
-        {
-            var timelines = TlDirectorTimelines.Collect(director.playableAsset as TimelineAsset, GetComponent<TlAlsoPlays>());
-            if (timelines.Count == 0 || !TlDirectorTimelines.HasTlTracks(timelines))
-                return;
-
-            var entity = GetEntity(TransformUsageFlags.Dynamic);
-            var added = new HashSet<ComponentType>();
-            var baker = new TlBaker(this, entity, added, director);
-            var blobs = new List<BlobAssetReference<TlTimelineBlob>>(timelines.Count);
-            var reached = new TlReachedKinds();
-
-            foreach (var timeline in timelines)
-            {
-                DependsOn(timeline);
-                foreach (var track in timeline.GetOutputTracks())
-                {
-                    if (track is not TlTrackAsset tl || tl.muted)
-                        continue;
-                    DependsOn(tl);
-                    foreach (var clip in tl.GetClips())
-                        DependsOn(clip.asset);
-                }
-                var blob = TlTimelineCompiler.Compile(timeline, timelines, ref baker, ref reached);
-                AddBlobAsset(ref blob, out _);
-                blobs.Add(blob);
-            }
-
-            var set = AddBuffer<TlTimelineSet>(entity);
-            foreach (var blob in blobs)
-                set.Add(new TlTimelineSet { Timeline = blob });
-
-            AddBuffer<Playback>(entity);
-            var requests = AddBuffer<TimelineRequest>(entity);
-            if (director.playOnAwake)
-                requests.Add(TimelineRequest.Start(0, TlTimelineSet.FirstSlot, TlTicks.From(director.initialTime)));
-            AddComponent<TimelinePlaying>(entity);
-            SetComponentEnabled<TimelinePlaying>(entity, false);
-            AddComponent(entity, TlDirectorSettings.From(director));
-
-            foreach (var kind in reached.Kinds)
-            {
-                if (added.Add(ComponentType.ReadWrite(kind.Entry)))
-                    AddComponent(entity, new ComponentTypeSet(ComponentType.ReadWrite(kind.Entry), ComponentType.ReadWrite(kind.Active), ComponentType.ReadWrite(kind.Enabled)));
-                foreach (var target in kind.ApplyTargets)
-                    if (added.Add(target))
-                        AddComponent(entity, target);
-            }
-            AddComponent(entity, new TlKindsToDisable { Count = reached.Kinds.Count });
-        }
-    }
-}
-```
-
-`TlTimelineCompiler.Compile` (package, editor, plain C#, no external process) walks the timeline once:
-
-1. ticks: `round(clip.start * TicksPerSecond)` and `round(clip.end * TicksPerSecond)`; a clip off the tick grid is rounded and reported on the clip;
-2. per Tl track, in window order: `TypeKey` (layout digest of the clip struct, as `PairLayoutDigest` does today), clips sorted by start;
-3. per clip: `clipAsset.Data.Write(ref writer, ref baker)`. The generated `Write` (B5) converts the Inspector mirror to the unmanaged struct, appends
-   its bytes to the blob, then calls the coder's `ITlBaker<T>.Bake` once per clip;
-4. per timeline: duration in ticks, When it ends (from the director's Wrap Mode for the first timeline, from the timeline's Tl section otherwise),
-   Play next (as a slot index into this director's set), Channel;
-5. adds the kinds each `TypeKey` feeds or pulses to `reached` (from the generated registry), including kinds reached through Play next chains;
-6. builds one `BlobAssetReference<TlTimelineBlob>`: `{ int Ticks; byte End; short Next; byte Channel; BlobArray<TlTrackBlob> Tracks }`,
-   `TlTrackBlob { ulong TypeKey; BlobArray<TlClipSpan> Clips; BlobArray<byte> Data }`. Equal timelines on many objects share one blob
-   (`AddBlobAsset` deduplicates by content hash).
-
-**B5. Generated per `[TlClip]` struct (by the package's generator, on compile, into the coder's assembly; not a file in `Assets/`).**
-
-```csharp
-[System.Serializable]
-public sealed class ForceClip_TlData : Tl.Unity.TlClipData
-{
-    public Unity.Mathematics.float3 Direction;
-    public float Strength;
-    public UnityEngine.AnimationCurve Falloff = Tl.TlCurve.DefaultAuthoring();
-
-    public override string MenuName => "Force";
-    public override ulong TypeKey => 0x5E1A7C0FD2B39A41UL;
-    public override Tl.Unity.TlClipData CreateDefault() => new ForceClip_TlData();
-
-    public override void Write(ref Tl.TlClipWriter writer, ref Tl.TlBaker baker)
-    {
-        var clip = new ForceClip { Direction = Direction, Strength = Strength, Falloff = Tl.TlCurve.Sample(Falloff) };
-        writer.Write(in clip);
-        default(ForceBaking).Bake(ref baker, in clip);
-    }
-}
-```
-
-Plus, under `#if UNITY_EDITOR`, a `UnityEditor.Timeline.Actions.TimelineAction` with `[MenuEntry("Tl/Force")]` that calls
-`TimelineEditor.inspectedAsset.CreateTrack<TlTrackAsset>(null, "Force")` with `Template = new ForceClip_TlData()` under Undo, a
-`TrackAction` `Add Force Clip`, and one registry row `TypeKey -> (ForceClip, ForceTrack.Evaluate, feeds ForceKind)` for the runtime dispatch.
-
-**B6. Enable bits in the baking world** (Baker has only generic `SetComponentEnabled<T>`):
-
-```csharp
-using Unity.Burst;
-using Unity.Entities;
-
-namespace Tl.Unity.Editor
-{
-    [WorldSystemFilter(WorldSystemFilterFlags.BakingSystem)]
-    public partial struct TlKindEnableBakingSystem : ISystem
-    {
-        public void OnUpdate(ref SystemState state)
-        {
-            TlKindBaking.DisableReachedKinds(ref state);
-        }
-    }
-}
-```
-
-**B7. Runtime pickup** (`InitializationSystemGroup`, Burst `ISystem`, no Library field anywhere): `TlTimelineRegisterSystem` queries entities whose
-`TlTimelineSet` changed, registers each blob not yet known in the world's timeline library (keyed by blob hash, gives a `TimelineId`), maps the
-entity's slots to ids, and the existing request, advance and kind tick systems run unchanged. A `TimelineRef` baked on a coder's own component
-is the same blob hash, so code and Inspector agree without names.
-
-**What lands on the Force demo entity** (Unity's Entity Baking Preview, top to bottom; Tl rows marked):
+**What lands on the Force demo entity** (Unity's Entity Baking Preview, top to bottom):
 
 ```
-LocalTransform, LocalToWorld, RenderMesh...        Unity
-TlTimelineSet            [1] Push                  Tl  timelines this object can play (blob per timeline)
-Playback                 [0]                       Tl  what is playing now (filled at runtime)
-TimelineRequest          [1] Start slot 0 at 0     Tl  from Play On Awake
-TimelinePlaying          (disabled)                Tl
-TlDirectorSettings       End Loop, Initial 0       Tl  from Wrap Mode / Initial Time
-ForceKindEntry / Active / Enabled                  Tl  per-tick inputs of ForceKind
-Force                    (0,0,0)                   coder, added because ForceKind.Apply writes it
-ForceLog                 [0]                       coder, from ForceBaking
-ForceFalloff             blob                      coder, from ForceBaking
+LocalTransform, LocalToWorld, rendering components     Unity
+TlTimelineSet            [1] Push                      Tl  timelines this object can play
+Playback                 [0]                           Tl  what is playing (filled at runtime)
+TimelineRequest          [1] Start slot 0              Tl  from Play On Awake
+TimelinePlaying          (disabled)                    Tl
+TlUnregistered           (enabled)                     Tl  cleared on the first frame of Play
+ForceKind entry buffer + enable bit                    Tl  per-tick inputs of ForceKind
+Force                    (0,0,0)                       coder, added because ForceKind.Apply writes it
+ForceLog                 [0]                           coder, from ForceBaking
+ForceFalloff             blob, 16 samples              coder, from ForceBaking
 ```
 
 The preview is Unity's engineer view and cannot be relabelled. The designer reads the same facts in plain words in the director's Tl foldout:
 `Can play: Push. Starts: Push (Play On Awake). Gets: Force, Force Log, Force Falloff. Engine data: 6 components (hidden).`
 
-**Incremental rebake.** Editing a clip changes that clip's sub-asset; `DependsOn(clip.asset)` makes Unity rebake only the objects whose director
-reaches that timeline. With the SubScene open (Unity's live baking), the new blob reaches the running world in the same frame of editing and B7
-swaps it while `Playback` keeps its tick: this is the live edit of 2.7, with no Tl reload code. With the SubScene closed, Unity reimports it on
-the next Play. Changing Play On Awake, Wrap Mode or Also Plays is a change to a baked component and also rebakes. Adding a `[TlClip]` type is a
-script change: Unity compiles, then rebakes as for any baker change.
+**Incremental rebake.**
+- Editing a clip changes that clip's sub-asset. `DependsOn` makes Unity rebake only the objects whose timelines include it; an unrelated asset rebakes nothing.
+- With the SubScene open (Unity's live baking), the new blob reaches the running world and the register system swaps it while `Playback` keeps its tick. This is the live edit of 2.7 (target under 1 s, spike S4).
+- With the SubScene closed, Unity reimports it on the next Play.
+- Play On Awake, Initial Time, Also Plays and the settings marker are dependencies too.
+- Adding a `[TlClip]` type is a script change: Unity compiles, then rebakes. Editing a timeline never compiles code (no `Kinds.g.cs`).
 
 **What the designer sees while it bakes.**
 
@@ -480,9 +231,10 @@ script change: Unity compiles, then rebakes as for any baker change.
 |---|---|
 | Baking running | Unity's own SubScene import progress (status bar spinner, "Importing SubScene" bar on a full reimport). No Tl window, no modal. |
 | Bake done, all fine | Tl foldout: `Baked just now: 1 timeline, 1 Tl track, 2 clips.` Console silent. |
-| Clip problem (off-grid, curve conflict, removed type) | Message on that clip's Inspector and a one-line Console warning whose click selects the clip in the Timeline window. The object still bakes; the clip is rounded or skipped. |
-| Object problem (outside SubScene, no Playable) | Message in the director's Tl foldout with a fix button (section 6). |
-| Coder's `ITlBaker` throws | Console: `Force Baking failed on clip at 0.50 s in Push (Cube): <exception message>. The clip is skipped.` Tl foldout shows the same. |
+| Clip problem (off-grid, second Force Falloff, missing type) | Message on that clip's Inspector and one Console warning whose click selects the clip. The object still bakes; the clip is rounded or skipped. |
+| Object problem (outside SubScene, no Playable, no Tl tracks) | Message in the director's Tl foldout with a fix button (section 6). |
+| Coder's `ITlBaker` throws | Console: `Force Baking failed on the clip at 0.50 s in Push (Cube): <exception message>. The clip is skipped.` Tl foldout says the same. |
+| Clip struct changed layout, rebake pending | Tl foldout: `Your Force code changed. Tl is waiting for Unity to finish compiling and rebaking.` |
 
 ---
 
@@ -514,7 +266,7 @@ script change: Unity compiles, then rebakes as for any baker change.
   built the same way. No `.json`, no generated file checked in.
 - **10 minutes.** Adds a new clip type: one file, about ten lines (section 2.9). Returns to Unity: after the normal compile, `Tl > Spin` is in the
   Timeline window's add-track menu with a typed Inspector. Adds an authoring field `public TimelineAsset Dash;`, drags the asset in, and starts it from
-  a Burst system with `requests.Play(dash)` (section 2.11).
+  a Burst system with `TlRequests.Start(ref requests, in dasher.Dash)` (section 2.11).
 - **First day.** Writes a gameplay system that reacts to a clip starting (pulse), adds a unit test that bakes a timeline in EditMode and steps the
   world, makes a player build. No step outside Unity.
 
@@ -567,7 +319,8 @@ Nothing else. No .NET SDK, no clone, no `tlb`, no install script, no asmdef mark
 - The **Playable Director** is the assignment. Its Unity fields mean:
   - **Playable**: the timeline this object starts with.
   - **Play On Awake**: on = starts when the object spawns; off = waits for code or the Inspector.
-  - **Wrap Mode**: Loop = loop, Hold = hold last frame, None = stop and remove.
+  - **Wrap Mode**: ignored by Tl. Loop/Hold/Stop belong to the timeline (its Tl section), so one timeline means the same on every object; the
+    foldout shows `This timeline loops (set on the timeline). Wrap Mode is not used by Tl.` when they disagree.
   - **Initial Time**: start offset.
   - Update Method other than Game Time: a yellow line under the director: `Tl timelines always follow game time. Update Method is ignored.`
 - Under the director, the package draws a **Tl** foldout (not a separate component the designer must add) with **Also Plays**: a list of timeline
@@ -582,8 +335,9 @@ Nothing else. No .NET SDK, no clone, no `tlb`, no install script, no asmdef mark
 
 ### 2.7 Edit a clip and see it change live
 
-- In Edit mode: scrubbing the Timeline window playhead moves the object in the Scene view (preview through the Editor world, like BovineLabs'
-  `EditorTimelineSystem` and Vex's scrub driver). Leaving the Timeline window restores the object.
+- In Edit mode (later phase, architecture 4.9 item 12): scrubbing the Timeline window playhead moves the object in the Scene view (preview
+  through the Editor world, like BovineLabs' `EditorTimelineSystem` and Vex's scrub driver). Leaving the Timeline window restores the object.
+  Until then the honest gap is listed in section 8.
 - In Play mode: change a clip value, move or trim a clip, add a clip. Within one second the running object follows. The timeline that is playing
   continues from its current time. Console: nothing (silence on success). The Tl Monitor shows `Reloaded Walker Moves`.
 - Exiting Play keeps the edits (they were edits to the `.playable` asset, which is normal Unity behaviour for assets).
@@ -649,31 +403,34 @@ drag a `.playable`; the field only accepts timelines in the target's Playable or
 **From code.** Gabe adds an object field to his own authoring and drags the asset in. The baker turns it into an id. The system never sees a name:
 
 ```csharp
+using Tl;
+using Unity.Entities;
+using UnityEngine;
+
 public sealed class DasherAuthoring : MonoBehaviour
 {
-    public TimelineAsset Dash;
+    public TlTimeline Dash;
 }
 
 public sealed class DasherBaker : Baker<DasherAuthoring>
 {
-    public override void Bake(DasherAuthoring a) =>
-        AddComponent(GetEntity(TransformUsageFlags.None), new Dasher { Dash = this.TimelineRef(a.Dash) });
+    public override void Bake(DasherAuthoring authoring) =>
+        AddComponent(GetEntity(TransformUsageFlags.None), new Dasher { Dash = TlBaking.GetTimeline(this, authoring.Dash) });
 }
 
-public struct Dasher : IComponentData { public TimelineRef Dash; }
+public struct Dasher : IComponentData { public TlTimelineRef Dash; }
 ```
 
 ```csharp
-requests.Play(dasher.Dash);
-requests.Stop(dasher.Dash);
-requests.Pause(dasher.Dash);
-requests.Resume(dasher.Dash);
-bool running = playback.IsPlaying(dasher.Dash);
+TlRequests.Start(ref requests, in dasher.Dash);
+TlRequests.Stop(ref requests, in dasher.Dash);
+TlRequests.Pause(ref requests, in dasher.Dash);
+TlRequests.Resume(ref requests, in dasher.Dash);
 ```
 
-`TimelineRef` is an unmanaged handle (timeline id). `this.TimelineRef(asset)` logs a plain-language error if the asset is not playable on that
-entity ("Dash is not in this object's Playable or Also Plays. Drag it into Also Plays on the Playable Director.") and adds it to the reachable set
-automatically when it is on the same GameObject. Generated `Timelines.Run` constants stay available for tests but are not in any doc's main path.
+`TlTimeline` draws as a timeline object field (drag and drop). `TlBaking.GetTimeline` bakes it to `TlTimelineRef` (the `.playable`'s identity,
+unmanaged) and adds that timeline to the object's playable set, so no Also Plays entry is needed for it. Requests resolve to ids at runtime;
+Pause/Resume are new request ops (architecture 4.5). No generated id constants anywhere.
 
 ### 2.12 Debugging view: Tl Monitor
 
@@ -710,7 +467,7 @@ Playable Director
   Playable           [Walker Moves (Timeline)  o]
   Update Method      Game Time
   Play On Awake      [x]
-  Wrap Mode          Loop
+  Wrap Mode          Loop     (not used by Tl)
   Initial Time       0
   Bindings           (none needed for Tl tracks)
 Tl
@@ -720,7 +477,7 @@ Tl
   Bakes: Playback, Motion, Walk Stat, Health
 ```
 
-"Starting values" lists only components required by the tracks on any of this object's timelines, with their fields, nicified names and
+"Starting values" (later phase, a `TlStartValues` component edited in this foldout; architecture 4.9 item 6) lists only components required by the tracks on any of this object's timelines, with their fields, nicified names and
 tooltips. A designer can override; not overriding is fine. This replaces `WalkerAuthoring` in the designer path.
 
 ### Timeline asset Inspector (Tl section under Unity's header)
@@ -735,8 +492,8 @@ Tl
   Status           OK. 2 Tl tracks, 3 clips, 1 cue.
 ```
 
-The director's Wrap Mode and this "When it ends" must not disagree; the timeline's setting wins and the director shows
-`Wrap Mode is set by the timeline (Loop).` Open question 5 decides where this is stored and whether Wrap Mode is the single source.
+Stored in a small Tl settings marker at time 0 inside the `.playable` (made on the first change, shown as a Tl badge), so duplicate and rename
+keep it. No marker = Stop, no channel. The director's Wrap Mode is not used (see 2.5).
 
 ### Tl track, selected
 
@@ -821,7 +578,7 @@ Removed from the designer path entirely (code may stay as internal engine detail
 | `Tlb` path, `dotnet`, .NET SDK, cloning `tl`, `TL_TLB` | Deleted. No external tool. |
 | `Kinds File` / `Kinds.g.cs` checked into user projects, capacity bake menu | Deleted from the user path; capacities computed at bake. |
 | `Game Assembly`, `Namespace`, ids class path | Deleted. Inferred from types. |
-| `Kind Sets`, `Kind Profile`, `Kinds` string list, `[RequiresKinds]` in the common case | Deleted. Reachable kinds come from timelines on the object plus `TimelineRef` fields. |
+| `Kind Sets`, `Kind Profile`, `Kinds` string list, `[RequiresKinds]` in the common case | Deleted. Reachable kinds come from timelines on the object plus `TlTimeline` fields. |
 | `Timeline Player Authoring` with `Start With` / `May Start` typed strings | Deleted. Playable Director + Also Plays object fields. |
 | `Timeline Bridge Asset` (Output, Ids File, Bake On Save, Timelines rows with Name/End/Next/Channel) | Deleted. Per-timeline settings live on the timeline (section 3). |
 | `Timeline Director Authoring`, `Sync()`, `Tools > Tl > Timeline Bridge > Sync Directors`, `Bake All Bridges` | Deleted. |
@@ -907,12 +664,12 @@ Fail = any step needs a typed name, a path, a terminal command, a second package
 
 ### Test A: build the Force demo from scratch (owner's contract, about 5 minutes)
 
-Same fresh project as above, package installed, no sample imported.
+Same fresh project as above, package installed, no sample imported. This is the owner-runnable acceptance of architecture phase 4.
 
 1. [ ] Copy the five files of section 0.2 into `Assets/Force/` exactly as written (no asmdef). Console: 0 errors, 0 Tl warnings, no
        "Ignoring invalid [UpdateAfter]" line.
 2. [ ] `File > New Scene`. `GameObject > Tl > Timeline Object`. The scene now has a camera, a light, a SubScene and a capsule in it.
-3. [ ] `Assets > Create > Tl > Timeline`, name `Push`. Open it. Timeline menu shows `Tl > Force`. Add the track, add a clip, stretch it to 2 s.
+3. [ ] `Assets > Create > Tl > Timeline`, name `Push`. Open it. The Timeline `+` menu shows `Force`. Add the track, add a clip, stretch it to 2 s.
 4. [ ] Select the clip: Inspector shows **Direction** (three number fields), **Strength** (number), **Falloff** (curve field that opens Unity's curve
        editor). Set Direction 1,0,0, Strength 4, draw a falling curve.
 5. [ ] Drag `Push` onto the capsule. Playable Director appears with Push, Play On Awake on. Tl foldout says it bakes Force and Force Log. No other
@@ -939,7 +696,7 @@ Honest table. "BL" = `com.bovinelabs.timeline` 2.0.0-pre.7; "Vex" = vex-studio t
 | Install | BL: package manager package first, then install BL Timeline (or git URL; needs BL Core). Two steps. | One URL + .NET SDK + clone + build `tlb` + install script. | One URL. **Better than BL.** |
 | Author | Unity Timeline window, `DOTSTrack`/`DOTSClip`, menu names like `DOTS/Cue Track`, `Vex/Transform/Spin`. Clip fields are plain serialized fields: native Inspector, Undo, tooltips for free. | Timeline window works but needs a Bridge + Library asset; fields stored as text. | Same as BL. BL is **better at field editing today** (native `SerializedProperty`); we must match it, not approximate it. |
 | Bindings | BL tracks bind to a Transform/entity; one timeline can drive many objects. | Tracks act on the playing entity only. | Same as today; **BL is more flexible** (multi-object cutscenes). Open question 9. |
-| Start playing | BL: `SetComponentEnabled<TimelineActive>(entity, true)` from code; sample uses a builder + UI. Vex: Play On Awake / Wrap Mode / Initial Time read from the director, which is very intuitive. | Typed names in Timeline Player. | Vex-style: director fields mean what they say, plus drag-in Also Plays, `TimelineRef`. |
+| Start playing | BL: `SetComponentEnabled<TimelineActive>(entity, true)` from code; sample uses a builder + UI. Vex: Play On Awake / Wrap Mode / Initial Time read from the director, which is very intuitive. | Typed names in Timeline Player. | Vex-style: director fields mean what they say, plus drag-in Also Plays, `TlTimeline` fields. |
 | Edit preview | BL: `EditorTimelineSystem` drives the Editor world from the Timeline window playhead: scrub and see. Vex adds a scrub driver, a debugger window and a bake "Doctor". | None. | Required (2.7, 2.12). Until shipped, **BL/Vex are better.** |
 | Sample | BL: one sample, scene + UI Toolkit panel, menu `BovineLabs > Samples > Timeline Play`; generated assets via a builder script. Rich but large (custom tracks, nesting, cues, crossings), aimed at engineers. | No camera; JSON; bytes. | Smaller and designer-first; BL's generator approach copied. |
 | Custom track | BL: two classes (`DOTSClip` + `DOTSTrack`) plus a system with `TrackBlendImpl` and a job: about 60 lines for a float3 track. | Data structs + 3 one-line Unity classes + Bridge asset + rebake. | Force contract: five small files, about 70 lines including a kind, a baker and a Burst job; a clip feeding an existing kind is about 12 lines (2.9). BL's clip `Bake` adds components with Unity's own `Baker`, which is just as direct as our `ITlBaker`. **Even** on lines; better than BL in setup if the generator delivers (no `TrackAsset` class). |
@@ -953,6 +710,9 @@ literally at bake; a "Doctor" that explains mismatches on the director; a debugg
 ---
 
 ## 9. Open questions for the architecture planner
+
+All answered in [zero-config-arch.md](zero-config-arch.md) section 4.9; this plan is reconciled with those answers. Still open: spikes S2
+to S6 (architecture section 6), in particular S3 (the real Timeline window, Undo of the menu swap) and S4 (live edit latency).
 
 1. Can the Tl data for a timeline be produced inside the Editor (ScriptedImporter or Baker over `TimelineAsset`), with no external process, fast
    enough that saving a clip and pressing Play feels instant?
