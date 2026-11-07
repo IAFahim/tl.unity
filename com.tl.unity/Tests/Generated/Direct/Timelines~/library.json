@@ -1,0 +1,9 @@
+{
+  "tickRate": 60,
+  "channels": [
+    "locomotion"
+  ],
+  "timelines": [
+    "stroll.json"
+  ]
+}

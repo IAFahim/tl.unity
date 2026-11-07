@@ -1,0 +1,24 @@
+{
+  "name": "Tl.Unity.Direct.Tests",
+  "rootNamespace": "DirectGame",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Unity.Direct",
+    "Unity.Entities",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "noEngineReferences": false
+}

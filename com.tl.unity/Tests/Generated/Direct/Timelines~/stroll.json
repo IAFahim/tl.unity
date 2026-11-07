@@ -1,0 +1,27 @@
+{
+  "name": "stroll",
+  "duration": 40,
+  "loop": true,
+  "channel": "locomotion",
+  "tracks": [
+    {
+      "namespace": "DirectGame",
+      "type": "StrideTrack",
+      "data": {
+        "Scale": 1
+      },
+      "clips": [
+        {
+          "namespace": "DirectGame",
+          "type": "StrideClip",
+          "start": 0,
+          "end": 40,
+          "data": {
+            "Speed": 2,
+            "Priority": 0
+          }
+        }
+      ]
+    }
+  ]
+}
