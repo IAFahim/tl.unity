@@ -1,0 +1,10 @@
+{
+  "name": "Spike.Tests",
+  "references": ["Spike.A", "Spike.A.Game", "Spike.C", "Tl.Spike", "Tl.Core", "Tl.Unity", "Unity.Entities", "Unity.Burst", "Unity.Collections", "Unity.Mathematics", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+  "includePlatforms": ["Editor"],
+  "allowUnsafeCode": true,
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll"],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}

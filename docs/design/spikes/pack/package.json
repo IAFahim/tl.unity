@@ -1,0 +1,7 @@
+{
+  "name": "com.tl.pack.spike",
+  "version": "0.0.1",
+  "displayName": "Tl Spike Pack",
+  "description": "Spike S-B: one folder with a .csproj and a package.json.",
+  "unity": "7000.0"
+}

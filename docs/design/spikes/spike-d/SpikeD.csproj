@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../../../com.tl.unity/Tools~/Tl.Gen.Unity.Snapshot/UnityStubs.cs" Link="UnityStubs.cs" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Remove="UnityStubs.cs" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.1" />
+    <ProjectReference Include="../../../../com.tl.unity/Tools~/Tl.Gen.Unity/Tl.Gen.Unity.csproj" />
+  </ItemGroup>
+
+</Project>

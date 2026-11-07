@@ -1,0 +1,10 @@
+{
+  "name": "Tl.Spike",
+  "rootNamespace": "Tl.Spike",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity"
+  ],
+  "allowUnsafeCode": true,
+  "noEngineReferences": false
+}

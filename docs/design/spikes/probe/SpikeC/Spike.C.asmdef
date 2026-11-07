@@ -1,0 +1,5 @@
+{
+  "name": "Spike.C",
+  "references": ["Tl.Core", "Tl.Spike", "Unity.Burst", "Unity.Collections", "Unity.Mathematics"],
+  "allowUnsafeCode": true
+}

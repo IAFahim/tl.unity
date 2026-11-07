@@ -1,0 +1,5 @@
+{
+  "name": "Spike.A.Game",
+  "references": ["Spike.A", "Unity.Burst", "Unity.Collections", "Unity.Entities"],
+  "allowUnsafeCode": true
+}
