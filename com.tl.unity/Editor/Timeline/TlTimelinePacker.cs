@@ -21,6 +21,13 @@ namespace Tl.Unity.Editor
 
         public static TlKindCatalog Catalog => s_Catalog ??= TlBake.Catalog(KindAssemblies());
 
+        [InitializeOnLoadMethod]
+        static void InstallResolvers()
+        {
+            TlClipData.AssetResolver = AssetResolver;
+            TlBaking.TickRateResolver = () => TlProjectSettings.instance.TicksPerSecond;
+        }
+
         public static BlobAssetReference<TlTimelineBlob> Pack(TimelineAsset timeline, uint tickRate, TlKindCatalog catalog, ref TlBaker baker, UnityEngine.Object context, out ulong kindMask)
         {
             var name = timeline.name;
