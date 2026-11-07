@@ -73,14 +73,23 @@ namespace KindGame
         readonly bool _events;
         bool _forward = true;
 
-        public KindWorld(int count, bool events = false)
+        public KindWorld(int count, bool events = false) : this(count, events, null)
+        {
+        }
+
+        public KindWorld(int count, bool events, Func<World, SystemHandle> library)
         {
             _events = events;
             World = new World("TlKinds");
             Entities = World.EntityManager;
-            TimelineLibraryBootstrap.Use("kinds.tlib", KindLibraryBytes.Bytes());
-            LibraryHandle = World.CreateSystem<TimelineLibrarySystem>();
-            LibraryHandle.Update(World.Unmanaged);
+            if (library == null)
+            {
+                TimelineLibraryBootstrap.Use("kinds.tlib", KindLibraryBytes.Bytes());
+                LibraryHandle = World.CreateSystem<TimelineLibrarySystem>();
+                LibraryHandle.Update(World.Unmanaged);
+            }
+            else
+                LibraryHandle = library(World);
             TickHandle = World.CreateSystem<TimelineKindTickSystem>();
             MovementHandle = World.CreateSystem<MovementSystem>();
             VitalsHandle = World.CreateSystem<VitalsSystem>();

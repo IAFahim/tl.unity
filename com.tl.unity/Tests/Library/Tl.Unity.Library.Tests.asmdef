@@ -1,0 +1,29 @@
+{
+  "name": "Tl.Unity.Library.Tests",
+  "rootNamespace": "Tl.Unity.Library.Tests",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Unity.Bake",
+    "Tl.Unity.Bake.Tests",
+    "Tl.Unity.Kinds",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Mathematics",
+    "UnityEngine.TestRunner"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": true,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS",
+    "UNITY_EDITOR"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
