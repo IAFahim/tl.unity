@@ -654,3 +654,51 @@ Fix for phase 3: the assembler takes `gamePulses` and the inline budget from the
 f9ce66cf; `GamePulses` still needs a `TlKind` property), with `channelCount` and `stackDepth` from project settings, so no `library.json`
 is needed; and it patches `Next`, `Channel` and `TimelineId` fields after assigning ids (or bakes against a manifest built from the sorted
 `Asset` set, as the test does with names).
+
+## 9. Phase 3 results
+
+Built on 7000.0.0a16. `eng/test-com-tl-unity.sh`: EditMode 68/68, PlayMode 55/55 (6 new), 0 `error CS`, 0 warnings. K bench (same
+process, Burst on, 100000 entities): A 7.8, B 1.8, B0 0.6 ns/entity, 0 B. Both pinned hashes unchanged on the legacy route and reproduced
+on the blob route.
+
+| Name | Where | What |
+|---|---|---|
+| `TlTimelineBlob` | `Tl.Unity`, `Runtime/Library` | `Hash128 Asset, Content; uint TickRate; BlobArray<byte> Name, Tlb, Kinds; BlobArray<Hash128> NextAssets` (`Unity.Entities.Hash128`). `Name` was added: `TimelineWorld` needs ordinal-sorted names and tlb byte identity needs the real names |
+| `TlTimelineBlobs.Create(asset, tickRate, name, tlb, kinds, nextAssets)` | same | builds the blob; `Content` is the first 16 B of SHA-256 over rate, name, tlb, kinds, next |
+| `TlTimelineSet` (buffer: `Blob`, `Id`), `TlUnregistered` (enableable tag) | same | what the director baker puts on the entity |
+| `TlLibraryAssembler.Assemble(parts, tickRate, settings)` | same | `LibraryPack.Emit` + `KindLayout.Capacities/Section` from the per-timeline kind payloads; patches TLB `Next` (offset 52) |
+| `TlLibrary` | same | managed registry behind a `GCHandle` in `TlLibraryHandle`: assets → ids, dedupe, swap, owns `TimelineWorld` + `KindIndex` |
+| `TlLibrarySystem`, `TlTimelineRegisterSystem` | same, `InitializationSystemGroup` | create the library entity on the first pending blob; register, publish `TimelineLibrary` + `TimelineStep` + `ClosedPlayback`, write ids, disable the tag |
+| `TlLibraryIndex` | same | `NativeHashMap<Hash128, ushort>` asset → id for phase 6 refs |
+| `TlBake.Catalog(assemblies, overrides)`, `TlBake.KindBytes(name, tlb, catalog)`, `TlKindKnobs` | `Tl.Unity.Bake` (Editor) | per-timeline kind payload: catalog section of one timeline + `MaxSpans`, `MaxPulses`, `Inline`, `GamePulses` per kind |
+| `TlKindAttribute.GamePulses` | `Tl.Unity` | read by `TlBake.Catalog` next to `Inline` |
+
+Rules the code keeps:
+
+- Ids: a batch is sorted by (name, `Asset`) and appended; a known `Asset` keeps its id when its `Content` changes; equal `Asset` and
+  `Content` is skipped (no reassembly). A name that would break the ordinal order gets a `U+FF5E` prefix in the library only, so ids already
+  handed out never move when a later SubScene adds a timeline.
+- `Next`: a blob is baked against a local manifest (`TlBake.Manifest(new[] { nextName }, channels, rate)`, id k = `NextAssets[k-1]`); the
+  assembler writes the library id, or 0 until the target is loaded, and every reassembly re-resolves it.
+- Tick rates: the first registered rate wins; a different one is rejected with "baked at 120 ticks per second but the library runs at 60".
+- Kinds: every blob must carry the same catalog (rows, feeders, strings, knobs) or the batch is rejected ("baked against different kinds";
+  rebake after the compile). Capacities use tlb's defaults (stack depth 1, 64 B inline budget); the channel count is the largest channel in
+  the blobs. Only the plain host's `KindStore` reads them.
+- Legacy: `TimelineLibrarySystem` stops when a `TlLibraryHandle` exists; the register system refuses to publish next to a legacy
+  `TimelineLibrary`. No statics, no asset, no file path on the new route; the world's systems free everything in `OnDestroy`.
+- Per frame: both systems `RequireForUpdate` the pending query and return on `IsEmpty`. `RequireForUpdate` alone ran the register system
+  every frame after the tag was disabled (264 B/frame); with the `IsEmpty` check the warm frame is 0 B.
+
+| Acceptance | Result |
+|---|---|
+| Blobs assembled (shuffled input) equal tlb's `game.tlib` byte for byte | pass, `AssemblesTheKindGameLibraryLikeTlbFromBlobs` |
+| World with no asset and no static, library only from `TlTimelineSet` blobs on 3 entities (overlapping sets) | `SixHundredStep` hash 13943614770702343869 and events hash 6607956939547305625, same as the legacy route |
+| Known blobs skipped, later timeline keeps earlier ids, changed timeline keeps its id, mixed rate rejected | pass |
+| Warm frame (library + register systems + tick, 64 frames) | 0 B |
+
+Open:
+- `TimelineId` fields inside clips are not patched (the fixture has none); phase 6 replaces them with `TlTimelineRef`.
+- The KindGame fixture keeps `[TimelineKind]` and `library.json` because `EditingATimelineWithoutChangingACapacityRewritesNothing` drives
+  the old tlb. The blob test passes Damage `Inline = 11, GamePulses = 8` as `TlKindKnobs`, the values `[TlKind]` would carry. tlb itself
+  reads `[TlKind(Inline)]` but not `GamePulses` yet; on the Unity route the runtime assembler is the only reader.
+- `Tests/Library` is a PlayMode assembly with a `UNITY_EDITOR` constraint so it can reference the Editor-only `Tl.Unity.Bake`.
