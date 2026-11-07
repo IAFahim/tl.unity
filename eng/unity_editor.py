@@ -45,6 +45,9 @@ def from_cli():
         rows = json.loads(result.stdout)['data']
     except (ValueError, KeyError):
         return {}
+    if isinstance(rows, dict):
+        rows = rows.get('items', [])
+    rows = [row for row in rows if isinstance(row, dict) and 'version' in row and 'location' in row]
     return {row['version']: pathlib.Path(row['location']) for row in rows if pathlib.Path(row['location']).is_file()}
 
 
