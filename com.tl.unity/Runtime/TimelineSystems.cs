@@ -6,7 +6,7 @@ using Unity.Jobs;
 
 namespace Tl.Unity
 {
-    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
+    [UpdateInGroup(typeof(TlSimulationGroup))]
     public partial class TimelineSimulationGroup : ComponentSystemGroup
     {
     }
