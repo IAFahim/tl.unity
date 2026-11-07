@@ -25,6 +25,11 @@
       "path": "Samples~/BulletsIL2CPP"
     },
     {
+      "displayName": "ECS demo",
+      "description": "The USING-ECS demo: a walker that runs, dashes and takes damage, a dummy that only takes damage, two cues and an exact rewind, as Burst ISystems, with an editor setup script and a PlayMode test.",
+      "path": "Samples~/EcsDemo"
+    },
+    {
       "displayName": "Plain C# host",
       "description": "Plays Tl timelines from a MonoBehaviour with no ECS: a managed host, a library loaded from game.bytes, and a Transform driven from FixedUpdate.",
       "path": "Samples~/PlainCSharp"

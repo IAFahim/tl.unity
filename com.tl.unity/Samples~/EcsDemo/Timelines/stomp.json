@@ -1,0 +1,14 @@
+{
+  "name": "stomp",
+  "duration": 8,
+  "channel": "action",
+  "tracks": [
+    {
+      "namespace": "Demo", "type": "HitTrack", "data": { "Scale": 1 },
+      "clips": [
+        { "namespace": "Demo", "type": "HitClip", "start": 2, "end": 4, "data": { "Amount": 25, "CueId": 1 } },
+        { "namespace": "Demo", "type": "HitClip", "start": 5, "end": 7, "data": { "Amount": 10, "CueId": 2 } }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "dash",
+  "duration": 20,
+  "tracks": [
+    {
+      "namespace": "Demo", "type": "WalkTrack", "data": { "Scale": 1 },
+      "clips": [
+        { "namespace": "Demo", "type": "WalkClip", "start": 0, "end": 20, "data": { "Speed": 5, "Priority": 10 } }
+      ]
+    }
+  ]
+}

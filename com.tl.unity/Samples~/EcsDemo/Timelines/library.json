@@ -1,0 +1,8 @@
+{
+  "tickRate": 60,
+  "channels": [ "locomotion", "action" ],
+  "timelines": [ "run.json", "dash.json", "stomp.json" ],
+  "kinds": {
+    "Damage": { "gamePulses": 8 }
+  }
+}

@@ -14,7 +14,15 @@ One pasted line (needs git, the .NET 10 SDK, `gh auth login`; installs Unity 7 i
 curl -sSL https://raw.githubusercontent.com/IAFahim/tl/main/install/unity.sh | bash -s -- <project-path>
 ```
 ```powershell
-$env:TL_PROJECT='C:pathMyGame'; irm https://raw.githubusercontent.com/IAFahim/tl/main/install/unity.ps1 | iex
+$env:TL_PROJECT='C:\path\MyGame'; irm https://raw.githubusercontent.com/IAFahim/tl/main/install/unity.ps1 | iex
+```
+
+First run: add `--demo` (bash) or `$env:TL_DEMO=1` (PowerShell) and it also builds the ECS demo, runs its PlayMode test and prints Walker health 58, Dummy health 93, two cues and the exact rewind:
+```sh
+curl -sSL https://raw.githubusercontent.com/IAFahim/tl/main/install/unity.sh | bash -s -- --demo <project-path>
+```
+```powershell
+$env:TL_PROJECT='C:\path\MyGame'; $env:TL_DEMO=1; irm https://raw.githubusercontent.com/IAFahim/tl/main/install/unity.ps1 | iex
 ```
 
 ## Install

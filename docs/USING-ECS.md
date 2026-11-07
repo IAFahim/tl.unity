@@ -70,8 +70,17 @@ One pasted line (needs git, the .NET 10 SDK, `gh auth login`; installs Unity 7 i
 curl -sSL https://raw.githubusercontent.com/IAFahim/tl/main/install/unity.sh | bash -s -- <project-path>
 ```
 ```powershell
-$env:TL_PROJECT='C:pathMyGame'; irm https://raw.githubusercontent.com/IAFahim/tl/main/install/unity.ps1 | iex
+$env:TL_PROJECT='C:\path\MyGame'; irm https://raw.githubusercontent.com/IAFahim/tl/main/install/unity.ps1 | iex
 ```
+
+The demo in one line (adds `--demo` / `TL_DEMO=1`): copies the sample into `Assets/EcsDemo`, bakes, builds the scene, runs the PlayMode test and prints the numbers of section 3 step 10:
+```sh
+curl -sSL https://raw.githubusercontent.com/IAFahim/tl/main/install/unity.sh | bash -s -- --demo <project-path>
+```
+```powershell
+$env:TL_PROJECT='C:\path\MyGame'; $env:TL_DEMO=1; irm https://raw.githubusercontent.com/IAFahim/tl/main/install/unity.ps1 | iex
+```
+The same sample is in Package Manager as "ECS demo" (the installer does not need it).
 
 ### Package
 
@@ -600,6 +609,11 @@ path is a label only.
 5. In the main scene (outside the SubScene) add a GameObject `Library` with
    `LibraryAuthoring`. Drag `Timelines/game.bytes` into its Library field.
 
+The sample (`Samples~/EcsDemo`, installed by `--demo`) does steps 4 and 8
+without clicks: `Editor/EcsDemoSetup.cs` has `Prepare` (the Timeline Library
+asset and the staged assemblies for step 5) and `Build` (both scenes, the
+SubScene, the Inspector references), run with `-batchmode -executeMethod`.
+
 Names in Start With, May Start and Kinds are the constant names in
 `Timelines.g.cs` and kind type names. A wrong name is a baking error that
 starts `Tl baking: GameObject '<name>'` (see section 9).
@@ -733,6 +747,12 @@ on 7000.0.0a16 (1 passed). After step 70 it asserts:
 | `Walker` cues | `Count` 2, `Last` 2 |
 | `X` at step 50 equals `X` at step 30 | ten steps back undo ten steps forward |
 | `DroppedPulses`, `DroppedStarts` | 0 and 0 |
+
+Headless, the test logs one line with these numbers (`EcsDemo result
+walkerHealth=58 dummyHealth=93 cues=2 lastCue=2 x30=... x50=... droppedPulses=0
+droppedStarts=0`); the installer's `--demo` prints them and fails if they
+differ. The test finds `Demo.unity` by name, so it works wherever the folder
+sits.
 
 The same demo built as a Windows player with `BuildPipeline.BuildPlayer`
 (scene `Demo.unity`, package from a local path) gives these values in both a
@@ -920,10 +940,13 @@ File: `Assets/Demo/Tests/DemoTests.cs`
 #if UNITY_EDITOR
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using NUnit.Framework;
 using Tl.Unity;
 using Unity.Collections;
 using Unity.Entities;
+using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -933,10 +956,21 @@ namespace Demo.Tests
 {
     public class DemoPlayTests
     {
+        static string ScenePath()
+        {
+            foreach (var guid in AssetDatabase.FindAssets("t:SceneAsset Demo"))
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                if (Path.GetFileNameWithoutExtension(path) == "Demo")
+                    return path;
+            }
+            return null;
+        }
+
         [UnityTest]
         public IEnumerator TheDemoRunsInTheDefaultWorld()
         {
-            yield return EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/Demo/Demo.unity", new LoadSceneParameters(LoadSceneMode.Single));
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode(ScenePath(), new LoadSceneParameters(LoadSceneMode.Single));
             var entities = World.DefaultGameObjectInjectionWorld.EntityManager;
             using var clockQuery = entities.CreateEntityQuery(typeof(DemoClock));
             using var walkers = entities.CreateEntityQuery(typeof(LocomotionEntry), typeof(Vitals_HealthData));
@@ -958,18 +992,22 @@ namespace Demo.Tests
             using var d = dummies.ToEntityArray(Allocator.Temp);
             Assert.AreEqual(1, w.Length);
             Assert.AreEqual(1, d.Length);
-            Assert.AreEqual(100 - 25 - 10 - 7, entities.GetComponentData<Vitals_HealthData>(w[0]).Value.Value, "stomp hits and one game pulse");
-            Assert.AreEqual(100 - 7, entities.GetComponentData<Vitals_HealthData>(d[0]).Value.Value, "game pulse only");
+            var walkerHealth = entities.GetComponentData<Vitals_HealthData>(w[0]).Value.Value;
+            var dummyHealth = entities.GetComponentData<Vitals_HealthData>(d[0]).Value.Value;
             var cues = entities.GetComponentData<Vitals_CuesData>(w[0]).Value;
+            using var tickQuery = entities.CreateEntityQuery(new EntityQueryDesc { All = new[] { ComponentType.ReadOnly<TimelineKindTick>() }, Options = EntityQueryOptions.IncludeSystems });
+            var tick = tickQuery.GetSingleton<TimelineKindTick>();
+            seen.TryGetValue(30, out var before);
+            seen.TryGetValue(50, out var after);
+            Debug.Log(string.Format(CultureInfo.InvariantCulture, "EcsDemo result walkerHealth={0} dummyHealth={1} cues={2} lastCue={3} x30={4} x50={5} droppedPulses={6} droppedStarts={7}",
+                walkerHealth, dummyHealth, cues.Count, cues.Last, before, after, tick.DroppedPulses, tick.DroppedStarts));
+            Assert.AreEqual(100 - 25 - 10 - 7, walkerHealth, "stomp hits and one game pulse");
+            Assert.AreEqual(100 - 7, dummyHealth, "game pulse only");
             Assert.AreEqual(2, cues.Count);
             Assert.AreEqual(2, cues.Last);
             Assert.Greater(entities.GetComponentData<Movement_MotionData>(w[0]).Value.X, 0f);
-            if (seen.TryGetValue(30, out var before) && seen.TryGetValue(50, out var after))
-                Assert.AreEqual(before, after, "ten steps back return X to its value ten steps earlier");
-            else
-                Assert.Fail("steps 30 and 50 were not both observed");
-            using var tickQuery = entities.CreateEntityQuery(new EntityQueryDesc { All = new[] { ComponentType.ReadOnly<TimelineKindTick>() }, Options = EntityQueryOptions.IncludeSystems });
-            var tick = tickQuery.GetSingleton<TimelineKindTick>();
+            Assert.IsTrue(seen.ContainsKey(30) && seen.ContainsKey(50), "steps 30 and 50 were both observed");
+            Assert.AreEqual(before, after, "ten steps back return X to its value ten steps earlier");
             Assert.AreEqual(0, tick.DroppedPulses);
             Assert.AreEqual(0, tick.DroppedStarts);
         }

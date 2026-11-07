@@ -1,0 +1,17 @@
+{
+  "name": "Demo",
+  "rootNamespace": "Demo",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Unity.Authoring",
+    "Tl.Unity.Generate",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Entities.Hybrid",
+    "Unity.Mathematics"
+  ],
+  "allowUnsafeCode": true,
+  "autoReferenced": true
+}

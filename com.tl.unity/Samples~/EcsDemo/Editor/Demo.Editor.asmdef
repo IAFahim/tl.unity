@@ -1,0 +1,17 @@
+{
+  "name": "Demo.Editor",
+  "rootNamespace": "Demo",
+  "references": [
+    "Demo",
+    "Tl.Unity",
+    "Tl.Unity.Authoring",
+    "Tl.Unity.Editor",
+    "Unity.Entities",
+    "Unity.Entities.Hybrid",
+    "Unity.Scenes"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "autoReferenced": false
+}
