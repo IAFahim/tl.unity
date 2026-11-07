@@ -9,9 +9,12 @@ Tested on the newest Unity 7 editor (tested on 7000.0.0a16).
 
 ## Quick start
 
-One command (needs git, the .NET 10 SDK, the Unity CLI) makes a Unity 7 project with Tl ready for game code. Safe to rerun:
+One pasted line (needs git, the .NET 10 SDK, `gh auth login`; installs Unity 7 if missing) makes or updates a Unity 7 project with Tl ready for game code. Safe to rerun:
 ```sh
-curl -fsSL https://raw.githubusercontent.com/IAFahim/tl.unity/main/eng/tl-init.sh | bash -s -- <new-project-path>
+curl -sSL https://raw.githubusercontent.com/IAFahim/tl/main/install/unity.sh | bash -s -- <project-path>
+```
+```powershell
+$env:TL_PROJECT='C:pathMyGame'; irm https://raw.githubusercontent.com/IAFahim/tl/main/install/unity.ps1 | iex
 ```
 
 ## Install
