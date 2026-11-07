@@ -1,0 +1,19 @@
+{
+  "name": "Tl.Demo.Events.Editor",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Unity.Tracks",
+    "Tl.Unity.Tracks.Editor",
+    "Tl.Demo.Events",
+    "Unity.Entities",
+    "Unity.Entities.Hybrid",
+    "Unity.Mathematics",
+    "Unity.Scenes",
+    "Unity.Timeline"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "autoReferenced": false
+}

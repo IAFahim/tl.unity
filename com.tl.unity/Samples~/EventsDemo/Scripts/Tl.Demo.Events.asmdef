@@ -1,0 +1,16 @@
+{
+  "name": "Tl.Demo.Events",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Entities.Hybrid",
+    "Unity.Mathematics",
+    "Unity.Transforms",
+    "Unity.Timeline"
+  ],
+  "allowUnsafeCode": true,
+  "autoReferenced": false
+}

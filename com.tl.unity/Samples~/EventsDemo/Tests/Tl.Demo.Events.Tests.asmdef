@@ -1,0 +1,20 @@
+{
+  "name": "Tl.Demo.Events.Tests",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Demo.Events",
+    "Unity.Collections",
+    "Unity.Entities",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+  ],
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "autoReferenced": false
+}
