@@ -34,3 +34,15 @@ section 2.3). This is phase 6.
 ## 5. The playback panel
 
 The package ships a `Tl Panel` component (no user MonoBehaviour needed), plus a sample that shows the hand-written way.
+
+## 6. No backward compatibility
+
+None is needed. Rename, move, delete and re-pin freely: no shims, no obsolete forwarding types, no old-name aliases, no compatibility
+fallbacks; pick the cleanest final API. What still holds: both pinned state hashes stay identical (13943614770702343869 and
+6607956939547305625), the five Force contract files compile unchanged (they fix the coder-side API shape), and the K bench stays in band.
+
+Effect on work done so far: phase 1 added no shim (the Unity copies were deleted, not forwarded; `TlAssetIds.ToAssetId()/ToHash128()` is
+the engine edge, not a compatibility layer). None of the spike results depends on a compatibility fallback: S-C took no fallback, and the
+S-D rule (a kind and the tracks that feed it share one assembly) is a current generator limit, not a compatibility promise. Plan items that
+existed only for compatibility are dropped: `[assembly: TlPack]` is no longer needed to keep old pair keys (decision 3 re-pins them), and
+`tlb` does not need to stay as an alias of `tl`.
