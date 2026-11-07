@@ -10,10 +10,16 @@
   },
   "dependencies": {
     "com.unity.entities": "6.7.0",
+    "com.unity.entities.graphics": "7.0.0",
     "com.unity.nuget.mono-cecil": "1.11.6",
     "com.unity.timeline": "6.7.0"
   },
   "samples": [
+    {
+      "displayName": "Force demo",
+      "description": "The Force track from five small files: a cube in a SubScene with a Playable Director and a Push timeline. Press Play and the cube is pushed along X. Includes the scene builder and a PlayMode test.",
+      "path": "Samples~/ForceDemo"
+    },
     {
       "displayName": "Kinds IL2CPP player",
       "description": "Runs the 600-step kind script on a Linux IL2CPP player and prints whether its hash equals the .NET hash.",

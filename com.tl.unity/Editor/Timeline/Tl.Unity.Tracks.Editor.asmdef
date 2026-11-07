@@ -1,0 +1,21 @@
+{
+  "name": "Tl.Unity.Tracks.Editor",
+  "rootNamespace": "Tl.Unity.Editor",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Unity.Authoring",
+    "Tl.Unity.Bake",
+    "Tl.Unity.Editor",
+    "Tl.Unity.Tracks",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Entities.Hybrid",
+    "Unity.Timeline",
+    "Unity.Timeline.Editor"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "noEngineReferences": false
+}

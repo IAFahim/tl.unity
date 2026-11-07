@@ -1,0 +1,13 @@
+{
+  "name": "Tl.Unity.Tracks",
+  "rootNamespace": "Tl.Unity",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Timeline"
+  ],
+  "noEngineReferences": false
+}
