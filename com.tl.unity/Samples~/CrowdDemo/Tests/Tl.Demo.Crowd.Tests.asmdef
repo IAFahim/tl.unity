@@ -1,0 +1,21 @@
+{
+  "name": "Tl.Demo.Crowd.Tests",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Demo.Crowd",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+  ],
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "autoReferenced": false
+}
