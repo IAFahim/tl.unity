@@ -1,6 +1,16 @@
 # Demo set plan (issue #22)
 
-Status: plan only. Nothing here is built yet. Based on tl.unity main `9328184` and tl main `f07c61c5`.
+Status: wave 1 built for A (Force polish), G (Events) and H (Crowd, Unity half), plus a Demo hub sample and the installers in tl
+(all demos in one project, one result line per demo). B to F are not built. Differences from this plan, found while building:
+- G sends the strike with `[Pulse]` into a `Mode = Each` kind (`ArenaStrike`) instead of `Events<Strike>`: the zero-config generator
+  does not dispatch `OnClipStart` + `Events<T>` on `ITlTrack` (IAFahim/tl.unity#25). The dummy's health is `DummyHealth.Max` minus a
+  `Wounds` kind column, because Tl adds every auto-system column to every entity a Tl timeline reaches (IAFahim/tl.unity#26), so the
+  game baker keeps its starting value in a component no kind writes.
+- `TlBaking.GetTimeline(baker, timeline)` and `TlBaking.Ticks(seconds)` exist (package addition); the target object must have the
+  timeline on its Playable Director or Also Plays.
+- H's bench steps `TlSimulationGroup` in the running default world (200 steps, jobs completed after each, second run kept).
+
+Based on tl.unity main `9328184` and tl main `f07c61c5`.
 
 Why: the owner scored the demo 3/10. Today there is one Force demo and a small Control demo. They do not show most of Tl, there is no
 way to control a timeline from a UI, and everything is Unity-only. This plan replaces that with eight demos. Each one shows one thing a

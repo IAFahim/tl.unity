@@ -17,8 +17,23 @@
   "samples": [
     {
       "displayName": "Force demo",
-      "description": "The Force track from five small files: a cube in a SubScene with a Playable Director and a Push timeline. Press Play and the cube is pushed along X. Tl > Samples > Build Control Demo adds a cube whose Burst job starts a Dash timeline from a clip field. Includes the scene builders and Play and Edit mode tests.",
+      "description": "The Force track from five small files: a cube on a grid floor is pushed 4.03 m along X, pauses, and a Return timeline (Play next) pushes it back, forever, with a follow camera and a readout. Tl > Samples > Build Control Demo adds a cube whose Burst job starts a Dash timeline from a clip field. Includes the scene builders and Play and Edit mode tests.",
       "path": "Samples~/ForceDemo"
+    },
+    {
+      "displayName": "Events demo",
+      "description": "Strike clips raise events that gameplay code turns into sparks, damage on a training dummy (a kind fed by game pulses), a Hurt timeline started on the dummy and a score. Builder, README and a PlayMode test (15 strikes, dummy health 10).",
+      "path": "Samples~/EventsDemo"
+    },
+    {
+      "displayName": "Crowd demo",
+      "description": "10,000 to 100,000 dancers play one Dance timeline from their own start ticks (hop, spin, glow). Builder, README and a PlayMode bench that prints ns per entity per Tl step and the warm allocation (0 B).",
+      "path": "Samples~/CrowdDemo"
+    },
+    {
+      "displayName": "Demo hub",
+      "description": "Builds a Tl Demos scene with a button per imported demo scene and puts them all in the build list. Import the other demos first, then Tl > Samples > Build Demo Hub.",
+      "path": "Samples~/DemoHub"
     },
     {
       "displayName": "Kinds IL2CPP player",
