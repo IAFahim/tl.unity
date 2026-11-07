@@ -702,3 +702,52 @@ Open:
   the old tlb. The blob test passes Damage `Inline = 11, GamePulses = 8` as `TlKindKnobs`, the values `[TlKind]` would carry. tlb itself
   reads `[TlKind(Inline)]` but not `GamePulses` yet; on the Unity route the runtime assembler is the only reader.
 - `Tests/Library` is a PlayMode assembly with a `UNITY_EDITOR` constraint so it can reference the Editor-only `Tl.Unity.Bake`.
+
+## 10. Phase 4 results
+
+Built on 7000.0.0a16 (Entities and Entities Graphics 7.0.0, Timeline 6.7.0, URP 17.7.0, all built in). `eng/test-com-tl-unity.sh`:
+EditMode 76/76 (8 new in `Tests/Timeline`), PlayMode 55/55, 0 `error CS`, 0 warnings, both pinned hashes unchanged. K bench (two runs, same
+process, Burst on, 100000 entities): A 8.1 / 7.9, B 1.8 / 1.9, B0 0.6 / 0.7 ns/entity, 0 B.
+
+| Name | Where | What |
+|---|---|---|
+| `TlTrack`, `TlClip`, `TlMenuTrack`, `TlMenu`, `TlTimelineSettings` + `TlEnd` | `Authoring/Timeline`, runtime asmdef `Tl.Unity.Tracks` (auto-referenced) | as 3.1; `Tl.Unity.Timeline` stays the legacy bridge's name until phase 7 |
+| `TlPlayOnAwake` (enableable), `TlPlayOnAwakeSystem` | same | Burst `ISystem` after `TlTimelineRegisterSystem`: once the tag is off, adds `TimelineRequest.Start(0, id, at)` and disables itself (the register system does not resolve slots) |
+| `<Clip>_TlMenu : TlMenuTrack` | generator (`UnityMirrorEmitter`) | `[DisplayName(menu)]` stub, emitted only when the compilation sees `Tl.Unity.TlMenuTrack` |
+| `TlMenuTrackEditor`, `TlTrackSwap.Replace` | `Editor/Timeline`, `Tl.Unity.Tracks.Editor` | delete stub + create `TlTrack` named after the menu, collapsed into one Undo group |
+| `TlClipEditor` | same | draws the mirror's own serialized fields (`PropertyField`, Unity Undo); no names, no type box |
+| `TlDirectorBaker`, `TlDirectorTimelines`, `TlTimelinePacker`, `TlKindBaking` | same | 3.2 order: Playable then the `Next` closure, `DependsOn` every timeline, marker track, settings marker, Tl track, parent group and clip asset; muted tracks skipped; ticks `round(s * rate)`; coder `Bake` once per clip (an exception skips the clip with the UX message); `TlBake.BakeTyped` + `KindBytes` into one blob; kind entry/active/enabled + every column of the kind's system (`Force`) |
+| `TlProjectSettings` + `Project Settings > Tl` | same | `ProjectSettings/TlSettings.asset`, 60 ticks/s default, baked into every blob; `Assets > Create > Tl > Timeline` presets the frame rate |
+
+Decisions made while building:
+- Kind catalog = the assemblies that register kinds with Unity (`KindRegistry` sources), not every loaded assembly: the test project holds
+  `PlainGame.Damage` and the KindGame `Damage`, and the library needs one catalog per world.
+- Reached kinds reuse `TimelineKindBake`/`TimelineKindBakeOwner` and `TimelineKindBakingSystem` (disables `Active`, checks columns), because a
+  Baker can only enable generic types. Phase 7 must keep them when it deletes `TimelinePlayerBaker`.
+- A director that also has `TimelinePlayerAuthoring` is left to the legacy baker.
+- `TlTimelineSettings` is added from the Timeline marker row menu (`Tl Settings`); the timeline Inspector section, the Tl foldout, Also Plays
+  and `GameObject > Tl > Timeline Object` are not built. Off-grid clips are rounded without a clip message. Changing the tick rate does not
+  rebake (a `ScriptableSingleton` cannot be a `DependsOn` target).
+
+**Entities Graphics (S5 rendering piece).** `com.unity.entities.graphics` 7.0.0 is now a package dependency. It draws only under an SRP
+(`EntitiesGraphicsUtils.IsEntitiesGraphicsSupportedOnSystem` is false without one; the log says "No SRP present"). A project made with
+`-createProject` uses the Built-in pipeline, so the cube moves but is invisible; the sample builder then logs a plain warning. With URP set
+(the Hub's Universal 3D template; reproduced headless with `UniversalRenderPipelineAsset.Create` in the scratch project) the cube renders.
+
+**Test A, headless** (fresh `-createProject` project, default modules + `com.tl.unity` from a local path + test framework + URP, the sample
+copied into `Assets/` as Package Manager does, no testables):
+
+| Check | Result |
+|---|---|
+| Compile with the five Force files (no asmdef) and the sample | 0 `error CS`, 0 warnings |
+| Builder (`ForceDemoBuilder.Build`, batch): camera, light, ground, SubScene with a blue cube, Playable Director on `Push.playable`; track made from the generated `ForceClip_TlMenu` stub through `TlTrackSwap` | scene, SubScene and timeline written by Unity |
+| Second batch process (editor restart) reads `Push.playable` | `TL-RESTART PASS`: sub-assets `TlClip, TlTrack, TimelineAsset` (no stub saved), track `Force`, template and data `Tl.Generated.ForceClip_TlData`, Strength 4, Direction (1,0,0), 2 curve keys, duration 2 s, 0 `m_Script: {fileID: 0}` |
+| PlayMode test in the default world | entity has `Force`, `ForceLog`, `ForceFalloff`, `ForceKindEntry`, `TlTimelineSet`; Play On Awake starts Push; x 0 → 4.0333 (predicted 4 × Σ(1 − k/120)/60 = 4.0333), y 0.5, z 0 |
+| Camera picture (batch Editor with a D3D12 device, `Camera.Render` into a RenderTexture) | cube at x 0 in the first picture, gone from there and at x 4.03 in the last: [start](phase4/force-demo-start.png), [end](phase4/force-demo-end.png) |
+
+Not verifiable headless (spike S3): the real Timeline window, its `+` menu, Undo/Redo by keyboard, duplicate, copy and drag. The EditMode
+test `TheMenuStubBecomesARealForceTrackInOneUndoStep` shows one `Undo.PerformUndo` removes the swapped track, but the window flow is the
+owner's [3-minute check](../FORCE-DEMO-CHECK.md).
+
+Open for phase 5: `TlBaker.AddBlob` warns on every second clip even when the value is equal (two Force clips print "Another clip ... already
+sets ForceFalloff"); live edit and the tick-kept swap; the settings Inspector section and the director foldout.

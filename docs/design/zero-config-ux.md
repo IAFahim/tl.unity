@@ -681,6 +681,9 @@ Same fresh project as above, package installed, no sample imported. This is the 
 10. [ ] Delete `ForceBaking.cs`: after compile the capsule still moves (Force is added because `ForceKind` writes it); `ForceLog` and `ForceFalloff`
         are gone. Restore the file.
 
+Phase 4 status: proven headless as listed in [zero-config-arch.md](zero-config-arch.md) section 10; the Timeline-window steps are the
+owner's [3-minute check](../FORCE-DEMO-CHECK.md).
+
 Automated twin: `Tl.Unity.Editor.Acceptance.RunForce` (architecture owns it) writes the same five files into a temp folder of the scratch project,
 builds the scene and timeline through Editor APIs, enters Play, and prints
 `TL-ACCEPT-FORCE PASS compileErrors=0 components=Force,ForceLog,ForceFalloff movedX>0.5 diagonal=yes`.
