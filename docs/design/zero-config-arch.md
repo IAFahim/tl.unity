@@ -19,7 +19,7 @@ All in throwaway projects outside the repo (`D:\GitHub\_work\probe-arch`), clean
 | F3 | A generator dll inside the runtime asmdef's folder (labelled `RoslynAnalyzer`), no marker asmdef | **Yes.** It ran on `Assembly-CSharp` (the Force files had no asmdef) and on every assembly referencing the runtime asmdef. This is how Entities ships its own generators. |
 | F4 | `Baker<PlayableDirector>` reads `TimelineAsset` → tracks → clip assets on a16, and the coder's `ITlBaker<ForceClip>` adds a component, a buffer and a blob | **Yes.** Baked entity: `LocalToWorld, LocalTransform, ForceFalloff, Force, ForceLog, ...`; blob has 16 samples, first 1, last 0 (sampled from the default `AnimationCurve.Linear(0,1,1,0)`). |
 | F5 | Incremental rebake: does a clip edit rebake the SubScene, and an unrelated asset not? | **Yes.** SubScene artifact hash unchanged after adding an unrelated asset; changed after setting the clip's `Strength` to 7 (`DependsOn(timeline, track, clip asset)`). |
-| F6 | Can "Force" appear in the Timeline window's own `+` track menu with no per-type `TrackAsset` file? | **Yes.** The generator emits a never-saved menu stub `[DisplayName("Force")] sealed class ForceClipMenuTrack : TlMenuTrack`. Timeline lists it (menu entries: `Activation Track, ..., Signal Track, Force`). A package `TrackEditor` for `TlMenuTrack` replaces the stub in `OnCreate` with a real `TlTrack` named `Force` whose `Template` is `ForceClipData`. The saved `.playable` holds only `TimelineAsset, TlTrack`. Headless: Undo and the real window are spike S3. |
+| F6 | Can "Force" appear in the Timeline window's own `+` track menu with no per-type `TrackAsset` file? | **Yes.** A never-saved menu stub `[DisplayName("Force")] sealed class ForceClipMenuTrack : TlMenuTrack` (since issue #24 an Editor step writes it as the real file `Assets/Tl Generated/Editor/ForceClip_TlMenu.cs`: a Roslyn-emitted stub has no MonoScript, so Timeline logs "appears to be invalid" and "No script asset"; one file per class name was tried and does not change that). Timeline lists it (menu entries: `Activation Track, ..., Signal Track, Force`). A package `TrackEditor` for `TlMenuTrack` replaces the stub in `OnCreate` with a real `TlTrack` named `Force` whose `Template` is `ForceClipData`. The saved `.playable` holds only `TimelineAsset, TlTrack`. Headless: Undo and the real window are spike S3. |
 | F7 | Can `Tl.Gen.Tlb` (the packer behind `tlb`) compile inside Unity? | **Almost.** Compiled offline with Unity's own `csc` and the exact reference set of an a16 Editor assembly (`unity-4.8-api` + `BCLExtensions/netstandard2.1`, `System.Text.Json` and `System.Reflection.Emit` present): 13 errors at C# 14, all `System.Runtime.Intrinsics.Vector256` (SIMD fast path) and `System.Threading.Lock`; 80 at Unity's default C# 9. |
 | F8 | Does a per-asmdef `csc.rsp` raise the language version on a16? | **Yes.** `-langversion:12` in `csc.rsp` was applied after Unity's `-langversion:9.0`; records then need the `IsExternalInit` polyfill, which `com.tl.unity/Core/Polyfills.cs` already has. The package already compiles Tl.Core this way (`-langversion:latest`). |
 | F9 | Does Unity bundle .NET? | a16 ships `Editor/Data/DotNetSdk` (SDK 10.0.303, runtime 10.0.11). Not needed by this design; noted as the fallback for running `tlb` out of process with no user install. |
@@ -171,12 +171,6 @@ namespace Tl.Generated
             writer.Write(in clip);
             default(global::ForceBaking).Bake(ref baker, in clip);
         }
-    }
-
-    [global::System.ComponentModel.DisplayName("Force")]
-    public sealed class ForceClip_TlMenu : global::Tl.Unity.TlMenuTrack
-    {
-        public override global::Tl.Unity.TlClipData CreateTemplate() => new ForceClip_TlData();
     }
 }
 ```
@@ -713,7 +707,7 @@ process, Burst on, 100000 entities): A 8.1 / 7.9, B 1.8 / 1.9, B0 0.6 / 0.7 ns/e
 |---|---|---|
 | `TlTrack`, `TlClip`, `TlMenuTrack`, `TlMenu`, `TlTimelineSettings` + `TlEnd` | `Authoring/Timeline`, runtime asmdef `Tl.Unity.Tracks` (auto-referenced) | as 3.1; `Tl.Unity.Timeline` stays the legacy bridge's name until phase 7 |
 | `TlPlayOnAwake` (enableable), `TlPlayOnAwakeSystem` | same | Burst `ISystem` after `TlTimelineRegisterSystem`: once the tag is off, adds `TimelineRequest.Start(0, id, at)` and disables itself (the register system does not resolve slots) |
-| `<Clip>_TlMenu : TlMenuTrack` | generator (`UnityMirrorEmitter`) | `[DisplayName(menu)]` stub, emitted only when the compilation sees `Tl.Unity.TlMenuTrack` |
+| `<Clip>_TlMenu : TlMenuTrack` | `TlMenuStubFiles` (`Editor/Timeline`), file `Assets/Tl Generated/Editor/<Clip>_TlMenu.cs` | `[DisplayName(menu)]` stub for every mirror compiled from `Assets/`; its `CreateTemplate` finds the mirror by name, so a stale file never breaks the compile; the Editor rewrites or deletes it after the next compile |
 | `TlMenuTrackEditor`, `TlTrackSwap.Replace` | `Editor/Timeline`, `Tl.Unity.Tracks.Editor` | delete stub + create `TlTrack` named after the menu, collapsed into one Undo group |
 | `TlClipEditor` | same | draws the mirror's own serialized fields (`PropertyField`, Unity Undo); no names, no type box |
 | `TlDirectorBaker`, `TlDirectorTimelines`, `TlTimelinePacker`, `TlKindBaking` | same | 3.2 order: Playable then the `Next` closure, `DependsOn` every timeline, marker track, settings marker, Tl track, parent group and clip asset; muted tracks skipped; ticks `round(s * rate)`; coder `Bake` once per clip (an exception skips the clip with the UX message); `TlBake.BakeTyped` + `KindBytes` into one blob; kind entry/active/enabled + every column of the kind's system (`Force`) |
@@ -740,7 +734,7 @@ copied into `Assets/` as Package Manager does, no testables):
 | Check | Result |
 |---|---|
 | Compile with the five Force files (no asmdef) and the sample | 0 `error CS`, 0 warnings |
-| Builder (`ForceDemoBuilder.Build`, batch): camera, light, ground, SubScene with a blue cube, Playable Director on `Push.playable`; track made from the generated `ForceClip_TlMenu` stub through `TlTrackSwap` | scene, SubScene and timeline written by Unity |
+| Builder (`ForceDemoBuilder.Build`, batch): camera, light, ground, SubScene with a blue cube, Playable Director on `Push.playable`; track made from the `ForceClip_TlMenu` stub through `TlTrackSwap` | scene, SubScene and timeline written by Unity |
 | Second batch process (editor restart) reads `Push.playable` | `TL-RESTART PASS`: sub-assets `TlClip, TlTrack, TimelineAsset` (no stub saved), track `Force`, template and data `Tl.Generated.ForceClip_TlData`, Strength 4, Direction (1,0,0), 2 curve keys, duration 2 s, 0 `m_Script: {fileID: 0}` |
 | PlayMode test in the default world | entity has `Force`, `ForceLog`, `ForceFalloff`, `ForceKindEntry`, `TlTimelineSet`; Play On Awake starts Push; x 0 → 4.0333 (predicted 4 × Σ(1 − k/120)/60 = 4.0333), y 0.5, z 0 |
 | Camera picture (batch Editor with a D3D12 device, `Camera.Render` into a RenderTexture) | cube at x 0 in the first picture, gone from there and at x 4.03 in the last: [start](phase4/force-demo-start.png), [end](phase4/force-demo-end.png) |

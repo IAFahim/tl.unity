@@ -79,7 +79,8 @@ namespace Tl.Unity.Editor
                     written.Add((typedClip, data));
                     typed.Duration = Math.Max(typed.Duration, end);
                 }
-                typed.Tracks.Add(typedTrack);
+                if (typedTrack.Clips.Count > 0)
+                    typed.Tracks.Add(typedTrack);
             }
             var names = new string[refs.Count];
             for (var i = 0; i < names.Length; i++)

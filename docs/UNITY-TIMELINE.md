@@ -10,7 +10,7 @@ How a Timeline asset made in Unity's Timeline window becomes data that Burst sys
 |---|---|---|
 | `TlTrack` | sub-asset of the `.playable` | the clip type (`Template`, a generated `<Clip>_TlData` mirror). One package class for every clip type. |
 | `TlClip` | sub-asset | the clip's values as the same mirror (`[SerializeReference]`), so Unity's Inspector, Undo, prefab and copy logic apply |
-| `<Clip>_TlMenu` | generated, never saved | the **+** menu entry; picking it creates a real `TlTrack` in one Undo step |
+| `<Clip>_TlMenu` | `Assets/Tl Generated/Editor/<Clip>_TlMenu.cs`, written by Tl, never saved in a timeline | the **+** menu entry; picking it creates a real `TlTrack` in one Undo step. Timeline wants every track class in a file named after the class, so Tl writes one tiny file per clip (rewritten or deleted when the clip changes; commit or ignore it) |
 | `TlTimelineSettings` | marker at time 0, made by the Tl section on the first change | When it ends (Stop, Loop, Hold, Next), Play next, Channel. Duplicating or renaming the `.playable` keeps it. |
 | `PlayableDirector` | the object, in a SubScene | Playable, Play On Awake, Initial Time. Unity's Wrap Mode is not used. |
 | `TlAlsoPlays` | hidden component, edited in the Tl foldout | more timelines the object can play |

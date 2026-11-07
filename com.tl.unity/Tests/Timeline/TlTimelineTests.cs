@@ -192,6 +192,26 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
+        public void AnEmptyTrackNextToAFilledOneBakesWithoutALog()
+        {
+            var timeline = Timeline("Push");
+            Clip(ForceTrack(timeline), 0, 1, 4f);
+            ForceTrack(timeline);
+            using var baked = new Baked(Director("Cube", timeline).gameObject);
+            LogAssert.NoUnexpectedReceived();
+            Assert.AreEqual(1, baked.Count<TlTimelineSet>(), "the timeline still bakes");
+        }
+
+        [Test]
+        public void OnlyEmptyTracksBakeWithoutALog()
+        {
+            var timeline = Timeline("Push");
+            ForceTrack(timeline);
+            using var baked = new Baked(Director("Cube", timeline).gameObject);
+            LogAssert.NoUnexpectedReceived();
+        }
+
+        [Test]
         public void TwoClipsWithDifferentCurvesWarnOnce()
         {
             var timeline = Timeline("Push");
