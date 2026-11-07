@@ -2,6 +2,8 @@
 **/obj/
 artifacts/
 **/Library/
+!/com.tl.unity/Runtime/Library/
+!/com.tl.unity/Tests/Library/
 **/Logs/
 **/Temp/
 **/UserSettings/
