@@ -1,0 +1,26 @@
+{
+  "name": "Tl.Unity.Bake.Tests",
+  "rootNamespace": "Tl.Unity.Bake.Tests",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Unity.Bake",
+    "Tl.Unity.ForceContract",
+    "Tl.Unity.Kinds",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "allowUnsafeCode": true,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "noEngineReferences": false
+}
