@@ -14,6 +14,7 @@ jobs:
   unity:
     name: com.tl.unity EditMode + PlayMode
     runs-on: [self-hosted, unity]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     needs: core-pin
     timeout-minutes: 60
     steps:
