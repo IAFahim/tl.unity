@@ -1,0 +1,477 @@
+# Zero-config UX plan (issue #22)
+
+Status: plan, not implemented. Companion: [zero-config-arch.md](zero-config-arch.md) (bootstrap, in-editor bake, generator, builds).
+Rules this plan obeys: newest Unity 7 only; hot path is unmanaged `ISystem` + Burst; references are dragged in the Inspector, never typed;
+no hand-written Unity YAML; no code comments in shipped code.
+
+The promise, in one sentence: **add one git URL, open Unity's Timeline window, drag clips, press Play, see it move.**
+
+---
+
+## 1. Personas and journeys
+
+| Persona | Who | Never wants to see |
+|---|---|---|
+| **Dana, designer** | Knows Unity scenes, Inspector, Timeline window, Animation. Does not read C#. | Paths, assembly names, namespaces, JSON, command lines, "kinds", "capacity", "tlb", typed names. |
+| **Gabe, gameplay programmer** | Writes C#, knows ECS basics (`ISystem`, `IComponentData`, Bakers). Not a Tl expert. | asmdef surgery, regenerated files to commit, a second tool to install, a library asset to keep in sync. |
+| **Owner / reviewer** | Wants to verify in 5 minutes on a fresh project. | Anything that needs an agent to drive it. |
+
+### Dana
+
+- **60 seconds.** Package Manager > Install from git URL > paste. The package's page shows the sample **Hello Tl** with Import. Click Import:
+  the scene `Hello Tl` opens by itself. Press Play. A capsule walks across a ground plane in front of a camera, dashes, hits a cube. On-screen text
+  says what is playing and the cube's health. Nothing was typed.
+- **10 minutes.** Select the capsule. Inspector shows **Playable Director** (Unity's own) with timeline `Walker Moves`. Double-click it: the Timeline
+  window opens with tracks named `Tl/Walk` and `Tl/Hit`. She drags the end of the Walk clip, changes **Speed** from 2 to 5 in the Inspector, presses
+  Play: the capsule runs faster. While still in Play mode she changes Speed back to 2: within a second the capsule slows. She right-clicks the track
+  area, `Tl > Walk`, adds a second clip. She creates a new timeline (`Create > Tl > Timeline`), drags it into the director's **Also Plays** list
+  and sets the first timeline's **When it ends** to **Play next** with the new one dragged in.
+- **First day.** She builds the three moves of a character (idle, attack, hurt) as three timelines, assigns them by drag-and-drop, uses the
+  **Tl Monitor** window during Play to see which timeline runs on which object and at what time, and fixes the one warning she got ("Walk clip
+  overlaps another Walk clip; only the higher Priority wins") by reading it in plain words on the clip itself.
+
+### Gabe
+
+- **60 seconds.** Same import. Opens `Samples/Hello Tl/Scripts`. Sees four short files: data, one track, one system, one "press key to dash"
+  system. No `.json`, no generated file checked in.
+- **10 minutes.** Adds a new clip type: one file, about ten lines (section 2.9). Returns to Unity: after the normal compile, `Tl > Spin` is in the
+  Timeline window's add-track menu with a typed Inspector. Adds an authoring field `public TimelineAsset Dash;`, drags the asset in, and starts it from
+  a Burst system with `requests.Play(dash)` (section 2.11).
+- **First day.** Writes a gameplay system that reacts to a clip starting (pulse), adds a unit test that bakes a timeline in EditMode and steps the
+  world, makes a player build. No step outside Unity.
+
+---
+
+## 2. The exact experience
+
+### 2.1 Add the package
+
+1. `Window > Package Management > Package Manager > + > Install package from git URL…`
+2. Paste `https://github.com/IAFahim/tl.unity.git?path=/com.tl.unity#main`. Install.
+3. Package Manager pulls `com.unity.entities`, `com.unity.entities.graphics`, `com.unity.timeline` (declared dependencies).
+4. Compile finishes. Console shows exactly one info line: `Tl is ready. Import the "Hello Tl" sample from Package Manager to see it run.`
+   No dialog, no window popping open, no files written into `Assets/`.
+
+Nothing else. No .NET SDK, no clone, no `tlb`, no install script, no asmdef marker, no project setting to change.
+
+### 2.2 Create the first scene (own scene, not the sample)
+
+1. `File > New Scene` (Unity default: camera + light).
+2. `GameObject > Tl > Timeline Object`. The package creates, in one Undo step:
+   - a SubScene named `Tl Objects` if the scene has none (reuses the existing one if it has one),
+   - inside it a capsule named `Timeline Object` with a **Playable Director** and a new timeline asset `Timeline Object.playable` saved next to the
+     scene, opened in the Timeline window.
+3. Alternative Unity-native path that must also work: create a GameObject in a SubScene, drag a `.playable` from the Project window onto it
+   (Unity adds the Playable Director itself).
+
+### 2.3 Create a Timeline with Tl tracks
+
+1. `Assets > Create > Tl > Timeline` (or Unity's `Create > Timeline`; both work, the Tl one presets frame rate to the tick rate and snapping on).
+2. In the Timeline window, `+` lists a `Tl` group: `Tl/Walk`, `Tl/Hit`, plus every track type in the project's code, grouped by the menu path the coder
+   chose. Track colors come from the code.
+3. Tl tracks have **no binding slot**. They act on the object that plays the timeline. (Unity tracks such as Animation or Activation keep working
+   next to them; they simply are not part of the Tl simulation.)
+4. Frame rate: the Timeline window shows frames that equal simulation ticks. If the designer changes the frame rate, the Tl section of the
+   timeline Inspector says: `This timeline runs at 30 frames per second but the game simulates 60 ticks per second. Clips will be rounded to the
+   nearest tick.` with a button **Use 60**.
+
+### 2.4 Drag clips
+
+- Right-click a Tl track > `Add Walk Clip`, or drag on the track. Move, trim, duplicate, copy across timelines: all Unity-native.
+- Clip label on the timeline: the clip's short summary, e.g. `Walk · speed 2`, never a type name with a namespace.
+- Select the clip: Inspector shows Unity's clip header (Start, End, Duration, ease) and below it the clip's fields as typed controls (section 3).
+- Markers: right-click the marker row > `Tl > Cue`. Inspector shows the marker's fields.
+- Overlap of two clips on one track: Unity draws the blend region; the Inspector of either clip explains what happens in words from the track type
+  (for Walk: `Overlapping Walk clips: the higher Priority wins while both play.`).
+
+### 2.5 Assign it to a GameObject
+
+- The **Playable Director** is the assignment. Its Unity fields mean:
+  - **Playable**: the timeline this object starts with.
+  - **Play On Awake**: on = starts when the object spawns; off = waits for code or the Inspector.
+  - **Wrap Mode**: Loop = loop, Hold = hold last frame, None = stop and remove.
+  - **Initial Time**: start offset.
+  - Update Method other than Game Time: a yellow line under the director: `Tl timelines always follow game time. Update Method is ignored.`
+- Under the director, the package draws a **Tl** foldout (not a separate component the designer must add) with **Also Plays**: a list of timeline
+  object fields for timelines code or other timelines may start on this object. Dragging is the only way to fill it.
+- Nothing to sync. There is no "Sync Directors" menu. Baking reads the director directly.
+
+### 2.6 Press Play
+
+- Press Play. The SubScene bakes as usual (Unity's own progress), the timeline data is part of that bake, the runtime finds it on the entity. The
+  object moves on the first frame.
+- If baking is slow on first import, Unity's own SubScene progress shows; no Tl-specific wait.
+
+### 2.7 Edit a clip and see it change live
+
+- In Edit mode: scrubbing the Timeline window playhead moves the object in the Scene view (preview through the Editor world, like BovineLabs'
+  `EditorTimelineSystem` and Vex's scrub driver). Leaving the Timeline window restores the object.
+- In Play mode: change a clip value, move or trim a clip, add a clip. Within one second the running object follows. The timeline that is playing
+  continues from its current time. Console: nothing (silence on success). The Tl Monitor shows `Reloaded Walker Moves`.
+- Exiting Play keeps the edits (they were edits to the `.playable` asset, which is normal Unity behaviour for assets).
+
+### 2.8 Unity Timeline window features that must behave
+
+| Feature | Behaviour |
+|---|---|
+| Undo/Redo | Native, including clip field edits. |
+| Duplicate `.playable` | Independent copy, plays on its own; Tl settings copied with it. |
+| Rename `.playable` | Nothing breaks; nothing references it by name. |
+| Delete a `.playable` still used | Director shows Unity's "Missing"; Tl foldout says `This object has no timeline. Drag one into Playable.` |
+| Nested timelines (Control Track) | Not supported in phase 1: Tl section shows `Control Track clips are ignored by Tl.` |
+| Group tracks, mute, lock | Mute = not baked. Lock = editor only. |
+
+### 2.9 A coder adds a new clip type (a few lines)
+
+Target shape (one file, no asmdef edit, no menu to run, no file to regenerate):
+
+```csharp
+using Tl;
+using UnityEngine;
+
+namespace Game
+{
+    public struct SpinClip
+    {
+        [Tooltip("Degrees per second.")] public float Speed;
+    }
+
+    [TimelineTrack("Movement/Spin", Color = 0x4CAF50)]
+    public struct Spin : ITrack<SpinClip>
+    {
+        [Feeds(typeof(Turning))]
+        public static float Evaluate(in Frame<SpinClip> f) => f.Direction * f.Clip.Speed;
+    }
+}
+```
+
+What Gabe sees: save, Unity compiles once, `Tl/Movement/Spin` appears in the Timeline window `+` menu with a green color, its clip Inspector shows
+**Speed** with the tooltip. No new asset, no library field, no rebake button. If the track needs a component the object does not have, baking adds
+it with default values (section 3).
+
+Requirements this puts on the architecture: track blend (`IBlend`) and a separate track-data struct become optional; the Unity-side
+`TrackAsset`/`PlayableAsset` classes are produced for him or are a one-line class he can copy (see open question 3).
+
+### 2.10 Add a gameplay system
+
+Gabe writes a normal Burst `ISystem` that reads components Tl writes (`Motion`, `Health`) or reacts to pulses. Template in the sample:
+`MoveFromMotionSystem` (writes `LocalTransform` from `Motion`), 15 lines, `[UpdateInGroup(typeof(TimelinePresentationGroup))]`. No registration,
+no `TimelineSystemMember` attribute for the common case.
+
+### 2.11 Start, stop, pause timelines
+
+**From the Inspector (designer, Play mode).** The Tl foldout under the director becomes live:
+
+```
+Tl  (playing)
+  Now playing     Walker Moves   1.20 s / 4.00 s   [Pause] [Stop]
+  Start           [ Dash              v ]  [Play]
+                  (dropdown lists Playable + Also Plays, by asset name)
+```
+
+**From another object, no code.** Component `Tl Trigger` (sample + package): fields `When` (dropdown: On Key, On Start, When another timeline ends),
+`Key` (key picker), `Target` (object field, drag a GameObject with a director), `Action` (dropdown: Play, Stop, Pause, Resume), `Timeline` (object field,
+drag a `.playable`; the field only accepts timelines in the target's Playable or Also Plays, and says so if not).
+
+**From code.** Gabe adds an object field to his own authoring and drags the asset in. The baker turns it into an id. The system never sees a name:
+
+```csharp
+public sealed class DasherAuthoring : MonoBehaviour
+{
+    public TimelineAsset Dash;
+}
+
+public sealed class DasherBaker : Baker<DasherAuthoring>
+{
+    public override void Bake(DasherAuthoring a) =>
+        AddComponent(GetEntity(TransformUsageFlags.None), new Dasher { Dash = this.TimelineRef(a.Dash) });
+}
+
+public struct Dasher : IComponentData { public TimelineRef Dash; }
+```
+
+```csharp
+requests.Play(dasher.Dash);
+requests.Stop(dasher.Dash);
+requests.Pause(dasher.Dash);
+requests.Resume(dasher.Dash);
+bool running = playback.IsPlaying(dasher.Dash);
+```
+
+`TimelineRef` is an unmanaged handle (timeline id). `this.TimelineRef(asset)` logs a plain-language error if the asset is not playable on that
+entity ("Dash is not in this object's Playable or Also Plays. Drag it into Also Plays on the Playable Director.") and adds it to the reachable set
+automatically when it is on the same GameObject. Generated `Timelines.Run` constants stay available for tests but are not in any doc's main path.
+
+### 2.12 Debugging view: Tl Monitor
+
+`Window > Tl > Monitor` (UI Toolkit). Play mode only; in Edit mode it says `Press Play to see what is running.`
+
+```
+Tl Monitor                                       World: Default World   [Pause game] [Step]
+Search [walker            ]
+
+Walker            Walker Moves    playing   1.20 / 4.00 s   loop     channel Body
+                  Dash            queued    starts next
+                  What it does this tick:
+                    Walk          speed 2  -> Motion X +2.0
+                    Hit           ended
+Dummy             (nothing playing)
+                  Health 80  (took 20 at 3.10 s from Walker Moves / Hit)
+
+Click a row: selects the object in Hierarchy and the timeline in the Timeline window at the current time.
+```
+
+- Words, not buffers: "playing / paused / queued / ended", "took 20 damage", values of the components a track writes.
+- `Show engine details` toggle (off by default) reveals the raw `Playback` buffer, kind entry counts and capacities for Gabe.
+- Entity Baking Preview stays Unity's; the Tl foldout on the director shows a one-line summary instead: `Bakes: Playback (2 timelines), Motion,
+  Walk Stat. Engine components hidden.`
+
+---
+
+## 3. What the Inspector shows (mocks)
+
+### Playable Director (Unity) + Tl foldout, Edit mode
+
+```
+Playable Director
+  Playable           [Walker Moves (Timeline)  o]
+  Update Method      Game Time
+  Play On Awake      [x]
+  Wrap Mode          Loop
+  Initial Time       0
+  Bindings           (none needed for Tl tracks)
+Tl
+  Also Plays         [Dash (Timeline)  o]  [Hurt (Timeline)  o]  [+]
+  Starting values    Walk Stat  [ 1   ]     Health [ 100 ]
+                     (added because the tracks Walk and Hit need them)
+  Bakes: Playback, Motion, Walk Stat, Health
+```
+
+"Starting values" lists only components required by the tracks on any of this object's timelines, with their fields, nicified names and
+tooltips. A designer can override; not overriding is fine. This replaces `WalkerAuthoring` in the designer path.
+
+### Timeline asset Inspector (Tl section under Unity's header)
+
+```
+Walker Moves (Timeline Asset)
+  [Unity: Duration Mode, Frame Rate ...]
+Tl
+  Channel          [ Body          v ]   (only one timeline plays per channel; starting another replaces it)
+                   [ Add channel... ]
+  When it ends     ( ) Loop  ( ) Hold last frame  (x) Stop  ( ) Play next [Run (Timeline)  o]
+  Status           OK. 2 Tl tracks, 3 clips, 1 cue.
+```
+
+The director's Wrap Mode and this "When it ends" must not disagree; the timeline's setting wins and the director shows
+`Wrap Mode is set by the timeline (Loop).` Open question 5 decides where this is stored and whether Wrap Mode is the single source.
+
+### Tl track, selected
+
+```
+Walk (Tl Track)
+  Scale        [ 1.0 ]
+  (track color and menu name from code; no Namespace, no Type text)
+```
+
+### Tl clip, selected
+
+```
+Walk Clip
+  [Unity clip header: Start 0.00  End 0.67  Duration 0.67  Ease In/Out]
+  Speed        [ 2   ]   units per tick
+  Priority     [ 0   ]   higher wins when Walk clips overlap
+```
+
+Fields come from the clip struct: `float/int/byte` numeric fields with `[Range]`/`[Min]` honoured, `bool` toggles, enums as dropdowns,
+`float2/3` vector fields, `[Tooltip]` shown. Unsupported field types show `Speed: this field type cannot be edited here yet.` in grey, never a
+text box.
+
+### Tl Trigger (no-code control)
+
+```
+Tl Trigger
+  When       [ On Key        v ]
+  Key        [ Space         v ]
+  Target     [Walker (Playable Director)  o]
+  Action     [ Play          v ]
+  Timeline   [Dash (Timeline)  o]
+```
+
+### Hidden from the designer (must not appear in any Inspector on the designer path)
+
+`Timeline Library Asset` and every field on it; `Timeline Bridge Asset`; `Timeline Director Authoring`; `Timeline Player Authoring` (its baker logic
+moves under the director); `Library Authoring` / `TextAsset` library field; `Kind Profile`; any `string[]` of names; `Kinds` list; Entity Baking
+Preview rows for `Playback`, `TimelineRequest`, `*Entry`, `*Kind*` (still visible in Unity's own Entities windows for engineers).
+
+---
+
+## 4. The demo that ships: "Hello Tl"
+
+Imported from Package Manager with one click; on import, the sample's editor code opens its scene. Assets ship as real files built in the Editor by
+a generator script in the package repo (never hand-written YAML), like BovineLabs' `TimelineFeatureTourSampleBuilder`.
+
+Scene contents:
+
+- Main Camera framing a 20 m ground plane at a 30 degree angle; directional light; URP default materials (render-pipeline-agnostic fallback if URP
+  is not installed: Built-in materials, decided by architecture).
+- SubScene `Hello Tl Objects` with:
+  - **Walker**: orange capsule. Playable Director: `Walker Moves` (Play On Awake, Loop): walks right 2 s, walks left 2 s, a `Hit` clip at 1.5 s. Also
+    Plays: `Dash`.
+  - **Dummy**: grey cube with a world-space health bar. Takes the Walker's hits.
+- Screen overlay (UI Toolkit), large readable text, top-left:
+
+```
+Hello Tl
+Walker   playing Walker Moves   1.2 / 4.0 s
+Dummy    health 80
+Space  dash        P  pause / resume        S  stop / start
+Open the Timeline window: select Walker, double-click Walker Moves.
+```
+
+- Keys are wired by `Tl Trigger` components (visible, editable, no code).
+- What a new user learns by poking: select Walker, edit Speed in Play mode, see it change. That is the tutorial.
+
+Rejected: auto-creating a scene on package import with no click (writes into `Assets/` without consent, surprises existing projects). Import is
+one click and the scene opens itself.
+
+---
+
+## 5. Delete list (designer path)
+
+Removed from the designer path entirely (code may stay as internal engine detail or for tests, but no doc, menu, Inspector or sample shows it):
+
+| Today | Fate |
+|---|---|
+| `Timeline Library Asset` (Folder, Timeline Ids, Game Assembly, Namespace, Kinds File, Tlb, Kind Sets) | Deleted from the user path. Library is built in the Editor from the timelines a SubScene uses. |
+| `Tlb` path, `dotnet`, .NET SDK, cloning `tl`, `TL_TLB` | Deleted. No external tool. |
+| `Kinds File` / `Kinds.g.cs` checked into user projects, capacity bake menu | Deleted from the user path; capacities computed at bake. |
+| `Game Assembly`, `Namespace`, ids class path | Deleted. Inferred from types. |
+| `Kind Sets`, `Kind Profile`, `Kinds` string list, `[RequiresKinds]` in the common case | Deleted. Reachable kinds come from timelines on the object plus `TimelineRef` fields. |
+| `Timeline Player Authoring` with `Start With` / `May Start` typed strings | Deleted. Playable Director + Also Plays object fields. |
+| `Timeline Bridge Asset` (Output, Ids File, Bake On Save, Timelines rows with Name/End/Next/Channel) | Deleted. Per-timeline settings live on the timeline (section 3). |
+| `Timeline Director Authoring`, `Sync()`, `Tools > Tl > Timeline Bridge > Sync Directors`, `Bake All Bridges` | Deleted. |
+| `LibraryAuthoring` + `game.bytes` TextAsset | Deleted. Runtime finds data via bootstrap. |
+| JSON authoring (`library.json`, `run.json`...) | Deleted from Unity docs and samples. JSON stays as an engine/CLI format for the plain C# path. |
+| `library.json` `channels` list | Replaced by the Channel dropdown with "Add channel...". |
+| `tickRate` in JSON | Project setting `Project Settings > Tl > Ticks per second` (default 60), with a frame-rate check on timelines. |
+| `WalkerAuthoring` just to add stats | Replaced by "Starting values" in the Tl foldout. |
+| Install scripts (`unity.sh`, `unity.ps1`, `--demo`) as the way in | Not on the Unity user path. Keep only for CI. |
+| `EcsDemo` sample (JSON + bytes, no camera) | Replaced by **Hello Tl**. Kept internally as a test fixture if needed, not listed in Package Manager. |
+| USING-ECS.md "Step 1 to 10" | Rewritten: section 2 of this plan becomes the guide; engine internals move to an appendix for engineers. |
+| `Tools > Tl > ...` menus for baking | Deleted. Only `Window > Tl > Monitor` and `GameObject > Tl > Timeline Object`, `Assets > Create > Tl > Timeline`. |
+
+---
+
+## 6. Error and empty-state messages
+
+Plain words, where the user is looking (on the object, clip or window), with a fix button when one exists. Console gets the same text once,
+clickable to select the object.
+
+| Situation | Where | Message | Fix button |
+|---|---|---|---|
+| Director with Tl tracks outside a SubScene | Tl foldout | `This object is not in a SubScene, so Tl will not run it.` | **Move to SubScene** |
+| Director has no Playable | Tl foldout | `This object has no timeline. Drag one into Playable.` | **Create timeline** |
+| Timeline has no Tl tracks | Timeline Tl section | `No Tl tracks yet. In the Timeline window click + and pick a Tl track.` | none |
+| Track with no clips | Track Inspector | `This track is empty. Right-click it and add a clip.` | none |
+| Frame rate mismatch | Timeline Tl section | see 2.3 | **Use 60** |
+| Clip starts between ticks | Clip Inspector | `Starts at 0.508 s, between ticks. It will start at 0.500 s.` | **Snap** |
+| Play next points at itself in a 1-tick loop | Timeline Tl section | `Play next is this same timeline and it is empty. It would restart forever.` | none |
+| Code starts a timeline the object cannot play | Console, once per object | `Walker was asked to play Dash, but Dash is not in its Playable or Also Plays. Drag Dash into Also Plays on Walker.` | click selects Walker |
+| Tl type removed from code but used in a timeline | Track | `This track's code was removed (Game.Spin). It is ignored. Delete the track or restore the code.` | **Delete track** |
+| Script compile errors | Tl foldout | `Your scripts have errors, so Tl shows the last good version. Fix the errors in the Console.` | none |
+| Bake failure (internal) | Console + Tl foldout | `Tl could not prepare Walker Moves: <one sentence>. Your last working version is still used.` | **Show details** |
+| No entities playing in Play mode | Tl Monitor | `Nothing is playing. Objects with a Playable Director inside a SubScene appear here.` | none |
+| Edit mode | Tl Monitor | `Press Play to see what is running.` | none |
+| Entities Graphics missing (nothing visible) | Console on Play, once | `Objects in SubScenes need Entities Graphics to be visible. It should have been installed with Tl; reinstall the package.` | none |
+
+Never shown to a designer: stack traces, file paths, `tlb`, assembly names, "kind", "capacity", "slot", "Playback buffer".
+
+---
+
+## 7. Acceptance tests (5 minutes, fresh project)
+
+### Commands (PowerShell; newest Unity 7 editor)
+
+```powershell
+unity install 7 --yes --accept-eula
+$Unity = (Get-ChildItem 'C:\Program Files\Unity\Hub\Editor' -Directory | Sort-Object Name | Select-Object -Last 1).FullName + '\Editor\Unity.exe'
+$P = "$env:TEMP\TlAccept"; Remove-Item $P -Recurse -Force -ErrorAction SilentlyContinue
+& $Unity -batchmode -quit -createProject $P -logFile "$P-create.log"
+$m = Get-Content "$P\Packages\manifest.json" -Raw | ConvertFrom-Json
+$m.dependencies | Add-Member -NotePropertyName 'com.tl.unity' -NotePropertyValue 'https://github.com/IAFahim/tl.unity.git?path=/com.tl.unity#main' -Force
+$m | ConvertTo-Json -Depth 10 | Set-Content "$P\Packages\manifest.json" -Encoding utf8
+& $Unity -projectPath $P
+```
+
+Automated check (once the package ships its acceptance entry point, owned by architecture):
+
+```powershell
+& $Unity -batchmode -projectPath $P -executeMethod Tl.Unity.Editor.Acceptance.Run -logFile "$P-accept.log" -quit
+Select-String -Path "$P-accept.log" -Pattern 'TL-ACCEPT'
+```
+
+Expected: `TL-ACCEPT PASS import=ok compileErrors=0 sample=ok entitiesPlaying>=1 walkerMoved=yes liveEdit=yes`.
+
+### Human checklist (tick all, no typing except the URL)
+
+1. [ ] After adding the URL and opening, Console has 0 errors and one `Tl is ready` line. `Assets/` is unchanged.
+2. [ ] Package Manager > Tl > Samples > Hello Tl > Import. The scene opens by itself.
+3. [ ] Press Play: the Game view shows a ground, a moving orange capsule, a grey cube, readable text. Within 2 s the cube's health drops.
+4. [ ] Press Space: the capsule dashes. P pauses it, P resumes.
+5. [ ] Select Walker in Hierarchy: Inspector shows Playable Director and a Tl foldout only. No Library, Bridge, Folder, Tlb, Namespace, Kinds,
+       or text box asking for a name anywhere.
+6. [ ] Double-click `Walker Moves`: Timeline window shows Tl tracks with clips. Select the Walk clip: Speed and Priority as number fields.
+7. [ ] In Play mode set Speed to 6: the capsule speeds up within 1 s without leaving Play.
+8. [ ] Stop Play. `File > New Scene`, `GameObject > Tl > Timeline Object`, in the Timeline window `+ > Tl > Walk`, add a clip, Speed 3. Press Play:
+       the new capsule moves.
+9. [ ] `Window > Tl > Monitor` in Play mode lists both objects and what they play, in words.
+10. [ ] Drop the `SpinClip` file from section 2.9 into `Assets/` (copied from the sample's `Extras`): after compile, `Tl/Movement/Spin` is in the
+        Timeline `+` menu.
+11. [ ] `File > Build And Run` (Windows): the sample scene runs the same in the player.
+
+Fail = any step needs a typed name, a path, a terminal command, a second package, or reading docs.
+
+---
+
+## 8. Compared with BovineLabs Timeline's first minute
+
+Honest table. "BL" = `com.bovinelabs.timeline` 2.0.0-pre.7; "Vex" = vex-studio timeline packages built on it.
+
+| Step | BovineLabs / Vex | Tl today | Tl after this plan |
+|---|---|---|---|
+| Install | BL: package manager package first, then install BL Timeline (or git URL; needs BL Core). Two steps. | One URL + .NET SDK + clone + build `tlb` + install script. | One URL. **Better than BL.** |
+| Author | Unity Timeline window, `DOTSTrack`/`DOTSClip`, menu names like `DOTS/Cue Track`, `Vex/Transform/Spin`. Clip fields are plain serialized fields: native Inspector, Undo, tooltips for free. | Timeline window works but needs a Bridge + Library asset; fields stored as text. | Same as BL. BL is **better at field editing today** (native `SerializedProperty`); we must match it, not approximate it. |
+| Bindings | BL tracks bind to a Transform/entity; one timeline can drive many objects. | Tracks act on the playing entity only. | Same as today; **BL is more flexible** (multi-object cutscenes). Open question 9. |
+| Start playing | BL: `SetComponentEnabled<TimelineActive>(entity, true)` from code; sample uses a builder + UI. Vex: Play On Awake / Wrap Mode / Initial Time read from the director, which is very intuitive. | Typed names in Timeline Player. | Vex-style: director fields mean what they say, plus drag-in Also Plays, `TimelineRef`. |
+| Edit preview | BL: `EditorTimelineSystem` drives the Editor world from the Timeline window playhead: scrub and see. Vex adds a scrub driver, a debugger window and a bake "Doctor". | None. | Required (2.7, 2.12). Until shipped, **BL/Vex are better.** |
+| Sample | BL: one sample, scene + UI Toolkit panel, menu `BovineLabs > Samples > Timeline Play`; generated assets via a builder script. Rich but large (custom tracks, nesting, cues, crossings), aimed at engineers. | No camera; JSON; bytes. | Smaller and designer-first; BL's generator approach copied. |
+| Custom track | BL: two classes (`DOTSClip` + `DOTSTrack`) plus a system with `TrackBlendImpl` and a job: about 60 lines for a float3 track. | Data structs + 3 one-line Unity classes + Bridge asset + rebake. | About 10 lines (2.9). **Better than BL** if the generator delivers. |
+| Runtime model | Entity per clip/track, timers, mixers. Flexible, heavier. | No entity per clip; kinds reduce per entity; Burst. | Unchanged. Our strength; not a UX selling point to designers. |
+| Docs | Overview 66 lines; getting started is 3 steps. | USING-ECS 1190 lines, 10 steps. | Getting started under 40 lines, the section 2 path. |
+
+What BL does that we should copy outright: native serialized clip fields; Timeline-window scrubbing into the Editor world; menu-path display names
+and `[TrackColor]`; a sample generator script that builds scene and assets in the Editor. What Vex adds that we should copy: director fields read
+literally at bake; a "Doctor" that explains mismatches on the director; a debugger window.
+
+---
+
+## 9. Open questions for the architecture planner
+
+1. Can the Tl data for a timeline be produced inside the Editor (ScriptedImporter or Baker over `TimelineAsset`), with no external process, fast
+   enough that saving a clip and pressing Play feels instant?
+2. Where does the runtime find the data with no Library field: blob on the director entity in the SubScene, or one hidden generated asset? What
+   happens with several SubScenes sharing one timeline (dedupe)?
+3. Clip type in about 10 lines: can the package emit the Unity `TrackAsset`/`PlayableAsset` classes from the attributed struct, given Unity's rule
+   that a `ScriptableObject` class needs a same-named file? If not, what is the smallest hand-written class (one line per type)?
+4. Kind capacities without regenerated C#: can they move to baked data so editing a timeline never triggers a script compile?
+5. Per-timeline Channel and When-it-ends storage inside the `.playable` (hidden settings marker or track?), surviving duplicate/rename. Should
+   Wrap Mode on the director be the single source for Loop/Hold/Stop, leaving only Channel and Play next for the timeline?
+6. Auto-adding components that tracks need (and "Starting values" overrides) from the director baker: feasible from the track types' `Feeds` /
+   `Evaluate` signatures?
+7. Pause/Resume request ops (`PlaybackFlags.Paused` exists in Core; no `TimelineRequest` op).
+8. Live edit in Play mode: hot-swap through `PollReload`, keeping current playback time; what if a clip type's layout changed?
+9. Bindings: phase 1 keeps "acts on the playing object". Is targeting another object's entity from a track (a binding slot) in scope later?
+10. Entities Graphics and render pipeline: should `com.tl.unity` depend on `com.unity.entities.graphics` so SubScene objects are visible, and does
+    the sample need URP?
+11. Tick rate as a project setting: where is it stored and baked?
+12. Editor-world scrub preview: which world and system group, and how to restore authoring state when the Timeline window loses focus?
