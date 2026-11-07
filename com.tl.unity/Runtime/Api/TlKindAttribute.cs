@@ -11,5 +11,6 @@ namespace Tl
         public string Group { get; set; }
         public bool FoldsPulses { get; set; }
         public int Inline { get; set; }
+        public int GamePulses { get; set; }
     }
 }

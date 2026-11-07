@@ -35,7 +35,39 @@ namespace Tl.Unity.Bake
         }
 
         public static TlKindCatalog Catalog(IEnumerable<Assembly> kindAssemblies)
-            => new TlKindCatalog(KindCatalog.Discover(kindAssemblies.ToList()));
+            => Catalog(kindAssemblies, null);
+
+        public static TlKindCatalog Catalog(IEnumerable<Assembly> kindAssemblies, IReadOnlyDictionary<string, TlKindKnobs>? overrides)
+        {
+            var assemblies = kindAssemblies.ToList();
+            var catalog = KindCatalog.Discover(assemblies);
+            var knobs = new TlKindKnobs[catalog.Kinds.Count];
+            for (var k = 0; k < knobs.Length; k++)
+            {
+                var kind = catalog.Kinds[k];
+                knobs[k] = overrides != null && overrides.TryGetValue(kind.Name, out var given) ? given : new TlKindKnobs(kind.Inline ?? -1, GamePulses(assemblies, kind.FullName));
+            }
+            return new TlKindCatalog(catalog, knobs);
+        }
+
+        public static byte[] KindBytes(string name, byte[] tlb, TlKindCatalog catalog)
+            => TlKindBytes.Write(KindTimeline.Analyze(name, tlb, catalog.Value), catalog);
+
+        static int GamePulses(List<Assembly> assemblies, string fullName)
+        {
+            foreach (var assembly in assemblies)
+            {
+                var type = assembly.GetType(fullName, false);
+                if (type == null) continue;
+                foreach (var attribute in type.CustomAttributes)
+                {
+                    if (attribute.AttributeType.FullName != KindCatalog.TlKindAttribute) continue;
+                    foreach (var argument in attribute.NamedArguments)
+                        if (argument.MemberName == "GamePulses" && argument.TypedValue.Value != null) return Convert.ToInt32(argument.TypedValue.Value);
+                }
+            }
+            return 0;
+        }
 
         public static TlKindAnalysis Analyze(string name, byte[] tlb, TlKindCatalog catalog)
             => new TlKindAnalysis(KindTimeline.Analyze(name, tlb, catalog.Value));
@@ -44,10 +76,27 @@ namespace Tl.Unity.Bake
     public sealed class TlKindCatalog
     {
         internal readonly KindCatalog Value;
+        internal readonly TlKindKnobs[] Knobs;
 
-        internal TlKindCatalog(KindCatalog value) => Value = value;
+        internal TlKindCatalog(KindCatalog value, TlKindKnobs[] knobs)
+        {
+            Value = value;
+            Knobs = knobs;
+        }
 
         public IReadOnlyList<string> Kinds => Value.Kinds.Select(k => k.Name).ToList();
+    }
+
+    public readonly struct TlKindKnobs
+    {
+        public readonly int Inline;
+        public readonly int GamePulses;
+
+        public TlKindKnobs(int inline, int gamePulses)
+        {
+            Inline = inline;
+            GamePulses = gamePulses;
+        }
     }
 
     public sealed class TlKindAnalysis
