@@ -11,3 +11,5 @@ artifacts/
 **/Assets/Packages.meta
 tests/Tl.V3.Project/Assets/Tests/Resources/
 tests/Tl.V3.Project/Assets/Tests/Resources.meta
+/com.tl.unity/Samples~/*/Scenes/
+/com.tl.unity/Samples~/*/Scenes.meta

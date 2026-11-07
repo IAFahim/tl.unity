@@ -24,6 +24,7 @@ namespace ForceDemo.Tests
     public class ForceDemoPreviewTests
     {
         static readonly int[] Ticks = { 30, 60, 90 };
+        const double Gap = 2.5;
 
         [UnityTest]
         public IEnumerator ScrubbingInEditModeShowsWhatPlayDoes()
@@ -45,15 +46,15 @@ namespace ForceDemo.Tests
             {
                 foreach (var tick in Ticks)
                     preview[tick] = Scrub(director, tick / 60.0);
-                end = Scrub(director, timeline.duration);
+                end = Scrub(director, Gap);
                 shot = Shot("ForceDemo-preview.png", director.gameObject.scene);
                 Undo.IncrementCurrentGroup();
                 var serialized = new SerializedObject(clip.asset);
                 serialized.FindProperty("Data.Strength").floatValue = 8f;
                 serialized.ApplyModifiedProperties();
-                stronger = Scrub(director, timeline.duration);
+                stronger = Scrub(director, Gap);
                 Undo.PerformUndo();
-                undone = Scrub(director, timeline.duration);
+                undone = Scrub(director, Gap);
             }
             finally
             {
@@ -77,15 +78,20 @@ namespace ForceDemo.Tests
                 var entity = query.GetSingletonEntity();
                 var playbacks = entities.GetBuffer<Playback>(entity);
                 var x = entities.GetComponentData<LocalTransform>(entity).Position.x;
-                if (playbacks.Length == 0 || playbacks[0].Timeline == 0)
+                var push = entities.GetBuffer<TlTimelineSet>(entity)[0].Id;
+                if (playbacks.Length == 0 || playbacks[0].Timeline == 0 || playbacks[0].Timeline != push)
                 {
                     if (!started)
                         continue;
-                    playEnd = x;
                     break;
                 }
                 started = true;
                 var at = playbacks[0].Tick;
+                if (at >= 125 && at <= 175)
+                {
+                    playEnd = x;
+                    break;
+                }
                 if ((playbacks[0].Flags & global::Tl.PlaybackFlags.StartPending) == 0 && Ticks.Contains(at) && !play.ContainsKey(at))
                     play[at] = x;
             }

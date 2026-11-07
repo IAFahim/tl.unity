@@ -21,80 +21,97 @@ namespace ForceDemo.Tests
         const float StartX = 0f;
         const float ExpectedPush = 4.0333f;
         const float Tolerance = 0.15f;
-        const float VisibleGap = 1.5f;
+        const float PictureTolerance = 0.02f;
         const int ShotWidth = 640;
         const int ShotHeight = 360;
 
         [UnityTest]
-        public IEnumerator TheCubeIsPushedAlongXByTheForceClip()
+        public IEnumerator TheCubeIsPushedThereAndBackAndTheCameraFollows()
         {
             var scene = ScenePath();
             Assert.IsNotNull(scene, "Build the demo first: Tl > Samples > Build Force Demo.");
-            yield return EditorSceneManager.LoadSceneAsyncInPlayMode(scene, new LoadSceneParameters(LoadSceneMode.Single));
-            var entities = World.DefaultGameObjectInjectionWorld.EntityManager;
-            using var query = entities.CreateEntityQuery(ComponentType.ReadOnly(Game("Force")), ComponentType.ReadOnly<LocalTransform>(), ComponentType.ReadOnly<TlTimelineSet>());
-            var deadline = Time.realtimeSinceStartup + 120f;
-            while (query.IsEmpty && Time.realtimeSinceStartup < deadline)
-                yield return null;
-            Assert.IsFalse(query.IsEmpty, "the Cube entity with Force appears after the SubScene loads");
-            var entity = query.GetSingletonEntity();
-            Assert.IsTrue(entities.HasComponent(entity, ComponentType.ReadWrite(Game("ForceLog"))), "ForceLog buffer");
-            Assert.IsTrue(entities.HasComponent(entity, ComponentType.ReadWrite(Game("ForceFalloff"))), "ForceFalloff");
-            Assert.IsTrue(entities.HasComponent(entity, ComponentType.ReadWrite(Game("TlUnityGenerated.ForceKindEntry"))), "ForceKind entry buffer");
+            var warnings = 0;
+            var errors = 0;
+            var firstProblem = "";
+            void Count(string message, string stack, LogType type)
+            {
+                if (type == LogType.Warning)
+                    warnings++;
+                else if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert)
+                    errors++;
+                else
+                    return;
+                if (firstProblem.Length == 0)
+                    firstProblem = message;
+            }
+            Application.logMessageReceived += Count;
+            try
+            {
+                yield return EditorSceneManager.LoadSceneAsyncInPlayMode(scene, new LoadSceneParameters(LoadSceneMode.Single));
+                var entities = World.DefaultGameObjectInjectionWorld.EntityManager;
+                using var query = entities.CreateEntityQuery(ComponentType.ReadOnly(Game("Force")), ComponentType.ReadOnly<LocalTransform>(), ComponentType.ReadOnly<TlTimelineSet>());
+                var deadline = Time.realtimeSinceStartup + 120f;
+                while (query.IsEmpty && Time.realtimeSinceStartup < deadline)
+                    yield return null;
+                Assert.IsFalse(query.IsEmpty, "the Cube entity with Force appears after the SubScene loads");
+                var entity = query.GetSingletonEntity();
+                Assert.IsTrue(entities.HasComponent(entity, ComponentType.ReadWrite(Game("ForceLog"))), "ForceLog buffer");
+                Assert.IsTrue(entities.HasComponent(entity, ComponentType.ReadWrite(Game("ForceFalloff"))), "ForceFalloff");
+                Assert.IsTrue(entities.HasComponent(entity, ComponentType.ReadWrite(Game("TlUnityGenerated.ForceKindEntry"))), "ForceKind entry buffer");
+                var set = entities.GetBuffer<TlTimelineSet>(entity);
+                Assert.AreEqual(2, set.Length, "Push and its Play next timeline Return are both baked onto the cube");
+                var push = set[0].Id;
+                var back = set[1].Id;
 
-            var graphics = SystemInfo.graphicsDeviceType != GraphicsDeviceType.Null && Camera.main != null;
-            Texture2D startShot = null;
-            var shotX = float.NaN;
-            var started = false;
-            deadline = Time.realtimeSinceStartup + 60f;
-            while (Time.realtimeSinceStartup < deadline)
-            {
-                if (graphics && startShot == null)
+                var graphics = SystemInfo.graphicsDeviceType != GraphicsDeviceType.Null && Camera.main != null;
+                var pushedX = float.NaN;
+                var backX = float.NaN;
+                var picture = "skipped";
+                var pictureError = float.NaN;
+                string shotFile = null;
+                var cameraLag = float.NaN;
+                deadline = Time.realtimeSinceStartup + 60f;
+                while (Time.realtimeSinceStartup < deadline && float.IsNaN(backX))
                 {
+                    yield return null;
+                    var playbacks = entities.GetBuffer<Playback>(entity);
+                    if (playbacks.Length == 0 || playbacks[0].Timeline == 0)
+                        continue;
+                    var playback = playbacks[0];
                     var x = entities.GetComponentData<LocalTransform>(entity).Position.x;
-                    var shot = Render();
-                    if (IsCube(shot, new Vector3(x, 0.5f, 0f)))
+                    if (playback.Timeline == push && playback.Tick >= 165 && playback.Tick <= 178 && float.IsNaN(pushedX))
                     {
-                        startShot = shot;
-                        shotX = x;
+                        pushedX = x;
+                        cameraLag = Camera.main != null ? Camera.main.transform.position.x - x : float.NaN;
+                        if (graphics)
+                        {
+                            var shot = Render();
+                            pictureError = Centroid(shot, new Vector3(x, 0.5f, 0f));
+                            picture = pictureError <= PictureTolerance ? "ok" : "off";
+                            shotFile = Save(shot, "ForceDemo-pushed.png");
+                            UnityEngine.Object.Destroy(shot);
+                        }
                     }
-                    else
-                        UnityEngine.Object.Destroy(shot);
+                    if (playback.Timeline == back && playback.Tick >= 125 && playback.Tick <= 175 && !float.IsNaN(pushedX))
+                        backX = x;
                 }
-                yield return null;
-                var playing = false;
-                foreach (var playback in entities.GetBuffer<Playback>(entity))
-                    playing |= playback.Timeline != 0;
-                if (playing)
-                    started = true;
-                else if (started)
-                    break;
+                var line = string.Format(CultureInfo.InvariantCulture, "TL-DEMO force x={0:0.0000} back={1:0.0000} expected={2:0.0000} warnings={3} errors={4} picture={5} pictureError={6:0.0000} cameraLag={7:0.000} shot={8}",
+                    pushedX - StartX, backX, ExpectedPush, warnings, errors, picture, pictureError, cameraLag, shotFile ?? "none");
+                Debug.Log(line);
+                Assert.AreEqual(ExpectedPush, pushedX - StartX, 0.0005f, "Strength 4 for 2 s with a falling linear curve pushes 4.0333 m, then the 1 s gap holds it there");
+                Assert.AreEqual(0f, backX, 0.0005f, "Return (Play next) pushes the cube back to where it started");
+                Assert.AreEqual(0, warnings, "no warnings while the demo plays: " + firstProblem);
+                Assert.AreEqual(0, errors, "no errors while the demo plays: " + firstProblem);
+                if (graphics)
+                {
+                    Assert.AreEqual(0f, cameraLag, 0.05f, "the follow camera has settled over the cube");
+                    Assert.AreEqual("ok", picture, "the cube is drawn within 2% of where the camera projects x 4.0333");
+                }
             }
-            for (var i = 0; i < 5; i++)
-                yield return null;
-            var end = entities.GetComponentData<LocalTransform>(entity).Position;
-            var endShot = graphics ? Render() : null;
-            var startFile = Save(startShot, "ForceDemo-start.png");
-            var endFile = Save(endShot, "ForceDemo-end.png");
-            var cubeAtStart = IsCube(startShot, new Vector3(shotX, 0.5f, 0f));
-            var goneFromStart = endShot != null && !IsCube(endShot, new Vector3(shotX, 0.5f, 0f));
-            var cubeAtEnd = IsCube(endShot, new Vector3(end.x, 0.5f, 0f));
-            var moved = end.x - StartX;
-            Debug.Log(string.Format(CultureInfo.InvariantCulture, "ForceDemo result started={0} endX={1:0.0000} movedX={2:0.0000} expected={3:0.0000} y={4:0.0000} z={5:0.0000} graphics={6} shotX={7:0.000} cubeAtStart={8} goneFromStart={9} cubeAtEnd={10} startShot={11} endShot={12}",
-                started, end.x, moved, ExpectedPush, end.y, end.z, SystemInfo.graphicsDeviceType, shotX, cubeAtStart, goneFromStart, cubeAtEnd, startFile ?? "none", endFile ?? "none"));
-            Assert.IsTrue(started, "the Push timeline started on its own (Play On Awake)");
-            Assert.AreEqual(ExpectedPush, moved, Tolerance, "Strength 4 for 2 s with a falling linear curve pushes about 4 m");
-            Assert.AreEqual(0.5f, end.y, 1e-4f);
-            Assert.AreEqual(0f, end.z, 1e-4f);
-            if (graphics)
+            finally
             {
-                Assert.IsTrue(cubeAtStart, "the camera shows the cube before it moved away");
-                Assert.Greater(end.x - shotX, VisibleGap, "the first picture was taken early enough to show the move");
-                Assert.IsTrue(goneFromStart, "the camera shows the cube gone from where the first picture had it");
-                Assert.IsTrue(cubeAtEnd, "the camera shows the cube where it stopped");
+                Application.logMessageReceived -= Count;
             }
-            UnityEngine.Object.Destroy(startShot);
-            UnityEngine.Object.Destroy(endShot);
         }
 
         [UnityTest]
@@ -178,18 +195,30 @@ namespace ForceDemo.Tests
             return path;
         }
 
-        static bool IsCube(Texture2D shot, Vector3 world)
+        static float Centroid(Texture2D shot, Vector3 world)
         {
             var camera = Camera.main;
-            if (shot == null || camera == null || float.IsNaN(world.x))
-                return false;
             camera.aspect = ShotWidth / (float)ShotHeight;
             var view = camera.WorldToViewportPoint(world);
             camera.ResetAspect();
-            var x = Mathf.Clamp(Mathf.RoundToInt(view.x * ShotWidth), 0, ShotWidth - 1);
-            var y = Mathf.Clamp(Mathf.RoundToInt(view.y * ShotHeight), 0, ShotHeight - 1);
-            var pixel = shot.GetPixel(x, y);
-            return pixel.b - pixel.r > 0.25f;
+            double sx = 0, sy = 0;
+            var count = 0;
+            for (var y = 0; y < ShotHeight; y++)
+                for (var x = 0; x < ShotWidth; x++)
+                {
+                    var pixel = shot.GetPixel(x, y);
+                    if (pixel.r < 0.35f && pixel.b - pixel.r > 0.35f && pixel.b - pixel.g > 0.15f)
+                    {
+                        sx += x;
+                        sy += y;
+                        count++;
+                    }
+                }
+            if (count < 50)
+                return float.PositiveInfinity;
+            var dx = (float)(sx / count) / ShotWidth - view.x;
+            var dy = (float)(sy / count) / ShotHeight - view.y;
+            return Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy));
         }
     }
 }

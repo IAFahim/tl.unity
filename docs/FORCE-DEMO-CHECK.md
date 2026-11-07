@@ -15,11 +15,13 @@ Editor cannot show: the real Timeline window, Undo/Redo, duplicating and draggin
 ## Check
 
 1. [ ] The scene **Force Demo** opens by itself. If it does not, click `Tl > Samples > Build Force Demo`. Console: 0 errors, 0 warnings.
-2. [ ] Press **Play**. In the Game view the cube slides to the right for 2 s, fast at first, slowing, and stops about 4 m from where it
-       started. Stop Play.
+2. [ ] Press **Play**. In the Game view the cube slides to the right for 2 s, fast at first, slowing, and stops on the 4 m line of the
+       grid floor; the camera follows it. After 1 s it slides back to 0 the same way, waits, and goes again. Top left the readout shows
+       `Push` or `Return`, the time, the force and x. Stop Play.
 3. [ ] Hierarchy: tick the checkbox next to **Force Demo Objects** (opens the SubScene), select **Cube**. Inspector shows **Playable
        Director** with **Push**, Play On Awake on. No Tl component was added.
-4. [ ] `Window > Sequencing > Timeline`. The window shows a track named **Force** with one clip labelled **Force**.
+4. [ ] `Window > Sequencing > Timeline`. The window shows a track named **Force** with one clip labelled **Force** and 1 s of empty
+       timeline after it (Duration Mode Fixed Length, 3 s).
 5. [ ] Click the clip. Inspector, under Unity's clip header: **Direction** (X 1, Y 0, Z 0), **Strength** (4), **Falloff** (a curve; click
        it and Unity's curve editor opens). No text box asks for a name or a type.
 6. [ ] Set Strength to 10, then press **Ctrl+Z**: Strength is 4 again. **Ctrl+Y**: 10. Set it back to 4.
@@ -35,9 +37,9 @@ Editor cannot show: the real Timeline window, Undo/Redo, duplicating and draggin
 13. [ ] Close Unity, open the project again, open Push in the Timeline window: the clip still shows Strength 4 and the curve.
 
 14. [ ] Open `Push` in the Timeline window (Cube selected, SubScene open). Drag the playhead: the cube moves in the Scene view while you drag,
-        without Play, and stands about 4 m to the right at the end. Click away from the Timeline window or close it: the cube is back at the start
+        without Play, and stands about 4 m to the right anywhere between 2 s and 3 s. Click away from the Timeline window or close it: the cube is back at the start
         and the scene title shows no `*`.
-15. [ ] With the playhead at the end, change Strength to 8 in the clip Inspector: the cube jumps to about 8 m. **Ctrl+Z**: back to about 4 m.
+15. [ ] With the playhead at 2.5 s, change Strength to 8 in the clip Inspector: the cube jumps to about 8 m. **Ctrl+Z**: back to about 4 m.
 16. [ ] Press **Play**. While the cube is moving, change Strength to 10: the cube speeds up within a second and Play does not restart. Stop Play.
 17. [ ] Select `Push.playable` in the Project window. Under Unity's header there is a **Tl** section: Channel, When it ends, Status
         `OK. 1 Tl track, 1 clip.`. Set When it ends to Loop, then **Ctrl+Z**.
