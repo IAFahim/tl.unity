@@ -838,3 +838,19 @@ Grep (package outside `Tests/`, samples, `docs/*.md`, READMEs) for `TimelineLibr
 | `eng/test-com-tl-unity.sh` | EditMode 46/46, PlayMode 54/54, 0 `error CS`, 0 warnings, both hashes green |
 | K bench | A 7.8/8.0, B 2.0/2.0, B0 0.6/0.6 ns/entity, 0 B |
 | `eng/check-samples-together.sh` on a URP project (all three samples imported) | 0 `error CS`, Force demo 4.0333, no library clash, PlayMode 2/2 |
+
+## 14. Phase 8 results (players)
+
+Windows 11, 7000.0.0a16, Windows standalone x64, both backends from the same editor (IL2CPP and CoreCLR player variations were already
+installed, no module added).
+
+| Player | How it was built | Log line |
+|---|---|---|
+| Kinds IL2CPP player, IL2CPP | package test project (`testables`) + define `TL_UNITY_TESTS`, sample copied into `Assets`, `BuildKindsSample.Build -tlBackend IL2CPP` | `script hash=13943614770702343869 ... match=True events hash=6607956939547305625 ... match=True backend=player` |
+| Kinds IL2CPP player, CoreCLR | same, `-tlBackend CoreCLR` | same two hashes, `match=True` |
+| Force demo, IL2CPP | URP demo project, Force Demo scene (SubScene baked at build time), a scratch probe that logs the cube when Push ends | `ForceProbe result x=4.0333 expected=4.0333 match=True` |
+| Force demo, CoreCLR | same | `ForceProbe result x=4.0333 expected=4.0333 match=True` |
+
+`BuildKindsSample` now builds for the editor's own platform (Windows, Linux, macOS) with `-tlBackend IL2CPP|CoreCLR` or the two menu items,
+and the Kinds sample prints both pinned hashes. The IL2CPP build folder has `GameAssembly.dll`; the CoreCLR one has `Managed/` and the
+`CoreCLR` runtime. Builds, scratch probes and the define were removed from the projects afterwards.

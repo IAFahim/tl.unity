@@ -42,4 +42,8 @@ Editor cannot show: the real Timeline window, Undo/Redo, duplicating and draggin
         visible.
 19. [ ] Drag the Cube out of the SubScene into the main scene: the foldout says it is not in a SubScene. **Ctrl+Z**.
 
+20. [ ] `Tl > Samples > Build Control Demo`, press Play: the cube slides right and, once past about 2 m, also slides away from the camera
+        (a Burst job started the Dash timeline). Select its clip **Dash When Far**: the Inspector shows a **Dash** timeline field (drag and drop)
+        and **At X**.
+
 Report on issue #22: the numbers of any unticked lines and what you saw instead.

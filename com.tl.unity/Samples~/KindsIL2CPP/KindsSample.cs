@@ -20,11 +20,16 @@ public sealed class KindsSample : MonoBehaviour
         ulong script;
         using (var game = new KindWorld(KindScript.Rows))
             script = KindScript.Play(game, KindScript.Steps);
+        ulong events;
+        using (var game = new KindWorld(KindScript.Rows, true))
+            events = KindScript.PlayEvents(game, KindScript.Steps);
         var scriptMatch = script == KindScript.Pinned;
+        var eventsMatch = events == KindScript.EventsPinned;
         Debug.Log("Tl kinds runner boost=" + boost + " lift=" + lift
             + " script hash=" + script + " expected=" + KindScript.Pinned + " match=" + scriptMatch
+            + " events hash=" + events + " expected=" + KindScript.EventsPinned + " match=" + eventsMatch
             + " backend=" + (Application.isEditor ? "editor" : "player"));
-        var ok = boost && lift && scriptMatch && _failures == 0;
+        var ok = boost && lift && scriptMatch && eventsMatch && _failures == 0;
         if (Application.isBatchMode)
             Application.Quit(ok ? 0 : 3);
     }
