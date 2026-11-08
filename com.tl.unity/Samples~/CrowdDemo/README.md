@@ -41,7 +41,8 @@ per tick. Start offsets come from the grid position, not a random generator, so 
 `TL-BENCH crowd entities=<n> ns/entity=<x> warmB=0 ...` and writes `Logs/CrowdBench.txt`. It fails unless the dancer count is exact, every
 dancer plays, the warm allocation is 0 B and ns/entity is below 100.
 
-Reference numbers (Windows 11, 7000.0.0a16, editor, Burst on, safety checks on): see the commit that added this demo and
-`docs/design/demo-set.md`.
+Reference numbers (Windows 11, 7000.0.0a16, editor, Burst on, safety checks on, 11 workers, 2026-11-08): 10,000 dancers 24-28
+ns/entity, 100,000 dancers 24-25 ns/entity, 0 B, over five runs. Same machine and day, the package K bench row A (one kind, one entry per
+entity) is 7.8-7.9 ns/entity; a dancer feeds three kinds from three tracks every tick, so about 3x row A is the expected cost.
 
 Not covered yet: the `Pose` hash compared with `tl bench demos/crowd --hash` in .NET (waits for the engine-agnostic CLI).
