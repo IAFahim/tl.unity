@@ -118,6 +118,29 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
+        public void EachAutoKindAddsOnlyTheColumnsItsOwnApplyWrites()
+        {
+            var registry = TimelineKindSets.Registry;
+            var glow = registry[registry.IndexOf("AutoKinds.GlowKind")];
+            var chime = registry[registry.IndexOf("AutoKinds.ChimeKind")];
+            CollectionAssert.AreEqual(new[] { typeof(AutoKinds.Glow) }, glow.Columns);
+            CollectionAssert.AreEqual(new[] { typeof(AutoKinds.Chime) }, chime.Columns);
+            var timeline = Timeline("GlowOnly");
+            var track = timeline.CreateTrack<TlTrack>(null, "Glow");
+            track.Template = new GlowClip_TlData();
+            var clip = track.CreateClip<TlClip>();
+            clip.start = 0;
+            clip.duration = 1;
+            using var baked = new Baked(Director("Lamp", timeline).gameObject);
+            var entities = baked.World.EntityManager;
+            var entity = baked.Single<TlTimelineSet>();
+            Assert.IsTrue(entities.HasComponent<AutoKinds.Glow>(entity), "the Glow kind adds Glow");
+            Assert.IsTrue(entities.HasComponent(entity, ComponentType.ReadWrite(glow.Entry)));
+            Assert.IsFalse(entities.HasComponent<AutoKinds.Chime>(entity), "an unrelated kind adds nothing");
+            Assert.IsFalse(entities.HasComponent(entity, ComponentType.ReadWrite(chime.Entry)));
+        }
+
+        [Test]
         public void ADirectorWithoutTlTracksBakesNothingOfTl()
         {
             var timeline = Timeline("Plain");

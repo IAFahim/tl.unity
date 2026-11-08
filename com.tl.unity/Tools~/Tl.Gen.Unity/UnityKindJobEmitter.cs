@@ -51,6 +51,47 @@ namespace Tl.Gen.Unity
             return new List<string>(names);
         }
 
+        static List<ConsumerParam> KindParams(SystemAssignment assignment, KindDecl kind)
+        {
+            var parameters = new List<ConsumerParam>(kind.ApplyParams);
+            foreach (var consumer in assignment.Consumers)
+                foreach (var feeder in consumer.Feeders)
+                    if (feeder.KindName == kind.Id)
+                        parameters.AddRange(feeder.Method.Params);
+            return parameters;
+        }
+
+        static List<int> KindColumnIndices(UnitySystemModel model, SystemAssignment assignment, KindDecl kind)
+        {
+            var indices = new List<int>();
+            foreach (var parameter in KindParams(assignment, kind))
+            {
+                if (parameter.Kind != ConsumerParamKind.Column && parameter.Kind != ConsumerParamKind.ColumnReadOnly)
+                    continue;
+                for (var i = 0; i < model.Columns.Count; i++)
+                    if (model.Columns[i].ElementTypeName == parameter.TypeName && (parameter.Kind == ConsumerParamKind.ColumnReadOnly || !model.Columns[i].ReadOnly))
+                    {
+                        if (!indices.Contains(i))
+                            indices.Add(i);
+                        break;
+                    }
+            }
+            indices.Sort();
+            return indices;
+        }
+
+        internal static IReadOnlyList<string> KindColumnsOf(UnitySystemModel model, SystemAssignment assignment, KindDecl kind)
+        {
+            var ns = model.Namespace.StartsWith("global::") ? model.Namespace.Substring(8) : model.Namespace;
+            var names = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (var i in KindColumnIndices(model, assignment, kind))
+            {
+                var column = model.Columns[i];
+                names.Add(column.Direct ? column.ElementTypeName : "global::" + ns + "." + ComponentName(model, column));
+            }
+            return new List<string>(names);
+        }
+
         static Shape ShapeOf(UnitySystemModel model, SystemAssignment assignment, IReadOnlyList<UnityKindInfo> kinds)
         {
             var shape = new Shape();
@@ -217,10 +258,16 @@ namespace Tl.Gen.Unity
                 if (!shape.UsedColumns[i])
                     continue;
                 var column = shape.Columns[i];
-                W(writer, "var __c" + i + " = (" + column.ElementTypeName + "*)chunk.GetRequiredComponentDataPtr" + (column.ReadOnly ? "RO" : "RW") + "(ref " + column.Name + "Handle);");
+                W(writer, "var __c" + i + " = chunk.Has(ref " + column.Name + "Handle) ? (" + column.ElementTypeName + "*)chunk.GetRequiredComponentDataPtr" + (column.ReadOnly ? "RO" : "RW") + "(ref " + column.Name + "Handle) : null;");
             }
             for (var k = 0; k < kinds.Count; k++)
-                W(writer, "if (__l" + k + ") Kind_" + k + "(chunk, __playbacks" + ColumnArgs(shape, false) + ");");
+            {
+                var guard = new StringBuilder("__l" + k);
+                foreach (var i in KindColumnIndices(model, assignment, kinds[k].Decl))
+                    if (shape.UsedColumns[i])
+                        guard.Append(" && __c" + i + " != null");
+                W(writer, "if (" + guard + ") Kind_" + k + "(chunk, __playbacks" + ColumnArgs(shape, false) + ");");
+            }
             W(writer, "}");
             for (var k = 0; k < kinds.Count; k++)
                 EmitKind(writer, shape, assignment, assignmentIndex, kinds[k], k, tlFrames);
@@ -258,9 +305,14 @@ namespace Tl.Gen.Unity
             W(writer, "{");
             W(writer, "var jobs = default(" + name + ");");
             W(writer, "var builder = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.Playback>();");
-            foreach (var column in model.Columns)
-                W(writer, column.ReadOnly ? "builder = builder.WithAll<" + ComponentName(model, column) + ">();" : "builder = builder.WithAllRW<" + ComponentName(model, column) + ">();");
+            W(writer, "var any = new NativeList<ComponentType>(" + (kinds.Count + events.Count) + ", Allocator.Temp);");
+            foreach (var kind in kinds)
+                W(writer, "any.Add(ComponentType.ReadWrite<" + kind.Entry + ">());");
+            foreach (var evented in events)
+                W(writer, "any.Add(ComponentType.ReadWrite<global::Tl.Unity.TimelineEvent<" + evented.TypeName + ">>());");
+            W(writer, "builder.WithAny(ref any);");
             W(writer, "jobs._query = builder.Build(ref state);");
+            W(writer, "any.Dispose();");
             W(writer, "builder.Dispose();");
             foreach (var handle in handles)
                 W(writer, "jobs._" + handle.field + " = state." + handle.getter + "(" + (handle.readOnly ? "true" : "false") + ");");

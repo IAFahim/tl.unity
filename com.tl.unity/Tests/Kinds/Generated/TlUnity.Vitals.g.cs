@@ -28,8 +28,8 @@ __l0 = ((__a0.ULong0 & __e0.ULong0) | (__a0.ULong1 & __e0.ULong1)) != 0;
 }
 if (!__l0) return;
 var __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
-var __c0 = (global::KindGame.Health*)chunk.GetRequiredComponentDataPtrRW(ref HealthHandle);
-if (__l0) Kind_0(chunk, __playbacks, __c0);
+var __c0 = chunk.Has(ref HealthHandle) ? (global::KindGame.Health*)chunk.GetRequiredComponentDataPtrRW(ref HealthHandle) : null;
+if (__l0 && __c0 != null) Kind_0(chunk, __playbacks, __c0);
 }
 void Kind_0(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Health* __c0)
 {
@@ -148,8 +148,11 @@ public static Vitals Create(ref SystemState state)
 {
 var jobs = default(Vitals);
 var builder = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.Playback>();
-builder = builder.WithAllRW<Vitals_HealthData>();
+var any = new NativeList<ComponentType>(1, Allocator.Temp);
+any.Add(ComponentType.ReadWrite<global::KindGame.DamageEntry>());
+builder.WithAny(ref any);
 jobs._query = builder.Build(ref state);
+any.Dispose();
 builder.Dispose();
 jobs._PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true);
 jobs._HealthHandle = state.GetComponentTypeHandle<Vitals_HealthData>(false);

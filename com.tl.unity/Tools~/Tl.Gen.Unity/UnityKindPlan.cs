@@ -44,7 +44,7 @@ namespace Tl.Gen.Unity
                     continue;
                 foreach (var owned in assignments[index].Kinds)
                     if (owned.Id == kind.Id)
-                        return UnityKindJobEmitter.ColumnsOf(model);
+                        return UnityKindJobEmitter.KindColumnsOf(model, assignments[index], owned);
             }
             return new List<string>();
         }

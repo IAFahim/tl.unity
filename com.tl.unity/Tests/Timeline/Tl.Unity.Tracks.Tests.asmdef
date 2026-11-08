@@ -9,6 +9,7 @@
     "Unity.Burst",
     "Tl.Unity.Editor",
     "Tl.Unity.ForceContract",
+    "Tl.Unity.AutoKinds",
     "Tl.Unity.Tracks",
     "Tl.Unity.Tracks.Editor",
     "Unity.Collections",

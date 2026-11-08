@@ -60,14 +60,14 @@ var __x = chunk.Has(ref CuesEventHandle);
 if (!__l0 && !__l1 && !__l2 && !__x) return;
 var __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
 if (__x) Events(chunk, __playbacks);
-var __c0 = (global::KindGame.Motion*)chunk.GetRequiredComponentDataPtrRW(ref MotionHandle);
-var __c1 = (global::KindGame.WalkStat*)chunk.GetRequiredComponentDataPtrRO(ref WalkStatHandle);
-var __c2 = (global::KindGame.JumpPower*)chunk.GetRequiredComponentDataPtrRO(ref JumpPowerHandle);
-var __c3 = (global::KindGame.Target*)chunk.GetRequiredComponentDataPtrRO(ref TargetHandle);
-var __c4 = (global::KindGame.Stamina*)chunk.GetRequiredComponentDataPtrRW(ref StaminaHandle);
-if (__l0) Kind_0(chunk, __playbacks, __c0, __c1, __c2, __c3, __c4);
-if (__l1) Kind_1(chunk, __playbacks, __c0, __c1, __c2, __c3, __c4);
-if (__l2) Kind_2(chunk, __playbacks, __c0, __c1, __c2, __c3, __c4);
+var __c0 = chunk.Has(ref MotionHandle) ? (global::KindGame.Motion*)chunk.GetRequiredComponentDataPtrRW(ref MotionHandle) : null;
+var __c1 = chunk.Has(ref WalkStatHandle) ? (global::KindGame.WalkStat*)chunk.GetRequiredComponentDataPtrRO(ref WalkStatHandle) : null;
+var __c2 = chunk.Has(ref JumpPowerHandle) ? (global::KindGame.JumpPower*)chunk.GetRequiredComponentDataPtrRO(ref JumpPowerHandle) : null;
+var __c3 = chunk.Has(ref TargetHandle) ? (global::KindGame.Target*)chunk.GetRequiredComponentDataPtrRO(ref TargetHandle) : null;
+var __c4 = chunk.Has(ref StaminaHandle) ? (global::KindGame.Stamina*)chunk.GetRequiredComponentDataPtrRW(ref StaminaHandle) : null;
+if (__l0 && __c0 != null && __c2 != null) Kind_0(chunk, __playbacks, __c0, __c1, __c2, __c3, __c4);
+if (__l1 && __c0 != null && __c1 != null && __c3 != null) Kind_1(chunk, __playbacks, __c0, __c1, __c2, __c3, __c4);
+if (__l2 && __c4 != null) Kind_2(chunk, __playbacks, __c0, __c1, __c2, __c3, __c4);
 }
 void Kind_0(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Motion* __c0, global::KindGame.WalkStat* __c1, global::KindGame.JumpPower* __c2, global::KindGame.Target* __c3, global::KindGame.Stamina* __c4)
 {
@@ -476,12 +476,14 @@ public static Movement Create(ref SystemState state)
 {
 var jobs = default(Movement);
 var builder = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.Playback>();
-builder = builder.WithAllRW<Movement_MotionData>();
-builder = builder.WithAll<Movement_WalkStatData>();
-builder = builder.WithAll<Movement_JumpPowerData>();
-builder = builder.WithAll<Movement_TargetData>();
-builder = builder.WithAllRW<Movement_StaminaData>();
+var any = new NativeList<ComponentType>(4, Allocator.Temp);
+any.Add(ComponentType.ReadWrite<global::KindGame.LiftEntry>());
+any.Add(ComponentType.ReadWrite<global::KindGame.LocomotionEntry>());
+any.Add(ComponentType.ReadWrite<global::KindGame.StatChangeEntry>());
+any.Add(ComponentType.ReadWrite<global::Tl.Unity.TimelineEvent<global::KindGame.Cue>>());
+builder.WithAny(ref any);
 jobs._query = builder.Build(ref state);
+any.Dispose();
 builder.Dispose();
 jobs._PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true);
 jobs._MotionHandle = state.GetComponentTypeHandle<Movement_MotionData>(false);

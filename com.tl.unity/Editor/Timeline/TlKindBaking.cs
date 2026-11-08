@@ -25,8 +25,6 @@ namespace Tl.Unity.Editor
                 Add(baker, entity, added, ComponentType.ReadWrite(descriptor.Entry));
                 Add(baker, entity, added, ComponentType.ReadWrite(descriptor.Active));
                 Add(baker, entity, added, ComponentType.ReadWrite(descriptor.Enabled));
-                foreach (var column in descriptor.Columns)
-                    Add(baker, entity, added, ComponentType.ReadWrite(column));
                 reached.Add(index);
             }
             foreach (var buffer in registry.EventBuffers)

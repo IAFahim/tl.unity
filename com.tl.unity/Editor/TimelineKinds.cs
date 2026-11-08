@@ -1,7 +1,5 @@
-using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Entities;
-using UnityEngine;
 
 namespace Tl.Unity.Editor
 {
@@ -50,7 +48,6 @@ namespace Tl.Unity.Editor
             using var entities = _players.ToEntityArray(Allocator.Temp);
             foreach (var entity in entities)
             {
-                var owner = manager.GetComponentData<TimelineKindBakeOwner>(entity).Name.ToString();
                 using var kinds = manager.GetBuffer<TimelineKindBake>(entity).ToNativeArray(Allocator.Temp);
                 foreach (var reached in kinds)
                 {
@@ -58,26 +55,9 @@ namespace Tl.Unity.Editor
                     manager.SetComponentEnabled(entity, ComponentType.ReadWrite(descriptor.Active), false);
                     foreach (var column in descriptor.Columns)
                         if (!manager.HasComponent(entity, ComponentType.ReadWrite(column)))
-                            Debug.LogError("Tl baking: GameObject '" + owner + "' gets kind '" + descriptor.Name + "' from " + reached.Source + ", fed by " + Feeders(descriptor.Signature) + ", but has no '" + column.Name + "' component.");
+                            manager.AddComponent(entity, ComponentType.ReadWrite(column));
                 }
             }
-        }
-
-        static string Feeders(string signature)
-        {
-            if (string.IsNullOrEmpty(signature))
-                return "game code";
-            var names = new List<string>();
-            foreach (var line in signature.Split('\n'))
-            {
-                var end = line.LastIndexOf(':');
-                var method = end < 0 ? line : line.Substring(0, end);
-                var dot = method.LastIndexOf('.');
-                var type = dot < 0 ? method : method.Substring(0, dot);
-                var shortType = type.Substring(type.LastIndexOf('.') + 1);
-                names.Add(shortType + (dot < 0 ? string.Empty : method.Substring(dot)));
-            }
-            return string.Join(", ", names);
         }
     }
 }
