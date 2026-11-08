@@ -221,7 +221,7 @@ Server and console with NativeAOT already work: `benchmarks/KindSystems.Aot` run
 
 ## 3. The .NET CLI
 
-The `tlb` tool (`tools/Tl.Bake`, package `Tl.Bake`) gets a second command name `tl` **(proposed)**; `tlb` stays as an alias.
+The `tl` tool (`tools/Tl.Bake`, package `Tl.Bake`; renamed from `tlb`, no alias) bakes, decodes and runs scenes (`tl run`, phase 7).
 
 ```
 tl bake tl.project.json --pack packs/Force/bin/Tl.Force.dll -o game.tlib

@@ -11,6 +11,7 @@ public sealed class BakerAssemblyResolver
     public BakerAssemblyResolver(IEnumerable<string>? assemblyPaths = null)
     {
         _assemblies.AddRange(AppDomain.CurrentDomain.GetAssemblies());
+        if (!_assemblies.Contains(typeof(TimelineId).Assembly)) _assemblies.Add(typeof(TimelineId).Assembly);
 
         if (assemblyPaths != null)
         {
@@ -188,7 +189,7 @@ public sealed class BakerAssemblyResolver
         }
     }
 
-    private static IEnumerable<Type> GetTypesSafe(Assembly asm)
+    internal static IEnumerable<Type> GetTypesSafe(Assembly asm)
     {
         try
         {

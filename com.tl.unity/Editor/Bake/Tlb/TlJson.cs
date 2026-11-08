@@ -39,7 +39,7 @@ public static class TlJson
         try
         {
             var root = document.RootElement;
-            Object(root, "scene", "schema", "project", "entities", "requests");
+            Object(root, "scene", "schema", "project", "entities", "requests", "direction");
             Schema(root);
             if (root.TryGetProperty("project", out var project)) Text(project, "scene.project");
             var entities = root.GetProperty("entities");
@@ -79,12 +79,12 @@ public static class TlJson
                     var op = request.GetProperty("op");
                     Text(op, "request.op");
                     var operation = op.GetString();
-                    if (!(operation is "Start" or "Stop" or "Pause" or "Resume" or "Seek" or "SetSpeed" or "SetReverse" or "StopChannel" or "StopAll" or "PauseChannel" or "ResumeChannel" or "SetSpeedChannel" or "SetReverseChannel")) Fail("unknown request operation.");
+                    if (!(operation is "Start" or "Stop" or "Pause" or "Resume" or "Seek" or "SetSpeed" or "SetReverse" or "StopChannel" or "StopAll" or "PauseChannel" or "ResumeChannel" or "SeekChannel" or "SetSpeedChannel" or "SetReverseChannel")) Fail("unknown request operation.");
                     var allowed = new List<string> { "step", "entity", "op" };
                     if (operation!.EndsWith("Channel", StringComparison.Ordinal)) { Text(request.GetProperty("channel"), "request.channel"); allowed.Add("channel"); }
                     else if (operation != "StopAll") { Text(request.GetProperty("timeline"), "request.timeline"); allowed.Add("timeline"); }
-                    if (operation is "Seek" or "Start") allowed.Add("tick");
-                    if (operation == "Seek") Number(request.GetProperty("tick"), "request.tick", ushort.MaxValue);
+                    if (operation is "Seek" or "Start" or "SeekChannel") allowed.Add("tick");
+                    if (operation is "Seek" or "SeekChannel") Number(request.GetProperty("tick"), "request.tick", ushort.MaxValue);
                     if (operation.StartsWith("SetSpeed", StringComparison.Ordinal)) { _ = request.GetProperty("speed"); allowed.Add("speed"); }
                     if (operation.StartsWith("SetReverse", StringComparison.Ordinal)) { _ = request.GetProperty("reverse"); allowed.Add("reverse"); }
                     Object(request, "request", allowed.ToArray());
@@ -93,6 +93,17 @@ public static class TlJson
                     if (request.TryGetProperty("tick", out var tick)) Number(tick, "request.tick", ushort.MaxValue);
                     if (request.TryGetProperty("speed", out var speed) && (speed.ValueKind != JsonValueKind.Number || !speed.TryGetDouble(out var value) || double.IsInfinity(value) || double.IsNaN(value) || value <= 0 || value > 255d / 16)) Fail("request.speed must be greater than 0 and at most 15.9375.");
                     if (request.TryGetProperty("reverse", out var reverse) && reverse.ValueKind != JsonValueKind.True && reverse.ValueKind != JsonValueKind.False) Fail("request.reverse must be a boolean.");
+                }
+            }
+            if (root.TryGetProperty("direction", out var direction))
+            {
+                Array(direction, "scene.direction");
+                foreach (var turn in direction.EnumerateArray())
+                {
+                    Object(turn, "direction", "step", "forward");
+                    Number(turn.GetProperty("step"), "direction.step", int.MaxValue);
+                    var forward = turn.GetProperty("forward");
+                    if (forward.ValueKind != JsonValueKind.True && forward.ValueKind != JsonValueKind.False) Fail("direction.forward must be a boolean.");
                 }
             }
             return document;
@@ -104,7 +115,7 @@ public static class TlJson
     public static string ExportProject(IReadOnlyList<string> timelines, IReadOnlyList<string> channels, uint tickRate)
     {
         using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
         {
             writer.WriteStartObject();
             writer.WriteNumber("schema", 1);
