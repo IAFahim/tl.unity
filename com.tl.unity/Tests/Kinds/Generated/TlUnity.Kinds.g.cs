@@ -15,7 +15,7 @@ public struct DamageActive : IComponentData, IEnableableComponent { }
 public struct DamageEnabled : IComponentData, IEnableableComponent { }
 public static class DamageKind
 {
-public const int Id = 771216480;
+public const int Id = 804387256;
 public const int InlineCapacity = global::KindGame.KindCapacity.Damage;
 public static global::Unity.Entities.ComponentType[] Types { get { return new global::Unity.Entities.ComponentType[] { typeof(DamageEntry), typeof(DamageActive), typeof(DamageEnabled) }; } }
 public static void Init(global::Unity.Entities.EntityManager entities, global::Unity.Entities.Entity entity) { entities.SetComponentEnabled<DamageActive>(entity, false); }
@@ -31,7 +31,7 @@ public struct LiftActive : IComponentData, IEnableableComponent { }
 public struct LiftEnabled : IComponentData, IEnableableComponent { }
 public static class LiftKind
 {
-public const int Id = 1995782556;
+public const int Id = -1807956668;
 public const int InlineCapacity = global::KindGame.KindCapacity.Lift;
 public static global::Unity.Entities.ComponentType[] Types { get { return new global::Unity.Entities.ComponentType[] { typeof(LiftEntry), typeof(LiftActive), typeof(LiftEnabled) }; } }
 public static void Init(global::Unity.Entities.EntityManager entities, global::Unity.Entities.Entity entity) { entities.SetComponentEnabled<LiftActive>(entity, false); }
@@ -46,7 +46,7 @@ public struct LocomotionActive : IComponentData, IEnableableComponent { }
 public struct LocomotionEnabled : IComponentData, IEnableableComponent { }
 public static class LocomotionKind
 {
-public const int Id = 1989750836;
+public const int Id = 762452220;
 public const int InlineCapacity = global::KindGame.KindCapacity.Locomotion;
 public static global::Unity.Entities.ComponentType[] Types { get { return new global::Unity.Entities.ComponentType[] { typeof(LocomotionEntry), typeof(LocomotionActive), typeof(LocomotionEnabled) }; } }
 public static void Init(global::Unity.Entities.EntityManager entities, global::Unity.Entities.Entity entity) { entities.SetComponentEnabled<LocomotionActive>(entity, false); }
@@ -61,7 +61,7 @@ public struct StatChangeActive : IComponentData, IEnableableComponent { }
 public struct StatChangeEnabled : IComponentData, IEnableableComponent { }
 public static class StatChangeKind
 {
-public const int Id = 1633184051;
+public const int Id = -1931731205;
 public const int InlineCapacity = global::KindGame.KindCapacity.StatChange;
 public static global::Unity.Entities.ComponentType[] Types { get { return new global::Unity.Entities.ComponentType[] { typeof(StatChangeEntry), typeof(StatChangeActive), typeof(StatChangeEnabled) }; } }
 public static void Init(global::Unity.Entities.EntityManager entities, global::Unity.Entities.Entity entity) { entities.SetComponentEnabled<StatChangeActive>(entity, false); }
@@ -115,10 +115,10 @@ default: return;
 public void Register(global::Tl.Unity.KindRegistry registry)
 {
 registry.AddEvents(typeof(global::Tl.Unity.TimelineEvent<global::KindGame.Cue>));
-registry.Add(new global::Tl.Unity.KindDescriptor("Damage", typeof(global::KindGame.DamageEntry), typeof(global::KindGame.DamageActive), typeof(global::KindGame.DamageEnabled), 4, 12, "KindGame.Hit.Start:1", new global::System.Type[] { typeof(global::KindGame.Vitals_HealthData) }));
-registry.Add(new global::Tl.Unity.KindDescriptor("Lift", typeof(global::KindGame.LiftEntry), typeof(global::KindGame.LiftActive), typeof(global::KindGame.LiftEnabled), 4, 12, "KindGame.Jump.Evaluate:0", new global::System.Type[] { typeof(global::KindGame.Movement_JumpPowerData), typeof(global::KindGame.Movement_MotionData), typeof(global::KindGame.Movement_StaminaData), typeof(global::KindGame.Movement_TargetData), typeof(global::KindGame.Movement_WalkStatData) }));
-registry.Add(new global::Tl.Unity.KindDescriptor("Locomotion", typeof(global::KindGame.LocomotionEntry), typeof(global::KindGame.LocomotionActive), typeof(global::KindGame.LocomotionEnabled), 8, 16, "KindGame.Walk.Evaluate:0", new global::System.Type[] { typeof(global::KindGame.Movement_JumpPowerData), typeof(global::KindGame.Movement_MotionData), typeof(global::KindGame.Movement_StaminaData), typeof(global::KindGame.Movement_TargetData), typeof(global::KindGame.Movement_WalkStatData) }));
-registry.Add(new global::Tl.Unity.KindDescriptor("StatChange", typeof(global::KindGame.StatChangeEntry), typeof(global::KindGame.StatChangeActive), typeof(global::KindGame.StatChangeEnabled), 4, 12, "KindGame.ChangeStat.Start:1\nKindGame.Steps.OnStep:3", new global::System.Type[] { typeof(global::KindGame.Movement_JumpPowerData), typeof(global::KindGame.Movement_MotionData), typeof(global::KindGame.Movement_StaminaData), typeof(global::KindGame.Movement_TargetData), typeof(global::KindGame.Movement_WalkStatData) }));
+registry.Add(new global::Tl.Unity.KindDescriptor("KindGame.Damage", typeof(global::KindGame.DamageEntry), typeof(global::KindGame.DamageActive), typeof(global::KindGame.DamageEnabled), 4, 12, "KindGame.Hit.Start:1", new global::System.Type[] { typeof(global::KindGame.Vitals_HealthData) }));
+registry.Add(new global::Tl.Unity.KindDescriptor("KindGame.Lift", typeof(global::KindGame.LiftEntry), typeof(global::KindGame.LiftActive), typeof(global::KindGame.LiftEnabled), 4, 12, "KindGame.Jump.Evaluate:0", new global::System.Type[] { typeof(global::KindGame.Movement_JumpPowerData), typeof(global::KindGame.Movement_MotionData), typeof(global::KindGame.Movement_StaminaData), typeof(global::KindGame.Movement_TargetData), typeof(global::KindGame.Movement_WalkStatData) }));
+registry.Add(new global::Tl.Unity.KindDescriptor("KindGame.Locomotion", typeof(global::KindGame.LocomotionEntry), typeof(global::KindGame.LocomotionActive), typeof(global::KindGame.LocomotionEnabled), 8, 16, "KindGame.Walk.Evaluate:0", new global::System.Type[] { typeof(global::KindGame.Movement_JumpPowerData), typeof(global::KindGame.Movement_MotionData), typeof(global::KindGame.Movement_StaminaData), typeof(global::KindGame.Movement_TargetData), typeof(global::KindGame.Movement_WalkStatData) }));
+registry.Add(new global::Tl.Unity.KindDescriptor("KindGame.StatChange", typeof(global::KindGame.StatChangeEntry), typeof(global::KindGame.StatChangeActive), typeof(global::KindGame.StatChangeEnabled), 4, 12, "KindGame.ChangeStat.Start:1\nKindGame.Steps.OnStep:3", new global::System.Type[] { typeof(global::KindGame.Movement_JumpPowerData), typeof(global::KindGame.Movement_MotionData), typeof(global::KindGame.Movement_StaminaData), typeof(global::KindGame.Movement_TargetData), typeof(global::KindGame.Movement_WalkStatData) }));
 }
 }
 internal static unsafe class TlUnityFrames

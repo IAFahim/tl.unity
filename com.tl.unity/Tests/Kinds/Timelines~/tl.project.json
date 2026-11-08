@@ -1,4 +1,5 @@
 {
+  "schema": 1,
   "tickRate": 60,
   "channels": [
     "locomotion",
@@ -16,6 +17,6 @@
     "whistle.json"
   ],
   "kinds": {
-    "Damage": { "gamePulses": 8, "maxInlineBytes": 132 }
+    "KindGame.Damage": { "gamePulses": 8, "maxInlineBytes": 132 }
   }
 }

@@ -293,7 +293,7 @@ namespace Tl.Gen.Unity
             var feeders = new List<(int consumer, FeederDecl feeder)>();
             for (var c = 0; c < assignment.Consumers.Count; c++)
                 foreach (var feeder in assignment.Consumers[c].Feeders)
-                    if (feeder.KindName == kind.Name)
+                    if (feeder.KindName == kind.Id)
                         feeders.Add((c, feeder));
             feeders.Sort((a, b) =>
             {

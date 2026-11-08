@@ -21,7 +21,7 @@ namespace Tl.Unity.Library.Tests
             Names = fixture.Names;
             TickRate = tickRate == 0 ? fixture.TickRate : tickRate;
             GameTlib = File.ReadAllBytes(Path.Combine(KindGameFixture.Folder, "game.tlib"));
-            var overrides = new Dictionary<string, global::Tl.KindOverride> { ["Damage"] = new global::Tl.KindOverride(11, 8) };
+            var overrides = new Dictionary<string, global::Tl.KindOverride> { ["KindGame.Damage"] = new global::Tl.KindOverride(11, 8) };
             var catalog = LibraryBake.Kinds(new[] { KindGameFixture.Game }, overrides);
             for (var i = 0; i < Names.Count; i++)
                 Assets.Add(AssetOf(Names[i]));

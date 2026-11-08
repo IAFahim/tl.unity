@@ -57,7 +57,7 @@ namespace Tl.Unity.Bake.Tests
             Assert.That(Assemble(fixture, tlbs, kinds, fixture.Settings), Is.EqualTo(game));
             var unset = Assemble(fixture, tlbs, kinds, LibrarySettings.Default);
             var differing = Enumerable.Range(0, Math.Min(game.Length, unset.Length - 32)).Where(i => game[i] != unset[i]).ToList();
-            TestContext.Out.WriteLine("S2 without library.json kinds: " + string.Join(", ", Fields(game, differing)));
+            TestContext.Out.WriteLine("S2 without tl.project.json kinds: " + string.Join(", ", Fields(game, differing)));
         }
 
         [Test]

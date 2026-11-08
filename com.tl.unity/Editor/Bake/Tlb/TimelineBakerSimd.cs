@@ -126,6 +126,7 @@ internal sealed unsafe class SimdWalker
     private SimdCursor _cursor;
     private ulong[] _seenBits = new ulong[8];
     private int _seenWords;
+    private bool _seenSchema;
 
     internal SimdWalker(JsonStructuralIndex index, BakerAssemblyResolver resolver, BakeWorkspace? workspace = null)
     {
@@ -258,7 +259,14 @@ internal sealed unsafe class SimdWalker
         var firstByte = isStructuralValue ? _utf8[bound] : _utf8[valueStart];
         var name = _utf8.AsSpan(nameOpen + 1, nameClose - nameOpen - 1);
         int valueEnd;
-        if (NameIs(name, "duration"u8))
+        if (NameIs(name, "schema"u8))
+        {
+            if (_seenSchema || isStructuralValue) Bail();
+            _seenSchema = true;
+            if (!FastNumber.ScanUnsigned32(_utf8, colon + 1, bound, out var schemaEnd, out var schema) || schema != 1) Bail();
+            valueEnd = schemaEnd;
+        }
+        else if (NameIs(name, "duration"u8))
         {
             if (seenDuration)
                 Bail();

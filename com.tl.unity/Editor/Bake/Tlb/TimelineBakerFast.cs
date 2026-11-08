@@ -4,7 +4,6 @@ using System.Numerics;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 #endif
-using System.Linq.Expressions;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
@@ -35,6 +34,7 @@ internal interface ITypeHelper
 {
     int Size { get; }
     unsafe void CopyTo(byte* dst, object box);
+    unsafe object Read(byte* source);
 }
 
 internal sealed class TypeHelper<T> : ITypeHelper
@@ -42,6 +42,7 @@ internal sealed class TypeHelper<T> : ITypeHelper
 {
     public int Size => Unsafe.SizeOf<T>();
     public unsafe void CopyTo(byte* dst, object box) => *(T*)dst = (T)box;
+    public unsafe object Read(byte* source) => *(T*)source;
 }
 
 internal sealed class FieldEntry
@@ -49,7 +50,6 @@ internal sealed class FieldEntry
     internal string Name = "";
     internal string TypeName = "";
     internal FieldKind Kind;
-    internal Delegate? Setter;
     internal FieldInfo Field = null!;
     internal Type Declaring = null!;
     internal int FloatOrdinal = -1;
@@ -59,7 +59,7 @@ internal sealed class FieldEntry
 
 internal enum FieldKind : byte
 {
-    Bool, Byte, SByte, Short, UShort, Int, UInt, Long, ULong, Float, Double, Enum, TimelineId, Unsupported,
+    Bool, Byte, SByte, Short, UShort, Int, UInt, Long, ULong, Float, Double, Enum, TimelineId, Struct, Unsupported,
 }
 
 internal unsafe delegate void FloatApplier(object box, int* ids, float* vals, int count);
@@ -383,7 +383,7 @@ internal static class TimelineBakerFast
             if (name.StartsWith("<") && name.Contains(">k__BackingField"))
                 name = name.Substring(1, name.IndexOf('>') - 1);
             var kind = KindOf(f.FieldType);
-            table.ByName[name] = new FieldEntry { Name = name, TypeName = f.FieldType.Name, Kind = kind, Setter = CompileSetter(f, kind), Field = f, Declaring = structType };
+            table.ByName[name] = new FieldEntry { Name = name, TypeName = f.FieldType.Name, Kind = kind, Field = f, Declaring = structType };
         }
         table.Freeze();
         return table;
@@ -404,27 +404,8 @@ internal static class TimelineBakerFast
         if (t == typeof(double)) return FieldKind.Double;
         if (t == typeof(Tl.TimelineId)) return FieldKind.TimelineId;
         if (t.IsEnum) return FieldKind.Enum;
+        if (t.IsValueType && IsUnmanagedCached(t)) return FieldKind.Struct;
         return FieldKind.Unsupported;
-    }
-
-    private static Delegate? CompileSetter(FieldInfo f, FieldKind kind)
-    {
-        if (kind is FieldKind.Float)
-            return null;
-        var method = new DynamicMethod(
-            "set_" + f.Name,
-            typeof(void),
-            [typeof(object), f.FieldType],
-            f.DeclaringType!.Module,
-            skipVisibility: true);
-        var il = method.GetILGenerator();
-        il.Emit(OpCodes.Ldarg_0);
-        il.Emit(OpCodes.Unbox, f.DeclaringType);
-        il.Emit(OpCodes.Ldarg_1);
-        il.Emit(OpCodes.Stfld, f);
-        il.Emit(OpCodes.Ret);
-        var actionType = Expression.GetActionType(typeof(object), f.FieldType);
-        return method.CreateDelegate(actionType);
     }
 
     internal static string KindNameOfValue(JsonTokenType t) => t switch
@@ -485,7 +466,7 @@ internal static class TimelineBakerFast
                 }
                 if (error is null && entry is { Kind: FieldKind.Float, FloatOrdinal: >= 0 })
                 {
-                    if (r.TokenType == JsonTokenType.Number && r.TryGetSingle(out var v))
+                    if (r.TokenType == JsonTokenType.Number && r.TryGetSingle(out var v) && !float.IsInfinity(v) && !float.IsNaN(v))
                     {
                         if (n == ids.Length)
                         {
@@ -584,83 +565,52 @@ internal static class TimelineBakerFast
 
     private static string? SetField(ref Utf8JsonReader r, FieldEntry entry, object box, string contextName, byte[] utf8, int baseOffset, List<DupScope>? scopes, LibraryManifest? manifest = null)
     {
-        var field = entry.Name;
-        var kindToken = r.TokenType;
-        string Fail(string message, ref Utf8JsonReader rr)
+        if (Scalar(ref r, entry, manifest) is { } value)
         {
-            SkipValue(ref rr, scopes, utf8, baseOffset);
-            return message;
+            entry.Field.SetValue(box, value);
+            return null;
         }
-        string Raw(ref Utf8JsonReader rr)
+        using var document = JsonDocument.ParseValue(ref r);
+        try
         {
-            var start = baseOffset + (int)rr.TokenStartIndex;
-            SkipValue(ref rr, scopes, utf8, baseOffset);
-            var end = baseOffset + (int)rr.BytesConsumed;
-            return Encoding.UTF8.GetString(utf8, start, end - start);
+            if (entry.Kind == FieldKind.Unsupported)
+                return $"wrong-typed value: field '{entry.Name}' in {contextName} has unsupported primitive type '{entry.TypeName}'.";
+            entry.Field.SetValue(box, ValueJson.ReadField(entry.Field, document.RootElement, contextName + "." + entry.Name, manifest));
+            return null;
         }
-        switch (entry.Kind)
+        catch (BakeDiagnosticException error)
         {
-            case FieldKind.Bool:
-                if (kindToken is JsonTokenType.True) { ((Action<object, bool>)entry.Setter!)(box, true); return null; }
-                if (kindToken is JsonTokenType.False) { ((Action<object, bool>)entry.Setter!)(box, false); return null; }
-                return Fail($"wrong-typed value: field '{field}' in {contextName} expected bool, got {KindNameOfValue(kindToken)}.", ref r);
-            case FieldKind.Byte:
-                if (kindToken == JsonTokenType.Number && r.TryGetByte(out var b)) { ((Action<object, byte>)entry.Setter!)(box, b); return null; }
-                return Fail($"wrong-typed value: field '{field}' in {contextName} expected byte, got {Raw(ref r)}.", ref r);
-            case FieldKind.SByte:
-                if (kindToken == JsonTokenType.Number && r.TryGetSByte(out var sb)) { ((Action<object, sbyte>)entry.Setter!)(box, sb); return null; }
-                return Fail($"wrong-typed value: field '{field}' in {contextName} expected sbyte, got {Raw(ref r)}.", ref r);
-            case FieldKind.Short:
-                if (kindToken == JsonTokenType.Number && r.TryGetInt16(out var s)) { ((Action<object, short>)entry.Setter!)(box, s); return null; }
-                return Fail($"wrong-typed value: field '{field}' in {contextName} expected short, got {Raw(ref r)}.", ref r);
-            case FieldKind.UShort:
-                if (kindToken == JsonTokenType.Number && r.TryGetUInt16(out var us)) { ((Action<object, ushort>)entry.Setter!)(box, us); return null; }
-                return Fail($"wrong-typed value: field '{field}' in {contextName} expected ushort, got {Raw(ref r)}.", ref r);
-            case FieldKind.Int:
-                if (kindToken == JsonTokenType.Number && r.TryGetInt32(out var i)) { ((Action<object, int>)entry.Setter!)(box, i); return null; }
-                return Fail($"wrong-typed value: field '{field}' in {contextName} expected int, got {Raw(ref r)}.", ref r);
-            case FieldKind.UInt:
-                if (kindToken == JsonTokenType.Number && r.TryGetUInt32(out var ui)) { ((Action<object, uint>)entry.Setter!)(box, ui); return null; }
-                return Fail($"wrong-typed value: field '{field}' in {contextName} expected uint, got {Raw(ref r)}.", ref r);
-            case FieldKind.Long:
-                if (kindToken == JsonTokenType.Number && r.TryGetInt64(out var l)) { ((Action<object, long>)entry.Setter!)(box, l); return null; }
-                return Fail($"wrong-typed value: field '{field}' in {contextName} expected long, got {Raw(ref r)}.", ref r);
-            case FieldKind.ULong:
-                if (kindToken == JsonTokenType.Number && r.TryGetUInt64(out var ul)) { ((Action<object, ulong>)entry.Setter!)(box, ul); return null; }
-                return Fail($"wrong-typed value: field '{field}' in {contextName} expected ulong, got {Raw(ref r)}.", ref r);
-            case FieldKind.Double:
-                if (kindToken == JsonTokenType.Number && r.TryGetDouble(out var d)) { ((Action<object, double>)entry.Setter!)(box, d); return null; }
-                return Fail($"wrong-typed value: field '{field}' in {contextName} expected double, got {Raw(ref r)}.", ref r);
-            case FieldKind.Enum:
-                if (kindToken == JsonTokenType.String)
-                {
-                    var text = r.GetString()!;
-                    var ft = entry.Field.FieldType;
-                    if (!Enum.IsDefined(ft, text))
-                    {
-                        var names = string.Join(", ", Enum.GetNames(ft));
-                        return Fail($"unknown enum member: field '{field}' in {contextName} has no member '{text}' on enum '{ft.Name}' (expected one of: {names}).", ref r);
-                    }
-                    var value = Enum.Parse(ft, text, ignoreCase: false);
-                    ((Action<object, object>)((object b, object v) => entry.Setter!.DynamicInvoke(b, v)))(box, value);
-                    return null;
-                }
-                return Fail($"wrong-typed value: field '{field}' in {contextName} expected enum member name, got {KindNameOfValue(kindToken)}.", ref r);
-            case FieldKind.TimelineId:
-                if (kindToken == JsonTokenType.String)
-                {
-                    var text = r.GetString()!;
-                    if (manifest == null) return Fail($"timeline reference without manifest: field '{field}' in {contextName} names timeline '{text}' but no library manifest is available; bake via `tlb library`.", ref r);
-                    if (!manifest.Timelines.TryGetValue(text, out var id)) return Fail($"unknown timeline: field '{field}' in {contextName} names unknown timeline '{text}'.", ref r);
-                    var setter = entry.Setter!;
-                    setter.DynamicInvoke(box, new Tl.TimelineId(id));
-                    return null;
-                }
-                return Fail($"wrong-typed value: field '{field}' in {contextName} expected timeline name, got {KindNameOfValue(kindToken)}.", ref r);
-            default:
-                return Fail($"wrong-typed value: field '{field}' in {contextName} has unsupported primitive type '{entry.TypeName}'.", ref r);
+            return error.Message;
         }
     }
+
+    private static object? Scalar(ref Utf8JsonReader r, FieldEntry entry, LibraryManifest? manifest)
+    {
+        var number = r.TokenType == JsonTokenType.Number;
+        switch (entry.Kind)
+        {
+            case FieldKind.Bool: return r.TokenType == JsonTokenType.True ? true : r.TokenType == JsonTokenType.False ? false : null;
+            case FieldKind.Byte: return number && r.TryGetByte(out var b) ? b : null;
+            case FieldKind.SByte: return number && r.TryGetSByte(out var sb) ? sb : null;
+            case FieldKind.Short: return number && r.TryGetInt16(out var s) ? s : null;
+            case FieldKind.UShort: return number && r.TryGetUInt16(out var us) ? us : null;
+            case FieldKind.Int: return number && r.TryGetInt32(out var i) ? i : null;
+            case FieldKind.UInt: return number && r.TryGetUInt32(out var ui) ? ui : null;
+            case FieldKind.Long: return number && r.TryGetInt64(out var l) ? l : null;
+            case FieldKind.ULong: return number && r.TryGetUInt64(out var ul) ? ul : null;
+            case FieldKind.Float: return number && r.TryGetSingle(out var f) && !float.IsNaN(f) && !float.IsInfinity(f) ? f : null;
+            case FieldKind.Double: return number && r.TryGetDouble(out var d) && !double.IsNaN(d) && !double.IsInfinity(d) ? d : null;
+            case FieldKind.Enum when r.TokenType == JsonTokenType.String:
+                var text = r.GetString()!;
+                return Enum.IsDefined(entry.Field.FieldType, text) ? Enum.Parse(entry.Field.FieldType, text, false) : null;
+            case FieldKind.TimelineId when r.TokenType == JsonTokenType.String:
+                var name = r.GetString()!;
+                if (name.Length == 0) return default(Tl.TimelineId);
+                return manifest != null && manifest.Timelines.TryGetValue(name, out var id) ? new Tl.TimelineId(id) : null;
+            default: return null;
+        }
+    }
+
 }
 
 internal static class DupScopePool
@@ -897,6 +847,11 @@ internal ref struct Walker
             var name = NameToken();
             switch (name)
             {
+                case "schema":
+                    _r.Read();
+                    if (_r.TokenType != JsonTokenType.Number || !_r.TryGetInt32(out var schema) || schema != 1)
+                        PendingRoot($"unsupported timeline schema: expected schema 1, got '{Raw()}'.");
+                    break;
                 case "name":
                     _r.Read();
                     if (_r.TokenType != JsonTokenType.String)
@@ -1488,7 +1443,7 @@ internal ref struct Walker
             return "";
         }
         var text = _r.GetString()!;
-        if (text.Contains('.') || text.Contains(',') || text.Contains('+') || text.Contains('='))
+        if (!(field == "type" && text.Contains('<')) && (field != "namespace" && text.Contains('.') || text.Contains(',') || text.Contains('+') || text.Contains('=')))
             error = $"dotted name rejected: '{field}' in {context} must be a bare name without '.', ',', '+' or '='; got '{text}'. Empty selects the global namespace.";
         return text;
     }
@@ -1592,6 +1547,10 @@ internal static class TimelineBakerFastCore
             var labels = new List<(int Track, int Clip, string Name)>();
             if (doc.RootName != null)
                 labels.Add((-1, -1, doc.RootName));
+            if (doc.ChannelName != null)
+                labels.Add((-2, -1, doc.ChannelName));
+            if (doc.NextName != null)
+                labels.Add((-3, -1, doc.NextName));
 
             for (var ti = 0; ti < doc.Tracks.Count; ti++)
             {
@@ -2136,7 +2095,20 @@ internal static class TimelineBakerFastCore
             foreach (var marker in doc.Markers)
                 if (seenMarkerTypes.Add(marker.MarkerType!))
                     markerTypes.Add((marker.MarkerType!, marker.MarkerType!));
-            var tail = TlbMetadataBuilder.Build(pairTypes, labels, doc.Markers);
+            var trackRows = new List<(Type Type, int Pair, int Value, int Clips)>(doc.Tracks.Count);
+            var clipRows = new List<(int Pair, int Value, uint Start, uint End)>(doc.Clips.Count);
+            for (var ti = 0; ti < doc.Tracks.Count; ti++)
+            {
+                var info = doc.Tracks[ti];
+                var lane = lanes.FirstOrDefault(l => l.TrackEntry == ti);
+                trackRows.Add((info.TrackType!, lane == null ? -1 : pairIndex[lane.Pair.Key], lane?.TrackValueIndex ?? 0, info.ClipIds.Count));
+                foreach (var clipId in info.ClipIds)
+                {
+                    var clip = doc.Clips[clipId];
+                    clipRows.Add((pairIndex[doc.Pairs[clip.PairId].Key], clipValueIndex[clipId], clip.Start, clip.End));
+                }
+            }
+            var tail = TlbMetadataBuilder.Build(pairTypes, labels, doc.Markers, trackRows, clipRows);
             var bytes = new byte[hotLength + tail.Length];
 
             BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(0), TlbLayout.Magic);

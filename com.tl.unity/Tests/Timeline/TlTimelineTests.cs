@@ -551,6 +551,50 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
+        public void ExportWritesJsonThatBakesToTheSamePackedBytes()
+        {
+            var push = Timeline("Push");
+            Clip(ForceTrack(push), 0, 2, 4f);
+            Clip(ForceTrack(push), 1, 2, 6f);
+            var dash = Timeline("Dash");
+            Clip(ForceTrack(dash), 0, 1, 8f);
+            ThenPlayClipOn(push, dash, null);
+            var directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tl-export-json-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                var names = TlExport.ExportJson(new[] { push }, directory);
+                CollectionAssert.AreEquivalent(new[] { "Push", "Dash" }, names);
+                using (var project = Tl.Gen.Tlb.TlJson.ReadProject(System.IO.File.ReadAllBytes(System.IO.Path.Combine(directory, "tl.project.json"))))
+                    Assert.AreEqual(2, project.RootElement.GetProperty("timelines").GetArrayLength());
+                var rate = TlProjectSettings.instance.TicksPerSecond;
+                var assemblies = push.GetOutputTracks().OfType<TlTrack>().Select(t => t.Template.ClipType.Assembly).Append(typeof(TlNoSettings<>).Assembly).Distinct().ToArray();
+                var resolver = Tl.Gen.Tlb.BakerAssemblyResolver.FromAssemblies(assemblies);
+                foreach (var (timeline, refs) in new[] { (push, new[] { "Dash" }), (dash, new string[0]) })
+                {
+                    var baker = new TlBaker(null, Entity.Null, new HashSet<ComponentType>(), null);
+                    var blob = TlTimelinePacker.Pack(timeline, rate, TlTimelinePacker.Catalog, ref baker, timeline, out _);
+                    try
+                    {
+                        var packed = blob.Value.Tlb.ToArray();
+                        var json = System.IO.File.ReadAllText(System.IO.Path.Combine(directory, timeline.name + ".json"));
+                        var manifest = Tl.Gen.Tlb.LibraryBake.Manifest(refs, new string[0], rate);
+                        CollectionAssert.AreEqual(packed, Tl.Gen.Tlb.TimelineBaker.BakeJson(json, resolver, manifest: manifest), timeline.name + " JSON bakes to the packed bytes");
+                        Assert.AreEqual(json, Tl.Gen.Tlb.TimelineJson.Decode(packed, resolver, manifest), timeline.name + " decodes to the exported JSON");
+                    }
+                    finally
+                    {
+                        blob.Dispose();
+                    }
+                }
+            }
+            finally
+            {
+                if (System.IO.Directory.Exists(directory))
+                    System.IO.Directory.Delete(directory, true);
+            }
+        }
+
+        [Test]
         public void TheProjectSettingDefaultsToSixtyTicksPerSecond()
         {
             Assert.AreEqual(60, TlProjectSettings.DefaultTicksPerSecond);

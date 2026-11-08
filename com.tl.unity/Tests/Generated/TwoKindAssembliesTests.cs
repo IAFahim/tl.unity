@@ -9,12 +9,12 @@ namespace GeneratedGame
         [Test]
         public void KindIdsComeFromKindNamesInEveryAssembly()
         {
-            Assert.AreEqual(KindIndex.IdOf("Gust"), GustKind.Id);
-            Assert.AreEqual(KindIndex.IdOf("Damage"), DamageKind.Id);
-            Assert.AreEqual(KindIndex.IdOf("StatChange"), StatChangeKind.Id);
+            Assert.AreEqual(KindIndex.IdOf("GeneratedGame.Gust"), GustKind.Id);
+            Assert.AreEqual(KindIndex.IdOf("KindGame.Damage"), DamageKind.Id);
+            Assert.AreEqual(KindIndex.IdOf("KindGame.StatChange"), StatChangeKind.Id);
             var registry = KindRegistry.Discover();
-            var gust = registry.IndexOf("Gust");
-            var damage = registry.IndexOf("Damage");
+            var gust = registry.IndexOf("GeneratedGame.Gust");
+            var damage = registry.IndexOf("KindGame.Damage");
             Assert.GreaterOrEqual(gust, 0);
             Assert.GreaterOrEqual(damage, 0);
             Assert.AreEqual("Tl.Unity.Generated.Tests", registry.SourceOf(gust));

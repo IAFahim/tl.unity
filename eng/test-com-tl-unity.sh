@@ -31,7 +31,7 @@ if [ "${TL_UNITY_PACKS:-0}" = 1 ]; then
   for pack in "$root"/external/tl-kinds/packs/*/package.json; do
     name="$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$pack" | head -1)"
     packs="$packs    \"$name\": \"file:$(native "$(dirname "$pack")")\","$'\n'
-    if [ "$testables" = '"com.tl.unity"' ]; then testables="\"$name\""; else testables="$testables, \"$name\""; fi
+    testables="$testables, \"$name\""
   done
 fi
 if [ "$(uname -s)" = Linux ]; then

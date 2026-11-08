@@ -57,6 +57,7 @@ public sealed class BakerAssemblyResolver
 
     public Type ResolveType(string @namespace, string typeName, string? assemblyName, string context)
     {
+        if (typeName.Contains('<')) return TypeNames.ResolveGeneric(this, @namespace, typeName, assemblyName, context);
         ValidateBareName(@namespace, allowGlobal: true, "namespace", context);
         ValidateBareName(typeName, allowGlobal: false, "type", context);
 
@@ -157,7 +158,7 @@ public sealed class BakerAssemblyResolver
             if (allowGlobal) return;
             throw new BakeDiagnosticException($"empty bare name: '{field}' in {context} must be a bare name.");
         }
-        if (value.Contains('.') || value.Contains(',') || value.Contains('+') || value.Contains('='))
+        if (field != "namespace" && value.Contains('.') || value.Contains(',') || value.Contains('+') || value.Contains('='))
             throw new BakeDiagnosticException($"dotted name rejected: '{field}' in {context} must be a bare name without '.', ',', '+' or '='; got '{value}'.");
     }
 
@@ -223,66 +224,5 @@ public sealed class BakerAssemblyResolver
     }
 
     public static object PopulateStruct(Type structType, JsonElement element, string contextName)
-    {
-        if (element.ValueKind != JsonValueKind.Object)
-            throw new BakeDiagnosticException($"wrong-typed value for {contextName}: expected object, got {element.ValueKind}.");
-
-        var allFields = structType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-        var fieldMap = new Dictionary<string, FieldInfo>(StringComparer.Ordinal);
-        foreach (var f in allFields)
-        {
-            var name = f.Name;
-            if (name.StartsWith("<") && name.Contains(">k__BackingField"))
-            {
-                name = name.Substring(1, name.IndexOf('>') - 1);
-            }
-            fieldMap[name] = f;
-        }
-
-        object boxed = Activator.CreateInstance(structType)!;
-
-        foreach (var prop in element.EnumerateObject())
-        {
-            if (!fieldMap.TryGetValue(prop.Name, out var field))
-            {
-                throw new BakeDiagnosticException($"unknown field name in track/payload: field '{prop.Name}' not found on type '{structType.Name}' in {contextName}.");
-            }
-
-            var val = ReadPrimitive(prop.Value, field.FieldType, prop.Name, contextName);
-            field.SetValue(boxed, val);
-        }
-
-        return boxed;
-    }
-
-        private static readonly Dictionary<Type, (Func<JsonElement, object?> Read, string Name)> NumberReaders = new()
-        {
-            [typeof(byte)] = (e => e.ValueKind == JsonValueKind.Number && e.TryGetByte(out var v) ? v : null, "byte"),
-            [typeof(sbyte)] = (e => e.ValueKind == JsonValueKind.Number && e.TryGetSByte(out var v) ? v : null, "sbyte"),
-            [typeof(short)] = (e => e.ValueKind == JsonValueKind.Number && e.TryGetInt16(out var v) ? v : null, "short"),
-            [typeof(ushort)] = (e => e.ValueKind == JsonValueKind.Number && e.TryGetUInt16(out var v) ? v : null, "ushort"),
-            [typeof(int)] = (e => e.ValueKind == JsonValueKind.Number && e.TryGetInt32(out var v) ? v : null, "int"),
-            [typeof(uint)] = (e => e.ValueKind == JsonValueKind.Number && e.TryGetUInt32(out var v) ? v : null, "uint"),
-            [typeof(long)] = (e => e.ValueKind == JsonValueKind.Number && e.TryGetInt64(out var v) ? v : null, "long"),
-            [typeof(ulong)] = (e => e.ValueKind == JsonValueKind.Number && e.TryGetUInt64(out var v) ? v : null, "ulong"),
-            [typeof(float)] = (e => e.ValueKind == JsonValueKind.Number && e.TryGetSingle(out var v) ? v : null, "float"),
-            [typeof(double)] = (e => e.ValueKind == JsonValueKind.Number && e.TryGetDouble(out var v) ? v : null, "double"),
-        };
-
-        private static object ReadPrimitive(JsonElement elem, Type targetType, string fieldName, string contextName)
-        {
-            if (targetType == typeof(bool))
-            {
-                if (elem.ValueKind == JsonValueKind.True) return true;
-                if (elem.ValueKind == JsonValueKind.False) return false;
-                throw new BakeDiagnosticException($"wrong-typed value: field '{fieldName}' in {contextName} expected bool, got {elem.ValueKind}.");
-            }
-            if (NumberReaders.TryGetValue(targetType, out var entry))
-            {
-                var value = entry.Read(elem);
-                if (value != null) return value;
-                throw new BakeDiagnosticException($"wrong-typed value: field '{fieldName}' in {contextName} expected {entry.Name}, got {elem.GetRawText()}.");
-            }
-            throw new BakeDiagnosticException($"wrong-typed value: field '{fieldName}' in {contextName} has unsupported primitive type '{targetType.Name}'.");
-        }
+        => ValueJson.Read(structType, element, contextName);
 }

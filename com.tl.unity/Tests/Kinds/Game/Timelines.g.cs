@@ -12,7 +12,7 @@ namespace KindGame
         public const ushort Vault = 7;
         public const ushort Waltz = 8;
         public const ushort Whistle = 9;
-        public const string LibraryDigest = "09678b6c865ee8ba3b1b61baea451fd30447739ce6f029b8bd5f308ea2ae9355";
+        public const string LibraryDigest = "75b67c9385d6379442f881581242f5aaf0bc176e2a6c21c6ee1909cd25b4230e";
         public const uint TickRate = 60;
     }
 }

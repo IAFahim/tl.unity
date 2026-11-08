@@ -24,7 +24,7 @@ namespace Tl.Unity.Bake.Tests
         public static KindGameFixture Load()
         {
             var fixture = new KindGameFixture();
-            using var library = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(Folder, "library.json")));
+            using var library = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(Folder, "tl.project.json")));
             var root = library.RootElement;
             if (root.TryGetProperty("tickRate", out var rate)) fixture.TickRate = rate.GetUInt32();
             foreach (var channel in root.GetProperty("channels").EnumerateArray()) fixture.Channels.Add(channel.GetString()!);

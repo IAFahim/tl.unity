@@ -30,7 +30,7 @@ internal sealed class KindCatalog
 
     internal static int GroupEntryBytes(int largestValueBytes) => 12 + ((largestValueBytes + 3) & ~3);
 
-    public int IndexOf(string name) => Kinds.FindIndex(k => k.Name == name);
+    public int IndexOf(string name) => Kinds.FindIndex(k => k.FullName == name);
 
     public static KindCatalog Discover(IEnumerable<Assembly> assemblies)
     {
@@ -68,7 +68,8 @@ internal sealed class KindCatalog
             var folds = Named(attribute, "FoldsPulses", 0) != 0;
             if (folds && (mode != KindRule.Combine || accepts == KindAccepts.Spans)) throw Bad($"{where}: FoldsPulses needs Combine mode and pulses.");
             var group = attribute.NamedArguments.FirstOrDefault(n => n.MemberName == "Group").TypedValue.Value as string;
-            if (catalog.Kinds.Any(k => k.Name == type.Name)) throw Bad($"{where}: another kind is already named '{type.Name}'; kind names must be unique.");
+            if (kindTypes.Keys.FirstOrDefault(k => k.FullName == type.FullName) is { } twin)
+                throw Bad($"two kinds are named '{type.FullName}': in assembly '{twin.Assembly.GetName().Name}' and in assembly '{type.Assembly.GetName().Name}'; Tl identifies kinds by full type name (namespace and name), so rename one or move it to another namespace.");
             if (catalog.Kinds.Count == 64) throw Bad($"{where}: more than 64 kinds; merge rare kinds into a kind group.");
             kindTypes[type] = catalog.Kinds.Count;
             catalog.Kinds.Add(new KindInfo(type.Name, type.FullName!, value, bytes, accepts, mode, Named(attribute, "Order", 0), string.IsNullOrEmpty(group) ? null : group, folds, Inline(attribute), Math.Max(0, Named(attribute, "GamePulses", 0))));

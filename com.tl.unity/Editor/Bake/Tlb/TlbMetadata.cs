@@ -63,97 +63,147 @@ public readonly struct TlbLabel
     public string Name { get; init; }
 }
 
+public readonly struct TlbTrackRow
+{
+    public int Type { get; init; }
+    public int Pair { get; init; }
+    public int Value { get; init; }
+    public int Clips { get; init; }
+}
+
+public readonly struct TlbClipRow
+{
+    public int Pair { get; init; }
+    public int Value { get; init; }
+    public uint Start { get; init; }
+    public uint End { get; init; }
+}
+
 public sealed class TlbMetadataView
 {
-    private const int HeaderLength = 48;
+    internal const int HeaderLength = 64;
+    internal const uint Version = 2u;
 
     private TlbMetadataView(
         IReadOnlyList<string> strings,
         IReadOnlyList<TlbTypeIdentity> types,
         IReadOnlyList<(int TrackType, int ClipType)> pairTypes,
-        IReadOnlyList<TlbLabel> labels)
+        IReadOnlyList<TlbLabel> labels,
+        IReadOnlyList<TlbTrackRow> tracks,
+        IReadOnlyList<TlbClipRow> clips)
     {
         Strings = strings;
         Types = types;
         PairTypes = pairTypes;
         Labels = labels;
+        Tracks = tracks;
+        Clips = clips;
     }
 
     public IReadOnlyList<string> Strings { get; }
     public IReadOnlyList<TlbTypeIdentity> Types { get; }
     public IReadOnlyList<(int TrackType, int ClipType)> PairTypes { get; }
     public IReadOnlyList<TlbLabel> Labels { get; }
+    public IReadOnlyList<TlbTrackRow> Tracks { get; }
+    public IReadOnlyList<TlbClipRow> Clips { get; }
 
     internal static TlbMetadataView Parse(ReadOnlySpan<byte> metadata)
     {
         if (metadata.Length < HeaderLength)
             throw new ArgumentException("TLB1 metadata tail is truncated.");
         if (BinaryPrimitives.ReadUInt32LittleEndian(metadata) != TlbMetadata.MetadataMagic ||
-            BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(4)) != 1u)
-            throw new ArgumentException("TLB1 metadata tail magic or version invalid.");
+            BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(4)) != Version)
+            throw new ArgumentException("TLB1 metadata tail magic or version invalid; rebake the asset.");
 
-        var stringCount = BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(8));
-        var stringIndexOffset = BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(12));
-        var stringBlobOffset = BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(16));
-        var stringBlobLen = BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(20));
-        var typeCount = BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(24));
-        var typeTableOffset = BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(28));
-        var pairTypeCount = BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(32));
-        var pairTypeTableOffset = BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(36));
-        var labelCount = BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(40));
-        var labelTableOffset = BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(44));
+        var header = new uint[HeaderLength / 4];
+        for (var i = 0; i < header.Length; i++)
+            header[i] = BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(4 * i));
+        var (stringCount, stringIndexOffset, stringBlobOffset, stringBlobLen) = (header[2], header[3], header[4], header[5]);
+        var (typeCount, typeTableOffset, pairTypeCount, pairTypeTableOffset) = (header[6], header[7], header[8], header[9]);
+        var (labelCount, labelTableOffset, trackCount, trackTableOffset) = (header[10], header[11], header[12], header[13]);
+        var (clipCount, clipTableOffset) = (header[14], header[15]);
 
         Check(metadata.Length, stringIndexOffset, 4ul * stringCount);
         Check(metadata.Length, stringBlobOffset, stringBlobLen);
         Check(metadata.Length, typeTableOffset, 12ul * typeCount);
         Check(metadata.Length, pairTypeTableOffset, 8ul * pairTypeCount);
         Check(metadata.Length, labelTableOffset, 12ul * labelCount);
+        Check(metadata.Length, trackTableOffset, 16ul * trackCount);
+        Check(metadata.Length, clipTableOffset, 16ul * clipCount);
 
-        var blob = metadata.Slice((int)stringBlobOffset, (int)stringBlobLen);
+        var words = metadata.ToArray();
+        uint U(int at) => BinaryPrimitives.ReadUInt32LittleEndian(words.AsSpan(at));
         var strings = new List<string>((int)stringCount);
         for (var i = 0; i < stringCount; i++)
         {
-            var start = BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice((int)stringIndexOffset + 4 * i));
-            var end = i + 1 < stringCount
-                ? BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice((int)stringIndexOffset + 4 * (i + 1)))
-                : stringBlobLen;
-            strings.Add(Encoding.UTF8.GetString(blob.Slice((int)start, (int)(end - start))));
+            var start = U((int)stringIndexOffset + 4 * i);
+            var end = i + 1 < stringCount ? U((int)stringIndexOffset + 4 * (i + 1)) : stringBlobLen;
+            if (start > end || end > stringBlobLen)
+                throw new ArgumentException("TLB1 metadata tail string out of bounds.");
+            strings.Add(Encoding.UTF8.GetString(words, (int)(stringBlobOffset + start), (int)(end - start)));
+        }
+
+        string Str(int at)
+        {
+            var index = U(at);
+            if (index >= stringCount) throw new ArgumentException("TLB1 metadata tail names a string beyond StringCount.");
+            return strings[(int)index];
+        }
+
+        int Index(int at, uint count, bool optional = false)
+        {
+            var value = U(at);
+            if (optional && value == uint.MaxValue) return -1;
+            if (value >= count) throw new ArgumentException("TLB1 metadata tail row index out of bounds.");
+            return (int)value;
         }
 
         var types = new List<TlbTypeIdentity>((int)typeCount);
         for (var i = 0; i < typeCount; i++)
         {
             var at = (int)typeTableOffset + 12 * i;
-            types.Add(new TlbTypeIdentity
-            {
-                Namespace = strings[(int)BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(at))],
-                Name = strings[(int)BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(at + 4))],
-                Assembly = strings[(int)BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(at + 8))],
-            });
+            types.Add(new TlbTypeIdentity { Namespace = Str(at), Name = Str(at + 4), Assembly = Str(at + 8) });
         }
 
         var pairTypes = new List<(int TrackType, int ClipType)>((int)pairTypeCount);
         for (var i = 0; i < pairTypeCount; i++)
         {
             var at = (int)pairTypeTableOffset + 8 * i;
-            pairTypes.Add((
-                (int)BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(at)),
-                (int)BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(at + 4))));
+            pairTypes.Add((Index(at, typeCount), Index(at + 4, typeCount)));
         }
 
         var labels = new List<TlbLabel>((int)labelCount);
         for (var i = 0; i < labelCount; i++)
         {
             var at = (int)labelTableOffset + 12 * i;
-            labels.Add(new TlbLabel
-            {
-                TrackEntry = (int)BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(at)),
-                ClipIndex = (int)BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(at + 4)),
-                Name = strings[(int)BinaryPrimitives.ReadUInt32LittleEndian(metadata.Slice(at + 8))],
-            });
+            labels.Add(new TlbLabel { TrackEntry = (int)U(at), ClipIndex = (int)U(at + 4), Name = Str(at + 8) });
         }
 
-        return new TlbMetadataView(strings, types, pairTypes, labels);
+        var tracks = new List<TlbTrackRow>((int)trackCount);
+        var covered = 0L;
+        for (var i = 0; i < trackCount; i++)
+        {
+            var at = (int)trackTableOffset + 16 * i;
+            var row = new TlbTrackRow { Type = Index(at, typeCount), Pair = Index(at + 4, pairTypeCount, true), Value = (int)U(at + 8), Clips = (int)U(at + 12) };
+            if (row.Pair < 0 != (row.Clips == 0))
+                throw new ArgumentException("TLB1 metadata track row needs a pair exactly when it has clips.");
+            covered += (uint)row.Clips;
+            tracks.Add(row);
+        }
+        if (covered != clipCount)
+            throw new ArgumentException("TLB1 metadata track rows do not cover the clip table.");
+
+        var clips = new List<TlbClipRow>((int)clipCount);
+        for (var i = 0; i < clipCount; i++)
+        {
+            var at = (int)clipTableOffset + 16 * i;
+            var row = new TlbClipRow { Pair = Index(at, pairTypeCount), Value = (int)U(at + 4), Start = U(at + 8), End = U(at + 12) };
+            if (row.Start >= row.End)
+                throw new ArgumentException("TLB1 metadata clip row window is empty.");
+            clips.Add(row);
+        }
+
+        return new TlbMetadataView(strings, types, pairTypes, labels, tracks, clips);
     }
 
     private static void Check(int total, uint offset, ulong length)
@@ -165,102 +215,124 @@ public sealed class TlbMetadataView
 
 internal static class TlbMetadataBuilder
 {
-    public static byte[] Build((Type Track, Type Clip)[] pairTypes, List<(int Track, int Clip, string Name)> labels, List<FastMarker>? markers = null)
+    public static byte[] Build(
+        (Type Track, Type Clip)[] pairTypes,
+        List<(int Track, int Clip, string Name)> labels,
+        List<FastMarker>? markers,
+        IReadOnlyList<(Type Type, int Pair, int Value, int Clips)> tracks,
+        IReadOnlyList<(int Pair, int Value, uint Start, uint End)> clips)
     {
+        var distinctTypes = pairTypes
+            .SelectMany(pair => new[] { pair.Track, pair.Clip })
+            .Concat(tracks.Select(t => t.Type))
+            .Concat((markers ?? new List<FastMarker>()).Where(m => m.MarkerType != null).Select(m => m.MarkerType!))
+            .Distinct()
+            .Select(t => (Type: t, Namespace: t.Namespace ?? string.Empty, Name: TypeNames.JsonName(t), Assembly: t.Assembly.GetName().Name ?? string.Empty))
+            .OrderBy(t => t.Namespace, StringComparer.Ordinal)
+            .ThenBy(t => t.Name, StringComparer.Ordinal)
+            .ThenBy(t => t.Assembly, StringComparer.Ordinal)
+            .ToArray();
+
         var pool = new SortedSet<string>(StringComparer.Ordinal);
-        foreach (var (track, clip) in pairTypes)
+        foreach (var type in distinctTypes)
         {
-            pool.Add(track.Namespace ?? string.Empty);
-            pool.Add(track.Name);
-            pool.Add(track.Assembly.GetName().Name ?? string.Empty);
-            pool.Add(clip.Namespace ?? string.Empty);
-            pool.Add(clip.Name);
-            pool.Add(clip.Assembly.GetName().Name ?? string.Empty);
+            pool.Add(type.Namespace);
+            pool.Add(type.Name);
+            pool.Add(type.Assembly);
         }
         foreach (var label in labels)
             pool.Add(label.Name);
-        if (markers != null)
-            foreach (var marker in markers)
-                if (marker.MarkerType != null)
-                {
-                    pool.Add(marker.MarkerType.Namespace ?? string.Empty);
-                    pool.Add(marker.MarkerType.Name);
-                    pool.Add(marker.MarkerType.Assembly.GetName().Name ?? string.Empty);
-                }
 
         var strings = pool.ToArray();
         var index = new Dictionary<string, int>(strings.Length, StringComparer.Ordinal);
         for (var i = 0; i < strings.Length; i++)
             index[strings[i]] = i;
 
-        var blobLimit = 48 + 4 * strings.Length;
+        var header = TlbMetadataView.HeaderLength;
+        var blobLimit = header + 4 * strings.Length;
         var offsets = new uint[strings.Length];
         using var blob = new MemoryStream();
         for (var i = 0; i < strings.Length; i++)
         {
             offsets[i] = (uint)blob.Length;
             var encoded = Encoding.UTF8.GetBytes(strings[i]);
-            blob.Write(encoded);
+            blob.Write(encoded, 0, encoded.Length);
         }
         var stringBlobLen = (uint)blob.Length;
 
-        var distinctTypes = pairTypes
-            .SelectMany(pair => new[] { pair.Track, pair.Clip })
-            .Concat((markers ?? new List<FastMarker>()).Where(m => m.MarkerType != null).Select(m => m.MarkerType!))
-            .Distinct()
-            .OrderBy(t => t.Namespace ?? string.Empty, StringComparer.Ordinal)
-            .ThenBy(t => t.Name, StringComparer.Ordinal)
-            .ThenBy(t => t.Assembly.GetName().Name ?? string.Empty, StringComparer.Ordinal)
-            .ToArray();
         var typeIndex = new Dictionary<Type, int>(distinctTypes.Length);
         for (var i = 0; i < distinctTypes.Length; i++)
-            typeIndex[distinctTypes[i]] = i;
+            typeIndex[distinctTypes[i].Type] = i;
 
         var typeTableOffset = blobLimit + (int)stringBlobLen;
         var pairTypeTableOffset = typeTableOffset + 12 * distinctTypes.Length;
         var labelTableOffset = pairTypeTableOffset + 8 * pairTypes.Length;
-        var total = labelTableOffset + 12 * labels.Count;
+        var trackTableOffset = labelTableOffset + 12 * labels.Count;
+        var clipTableOffset = trackTableOffset + 16 * tracks.Count;
+        var total = clipTableOffset + 16 * clips.Count;
 
         var metadata = new byte[total];
-        BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(0), TlbMetadata.MetadataMagic);
-        BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(4), 1u);
-        BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(8), (uint)strings.Length);
-        BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(12), 48u);
-        BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(16), (uint)blobLimit);
-        BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(20), stringBlobLen);
-        BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(24), (uint)distinctTypes.Length);
-        BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(28), (uint)typeTableOffset);
-        BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(32), (uint)pairTypes.Length);
-        BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(36), (uint)pairTypeTableOffset);
-        BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(40), (uint)labels.Count);
-        BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(44), (uint)labelTableOffset);
+        void W(int at, uint value) => BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(at), value);
+        W(0, TlbMetadata.MetadataMagic);
+        W(4, TlbMetadataView.Version);
+        W(8, (uint)strings.Length);
+        W(12, (uint)header);
+        W(16, (uint)blobLimit);
+        W(20, stringBlobLen);
+        W(24, (uint)distinctTypes.Length);
+        W(28, (uint)typeTableOffset);
+        W(32, (uint)pairTypes.Length);
+        W(36, (uint)pairTypeTableOffset);
+        W(40, (uint)labels.Count);
+        W(44, (uint)labelTableOffset);
+        W(48, (uint)tracks.Count);
+        W(52, (uint)trackTableOffset);
+        W(56, (uint)clips.Count);
+        W(60, (uint)clipTableOffset);
 
         for (var i = 0; i < strings.Length; i++)
-            BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(48 + 4 * i), offsets[i]);
+            W(header + 4 * i, offsets[i]);
         blob.ToArray().CopyTo(metadata, blobLimit);
 
         for (var i = 0; i < distinctTypes.Length; i++)
         {
             var at = typeTableOffset + 12 * i;
-            var type = distinctTypes[i];
-            BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(at), (uint)index[type.Namespace ?? string.Empty]);
-            BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(at + 4), (uint)index[type.Name]);
-            BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(at + 8), (uint)index[type.Assembly.GetName().Name ?? string.Empty]);
+            W(at, (uint)index[distinctTypes[i].Namespace]);
+            W(at + 4, (uint)index[distinctTypes[i].Name]);
+            W(at + 8, (uint)index[distinctTypes[i].Assembly]);
         }
 
         for (var i = 0; i < pairTypes.Length; i++)
         {
             var at = pairTypeTableOffset + 8 * i;
-            BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(at), (uint)typeIndex[pairTypes[i].Track]);
-            BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(at + 4), (uint)typeIndex[pairTypes[i].Clip]);
+            W(at, (uint)typeIndex[pairTypes[i].Track]);
+            W(at + 4, (uint)typeIndex[pairTypes[i].Clip]);
         }
 
         for (var i = 0; i < labels.Count; i++)
         {
             var at = labelTableOffset + 12 * i;
-            BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(at), (uint)labels[i].Track);
-            BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(at + 4), (uint)labels[i].Clip);
-            BinaryPrimitives.WriteUInt32LittleEndian(metadata.AsSpan(at + 8), (uint)index[labels[i].Name]);
+            W(at, (uint)labels[i].Track);
+            W(at + 4, (uint)labels[i].Clip);
+            W(at + 8, (uint)index[labels[i].Name]);
+        }
+
+        for (var i = 0; i < tracks.Count; i++)
+        {
+            var at = trackTableOffset + 16 * i;
+            W(at, (uint)typeIndex[tracks[i].Type]);
+            W(at + 4, tracks[i].Pair < 0 ? uint.MaxValue : (uint)tracks[i].Pair);
+            W(at + 8, (uint)tracks[i].Value);
+            W(at + 12, (uint)tracks[i].Clips);
+        }
+
+        for (var i = 0; i < clips.Count; i++)
+        {
+            var at = clipTableOffset + 16 * i;
+            W(at, (uint)clips[i].Pair);
+            W(at + 4, (uint)clips[i].Value);
+            W(at + 8, clips[i].Start);
+            W(at + 12, clips[i].End);
         }
 
         return metadata;

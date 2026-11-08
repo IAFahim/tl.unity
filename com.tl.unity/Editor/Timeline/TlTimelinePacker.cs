@@ -30,9 +30,34 @@ namespace Tl.Unity.Editor
         public static BlobAssetReference<TlTimelineBlob> Pack(TimelineAsset timeline, uint tickRate, BakeKinds catalog, ref TlBaker baker, UnityEngine.Object context, out ulong kindMask)
         {
             var name = timeline.name;
+            var typed = Typed(timeline, tickRate, ref baker, context, out var refs, out var channels, out var written);
+            var names = new string[refs.Count];
+            for (var i = 0; i < names.Length; i++)
+                names[i] = i == 0 && typed.Next != null ? typed.Next : "~" + i;
+            var manifest = LibraryBake.Manifest(names, channels, tickRate);
+            var timelineBytes = Bake(typed, manifest, written, refs, 0);
+            uint[] sites = null;
+            if (written.Any(w => TlDirectorTimelines.IdFields(w.data).Any()))
+                sites = Sites(timelineBytes, Bake(typed, manifest, written, refs, Marker), refs.Count);
+            kindMask = LibraryBake.KindMask(name, timelineBytes, catalog);
+            return TlTimelineBlobs.Create(AssetOf(timeline), tickRate, name, timelineBytes, LibraryBake.KindPayload(name, timelineBytes, catalog), refs.Select(AssetOf).ToArray(), sites);
+        }
+
+        public static string Json(TimelineAsset timeline, uint tickRate, ref TlBaker baker, out int channelCount)
+        {
+            var typed = Typed(timeline, tickRate, ref baker, timeline, out var refs, out var channels, out var written);
+            channelCount = channels.Length;
+            var manifest = LibraryBake.Manifest(refs.Select(r => r.name).ToArray(), channels, tickRate);
+            Fill(written, refs, 0);
+            return TimelineJson.Export(typed, manifest);
+        }
+
+        static TypedTimeline Typed(TimelineAsset timeline, uint tickRate, ref TlBaker baker, UnityEngine.Object context, out List<TimelineAsset> refs, out string[] channels, out List<(TypedClip clip, TlClipData data)> written)
+        {
+            var name = timeline.name;
             var typed = new TypedTimeline { Name = name, Duration = Ticks(timeline.duration, tickRate) };
-            var refs = new List<TimelineAsset>();
-            var channels = Array.Empty<string>();
+            refs = new List<TimelineAsset>();
+            channels = Array.Empty<string>();
             var settings = TlDirectorTimelines.Settings(timeline);
             if (settings != null)
             {
@@ -49,7 +74,7 @@ namespace Tl.Unity.Editor
                     typed.Channel = channels[channels.Length - 1];
                 }
             }
-            var written = new List<(TypedClip clip, TlClipData data)>();
+            written = new List<(TypedClip clip, TlClipData data)>();
             TlClipData.AssetResolver = AssetResolver;
             foreach (var track in timeline.GetOutputTracks())
             {
@@ -88,21 +113,18 @@ namespace Tl.Unity.Editor
                 if (typedTrack.Clips.Count > 0)
                     typed.Tracks.Add(typedTrack);
             }
-            var names = new string[refs.Count];
-            for (var i = 0; i < names.Length; i++)
-                names[i] = i == 0 && typed.Next != null ? typed.Next : "~" + i;
-            var manifest = LibraryBake.Manifest(names, channels, tickRate);
-            var timelineBytes = Bake(typed, manifest, written, refs, 0);
-            uint[] sites = null;
-            if (written.Any(w => TlDirectorTimelines.IdFields(w.data).Any()))
-                sites = Sites(timelineBytes, Bake(typed, manifest, written, refs, Marker), refs.Count);
-            kindMask = LibraryBake.KindMask(name, timelineBytes, catalog);
-            return TlTimelineBlobs.Create(AssetOf(timeline), tickRate, name, timelineBytes, LibraryBake.KindPayload(name, timelineBytes, catalog), refs.Select(AssetOf).ToArray(), sites);
+            return typed;
         }
 
         const ushort Marker = 0x8000;
 
         static byte[] Bake(TypedTimeline typed, LibraryManifest manifest, List<(TypedClip clip, TlClipData data)> written, List<TimelineAsset> refs, ushort marker)
+        {
+            Fill(written, refs, marker);
+            return LibraryBake.BakeTyped(typed, manifest);
+        }
+
+        static void Fill(List<(TypedClip clip, TlClipData data)> written, List<TimelineAsset> refs, ushort marker)
         {
             TlClipData.LocalIdResolver = asset => asset is TimelineAsset target && refs.IndexOf(target) is var index && index >= 0 ? (ushort)((index + 1) | marker) : (ushort)0;
             try
@@ -117,7 +139,6 @@ namespace Tl.Unity.Editor
             {
                 TlClipData.LocalIdResolver = null;
             }
-            return LibraryBake.BakeTyped(typed, manifest);
         }
 
         static uint[] Sites(byte[] plain, byte[] marked, int count)

@@ -37,7 +37,7 @@ namespace Tl.Gen.Unity
             shape.UsedColumns = new bool[shape.Columns.Count];
             shape.UsedContexts = new bool[shape.Contexts.Count];
             foreach (var kind in kinds)
-                foreach (var (_, feeder) in FeedersOf(assignment, kind.Name))
+                foreach (var (_, feeder) in FeedersOf(assignment, kind.Key))
                     foreach (var parameter in feeder.Method.Params)
                     {
                         if (parameter.Kind != ConsumerParamKind.Column && parameter.Kind != ConsumerParamKind.ColumnReadOnly && parameter.Kind != ConsumerParamKind.Context)
@@ -162,7 +162,7 @@ namespace Tl.Gen.Unity
 
         static void EmitFeedKind(StringBuilder writer, Shape shape, SystemAssignment assignment, int assignmentIndex, UnityKindInfo info, int ordinal, ISet<string> tlFrames)
         {
-            var feeders = FeedersOf(assignment, info.Name);
+            var feeders = FeedersOf(assignment, info.Key);
             var value = info.Decl.ValueTypeName;
             W(writer, "void Feed_" + ordinal + "(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks" + ColumnArgs(shape, true) + ")");
             W(writer, "{");

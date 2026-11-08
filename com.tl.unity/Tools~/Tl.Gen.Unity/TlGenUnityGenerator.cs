@@ -144,7 +144,7 @@ namespace Tl.Gen.Unity
                 if (index >= 0)
                     foreach (var kind in assignments[index].Kinds)
                         foreach (var info in kinds)
-                            if (info.Name == kind.Name)
+                            if (info.Key == kind.Id)
                                 (info.Foreign ? fed : own).Add(info);
                 var isAuto = ReferenceEquals(model, auto);
                 if (own.Count != 0 || !isAuto)

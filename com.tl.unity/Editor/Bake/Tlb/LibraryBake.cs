@@ -53,11 +53,11 @@ public sealed class BakeKinds
             var kind = catalog.Kinds[k];
             KindOverride given = default;
             if (overrides != null)
-                overrides.TryGetValue(kind.Name, out given);
+                overrides.TryGetValue(kind.FullName, out given);
             Inline[k] = given.Inline ?? kind.Inline ?? -1;
             GamePulses[k] = given.GamePulses ?? kind.GamePulses;
         }
     }
 
-    public IReadOnlyList<string> Names => Catalog.Kinds.Select(k => k.Name).ToList();
+    public IReadOnlyList<string> Names => Catalog.Kinds.Select(k => k.FullName).ToList();
 }
