@@ -10,7 +10,7 @@ machine's scratch project.
 | S-A generator-made `IComponentData` on a `partial` pack struct | PASS, with one limit | main path; the limit shapes phase 8 |
 | S-B one folder with `.csproj` and `package.json` | PASS | main path, three rules |
 | S-C `Tl.Mathematics.float3` against Unity's `float3` in Burst | PASS | decision 1 main path; the conditional-alias fallback is not taken |
-| S-D Unity generator reads kinds from a referenced assembly | FAIL today | fallback until phase 2: a kind and every track that feeds it share one assembly |
+| S-D Unity generator reads kinds from a referenced assembly | FAIL today, fixed in phase 2 | see the phase 2 result below |
 
 ## S-A: generator-made component, registered by the ILPP, used by Burst jobs
 
@@ -119,6 +119,17 @@ Fallback until then: a kind and every track that feeds it live in one assembly. 
 tracks, like `ForceKind` with `ForceTrack`), and game code keeps its own kinds in its own assembly, as the Force contract does. Proposed for
 phase 2 (one front end): read kinds from referenced assemblies, generate feeders only in the feeding assembly, and keep kind types and the
 apply in the declaring assembly.
+
+### Phase 2 result (tl 79971f85, tl.unity 3c3f6df)
+
+Fixed. Both generators read kinds from referenced assemblies (`SystemReader` foreign kinds). The feeding assembly emits only a
+feed job (Unity: `TlFeedSystem<T>` in `TlFeedGroup`, before every `TlKindSystem`; .NET: a feed loop the host runs before the
+kind's own system); the declaring assembly keeps the kind types and `Apply`. Entries carry their owner (`KindEntry.Owner`,
+routed at insertion on Unity, through `KindStore.Join` on .NET) and a value slot; the feeder writes the value and `Ready`, `Apply`
+reads it in entry order, so the result is bit-equal to one assembly. Proof: `TwoAssemblyTests` (tl, also against a one-assembly
+control) and `PushTwoAssemblyTests` (Unity) both give 12545803591333190611. Limit: a kind from another assembly is fed only from
+consumers outside `[TimelineSystem]` structs (TLUNITY9106); the feeding entity needs the feeder's own columns or its entries stay
+unfed.
 
 ## How to run them again
 
