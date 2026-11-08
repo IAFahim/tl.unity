@@ -175,6 +175,55 @@ namespace Tl.Unity.Tests
         }
 
         [Test]
+        public void AKindFreeLiveSwapKeepsItsPositionForOneStep()
+        {
+            using var closed = Closed();
+            var slots = Slots(closed);
+            Assert.IsTrue(Start(ref slots, RunId, 4));
+            var buffer = _entities.GetBuffer<Playback>(_entity);
+            var value = buffer[0];
+            value.Flags = global::Tl.PlaybackFlags.None;
+            value.Reserved = 0xc37b;
+            buffer[0] = value;
+            var handle = _world.CreateSystem<TimelineAdvanceSystem>();
+            ref var state = ref _world.Unmanaged.ResolveSystemStateRef(handle);
+            using var changed = new NativeArray<ushort>(new[] { RunId }, Allocator.TempJob);
+            using var query = _entities.CreateEntityQuery(ComponentType.ReadWrite<Playback>());
+            new TlTimelineSwapJob
+            {
+                Index = new KindIndex { Timelines = _view.Timelines, TimelineCount = _view.TimelineCount },
+                PlaybackHandle = state.GetBufferTypeHandle<Playback>(false),
+                PlayingHandle = state.GetComponentTypeHandle<TimelinePlaying>(false),
+                Swapped = changed,
+            }.Run(query);
+            var advance = new TimelineAdvanceJob { View = _view, PlaybackHandle = state.GetBufferTypeHandle<Playback>(false) };
+            advance.Run(query);
+            buffer = _entities.GetBuffer<Playback>(_entity);
+            Assert.AreEqual(4, buffer[0].Tick);
+            Assert.AreEqual(0xc37b, buffer[0].Reserved);
+            advance.Run(query);
+            Assert.AreEqual(5, _entities.GetBuffer<Playback>(_entity)[0].Tick);
+        }
+
+        [TestCase(RunId, 5)]
+        [TestCase(SlideId, 7)]
+        public void RebindClampsOrWrapsAShorterTimelineAndKeepsReserved(int timeline, int expected)
+        {
+            var slot = new global::Tl.Playback
+            {
+                Timeline = (ushort)timeline,
+                Tick = 25,
+                Flags = global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Reverse,
+                Reserved = 0xc37b,
+            };
+            Assert.IsTrue(global::Tl.PlaybackRules.Rebind(ref slot, _view.Timelines, _view.TimelineCount));
+            Assert.AreEqual(expected, slot.Tick);
+            Assert.AreEqual(0xc37b, slot.Reserved);
+            Assert.AreNotEqual(0, (int)(slot.Flags & global::Tl.PlaybackFlags.Paused));
+            Assert.AreNotEqual(0, (int)(slot.Flags & global::Tl.PlaybackFlags.Reverse));
+        }
+
+        [Test]
         public void Advance_WrapsLoop()
         {
             var slot = Started(RunId, 9);

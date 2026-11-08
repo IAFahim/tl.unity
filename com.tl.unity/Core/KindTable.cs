@@ -138,6 +138,22 @@ public unsafe struct KindTable
         return false;
     }
 
+    public void Purge(int row, byte slot, ushort timeline)
+    {
+        var length = Length[row];
+        var data = Data(row);
+        var kept = 0;
+        for (var i = 0; i < length; i++)
+        {
+            var entry = (KindEntry*)(data + (nuint)i * (nuint)Stride);
+            if (entry->Slot == slot && entry->Timeline == timeline) continue;
+            if (kept != i) Buffer.MemoryCopy(entry, data + (nuint)kept * (nuint)Stride, Stride, Stride);
+            kept++;
+        }
+        Length[row] = (ushort)kept;
+        if (kept == 0) Active[row >> 6] &= ~(1ul << (row & 63));
+    }
+
     public void RemovePulses(int row)
     {
         var length = Length[row];

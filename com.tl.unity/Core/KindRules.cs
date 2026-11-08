@@ -20,10 +20,18 @@ public unsafe interface IKindRows
 {
     KindEntry* Append(int row, LibraryFeeder* feeder);
     void RemoveSpan(int row, int kind, byte slot, ushort timeline, ushort step);
+    void Purge(int row, byte slot, ushort timeline);
 }
 
 public static unsafe class KindRules
 {
+    public static bool Rebind<TRows>(in KindTables t, ref TRows rows, int row, ref Playback s, int slot) where TRows : struct, IKindRows
+    {
+        if (s.Timeline == 0) return false;
+        rows.Purge(row, (byte)slot, s.Timeline);
+        return PlaybackRules.Rebind(ref s, t.Timelines, t.TimelineCount);
+    }
+
     public static void Close<TRows>(in KindTables t, ref TRows rows, int row, ref Playback s, int slot) where TRows : struct, IKindRows
     {
         Stop(in t, ref rows, row, in s, slot);
@@ -77,6 +85,7 @@ public static unsafe class KindRules
 
     static bool TickSlot<TRows>(in KindTables t, ref TRows rows, int row, int i, Playback* s, int stepDir) where TRows : struct, IKindRows
     {
+        if ((s->Flags & (PlaybackFlags.Began | PlaybackFlags.ReenterPending)) == (PlaybackFlags.Began | PlaybackFlags.ReenterPending)) s->Flags &= ~PlaybackFlags.ReenterPending;
         s->Flags &= ~PlaybackFlags.Began;
         if ((s->Flags & PlaybackFlags.Stopping) != 0)
         {
@@ -91,6 +100,12 @@ public static unsafe class KindRules
         if ((s->Flags & PlaybackFlags.StartPending) != 0)
         {
             Begin(in t, ref rows, row, i, s, stepDir);
+            return true;
+        }
+        if ((s->Flags & PlaybackFlags.ReenterPending) != 0)
+        {
+            s->Flags |= PlaybackFlags.Began;
+            Reenter(in t, ref rows, row, in *s, i);
             return true;
         }
         if ((s->Flags & PlaybackFlags.Paused) != 0) return true;

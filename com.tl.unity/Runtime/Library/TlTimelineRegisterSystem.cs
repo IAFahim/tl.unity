@@ -106,7 +106,6 @@ namespace Tl.Unity
             new TlTimelineSwapJob
             {
                 Index = index,
-                View = published.View,
                 PlaybackHandle = _playbackHandle,
                 PlayingHandle = _playingHandle,
                 Handles = handles,

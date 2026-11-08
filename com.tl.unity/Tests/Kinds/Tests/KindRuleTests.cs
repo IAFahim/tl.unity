@@ -30,6 +30,95 @@ namespace KindGame
                 _game.Step();
         }
 
+        unsafe void Swap(ushort timeline)
+        {
+            _game.Entities.CompleteAllTrackedJobs();
+            using var libraryQuery = _game.Entities.CreateEntityQuery(ComponentType.ReadOnly<TimelineLibrary>());
+            var library = libraryQuery.GetSingleton<TimelineLibrary>();
+            var index = library.Kinds;
+            ref var state = ref _game.World.Unmanaged.ResolveSystemStateRef(_game.TickHandle);
+            var handles = default(KindHandleSet);
+            for (var k = 0; k < index.KindCount; k++)
+                if ((index.Bound & (1ul << k)) != 0)
+                    KindHandleSet.Put(ref handles, k, state.GetDynamicComponentTypeHandle(index.EntryTypes[k]), state.GetDynamicComponentTypeHandle(index.ActiveTypes[k]));
+            using var changed = new NativeArray<ushort>(new[] { timeline }, Allocator.TempJob);
+            using var targets = _game.Entities.CreateEntityQuery(ComponentType.ReadWrite<Playback>());
+            new TlTimelineSwapJob
+            {
+                Index = index,
+                Handles = handles,
+                PlaybackHandle = state.GetBufferTypeHandle<Playback>(false),
+                PlayingHandle = state.GetComponentTypeHandle<TimelinePlaying>(false),
+                Swapped = changed,
+            }.Run(targets);
+        }
+
+        [Test]
+        public void ALiveSwapKeepsTheTickWithoutRepeatingStartPulses()
+        {
+            _game.Start(0, KindWorld.Jump);
+            _game.Step();
+            Assert.AreEqual(-1, _game.Stamina(0));
+            Swap(KindWorld.Jump);
+            _game.Step();
+            Assert.AreEqual(0, _game.Slots(0)[0].Tick);
+            Assert.AreEqual(-1, _game.Stamina(0));
+            Assert.AreEqual(12f, _game.Motion(0).Y);
+            Assert.AreEqual(1, _game.Entries<LiftEntry>(0));
+            _game.Step();
+            Assert.AreEqual(1, _game.Slots(0)[0].Tick);
+            Assert.AreEqual(-1, _game.Stamina(0));
+        }
+
+        [Test]
+        public void ALiveSwapPreservesPauseAndDoesNotApplyItsSpans()
+        {
+            _game.Start(0, KindWorld.Jump);
+            _game.Step();
+            _game.Entities.GetBuffer<TimelineRequest>(_game.Rows[0]).Add(TimelineRequest.Pause(0, KindWorld.Jump));
+            _game.Step();
+            var before = _game.Motion(0).Y;
+            Swap(KindWorld.Jump);
+            _game.Step();
+            Assert.AreNotEqual(0, (int)(_game.Slots(0)[0].Flags & global::Tl.PlaybackFlags.Paused));
+            Assert.AreEqual(0, _game.Slots(0)[0].Tick);
+            Assert.AreEqual(before, _game.Motion(0).Y);
+            Assert.AreEqual(-1, _game.Stamina(0));
+            _game.Entities.GetBuffer<TimelineRequest>(_game.Rows[0]).Add(TimelineRequest.Resume(0, KindWorld.Jump));
+            _game.Step();
+            Assert.AreEqual(1, _game.Slots(0)[0].Tick);
+            Assert.AreEqual(before + 6f, _game.Motion(0).Y);
+        }
+
+        [Test]
+        public void ALiveSwapKeepsAnotherPlaybacksSpanOnTheSameKind()
+        {
+            _game.Start(0, KindWorld.Jump);
+            _game.Start(0, KindWorld.PotionHop);
+            _game.Step();
+            Assert.AreEqual(8f, _game.Motion(0).Y);
+            Swap(KindWorld.Jump);
+            _game.Step();
+            Assert.AreEqual(2, _game.Entries<LiftEntry>(0));
+            Assert.AreEqual(16f, _game.Motion(0).Y);
+            Assert.AreEqual(-1, _game.Stamina(0));
+        }
+
+        [Test]
+        public void ALiveSwapDropsStoppingSlots()
+        {
+            _game.Start(0, KindWorld.Jump);
+            _game.Step();
+            _game.Stop(0, KindWorld.Jump);
+            _game.Step();
+            Swap(KindWorld.Jump);
+            _game.Step();
+            Assert.AreEqual(0, _game.Slots(0)[0].Timeline);
+            Assert.AreEqual(6f, _game.Motion(0).Y);
+            Assert.AreEqual(-1, _game.Stamina(0));
+            Assert.AreEqual(0, _game.Entries<LiftEntry>(0));
+        }
+
         [Test]
         public void SpeedBoostOverridesTheNormalWalkByPriorityThenRunTakesOver()
         {

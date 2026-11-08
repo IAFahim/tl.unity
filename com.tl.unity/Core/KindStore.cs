@@ -334,6 +334,17 @@ public sealed unsafe class KindStore : IDisposable
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void RemoveSpan(int entity, int kind, byte slot, ushort timeline, ushort step) => Tables[kind]->RemoveSpan(RowOf(entity, kind), slot, timeline, step, kind);
+
+        public void Purge(int entity, byte slot, ushort timeline)
+        {
+            var kinds = Mask[entity];
+            while (kinds != 0)
+            {
+                var kind = Tz(kinds);
+                kinds &= kinds - 1;
+                Tables[kind]->Purge(RowOf(entity, kind), slot, timeline);
+            }
+        }
     }
 
     internal void Sync()
@@ -417,12 +428,12 @@ public sealed unsafe class KindStore : IDisposable
             {
                 var s = slots + i;
                 if (s->Timeline == 0) continue;
-                if ((s->Flags & PlaybackFlags.Stopping) != 0) { *s = default; continue; }
-                if (s->Timeline > _timelineCount) throw new ArgumentException($"Playback slot {i} of entity {e} names no timeline in the reloaded library.");
-                p.SetPlaying(e, true);
-                if ((s->Flags & (PlaybackFlags.StartPending | PlaybackFlags.Ended)) != 0 || _kindCount == 0) continue;
-                ValidateStart(e, s->Timeline);
-                KindRules.Reenter(in _t, ref _kindRows, e, in *s, i);
+                if ((s->Flags & PlaybackFlags.Stopping) == 0)
+                {
+                    if (s->Timeline > _timelineCount) throw new ArgumentException($"Playback slot {i} of entity {e} names no timeline in the reloaded library.");
+                    ValidateStart(e, s->Timeline);
+                }
+                if (KindRules.Rebind(in _t, ref _kindRows, e, ref *s, i)) p.SetPlaying(e, true);
             }
         }
     }

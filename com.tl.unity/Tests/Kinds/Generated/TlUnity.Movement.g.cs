@@ -421,7 +421,7 @@ var __stage = global::Tl.LibraryViewReader.StageAt(__tl, __tick);
 if (__stage == null) continue;
 var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
 var __kflags = __backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None;
-if ((__pb->Flags & global::Tl.PlaybackFlags.StartPending) != 0 && __tick > 0) __kflags |= global::Tl.FrameFlags.Synthetic;
+if (((__pb->Flags & global::Tl.PlaybackFlags.StartPending) != 0 && __tick > 0) || (__pb->Flags & global::Tl.PlaybackFlags.ReenterPending) != 0) __kflags |= global::Tl.FrameFlags.Synthetic;
 if (__tick == 0) __kflags |= global::Tl.FrameFlags.TimelineStart;
 if (__tick == (ushort)(__tl->Duration - 1)) __kflags |= global::Tl.FrameFlags.TimelineEnd;
 __eb0.Bind(0, __s);
@@ -439,7 +439,7 @@ ushort __len4 = (ushort)(__def->WindowEnd - __def->WindowStart);
 ushort __within4 = (ushort)(__tick - __def->WindowStart);
 sbyte __dir4 = __backward ? (sbyte)-1 : (sbyte)1;
 global::TlUnityGenerated.TlUnityFrames.Frame_0_4(__row4, __first4, __second4, __blend4, __tick, __len4, __within4, (ushort)__def->TrackIndex, (ushort)__tl->Duration, __dir4, __kflags, out var __t4, out var __cc4, out var __f4);
-if (__tick == __def->WindowStart) global::KindGame.Whistle.OnClipStart(in __f4, ref __eb0);
+if (__tick == __def->WindowStart && (__pb->Flags & global::Tl.PlaybackFlags.ReenterPending) == 0) global::KindGame.Whistle.OnClipStart(in __f4, ref __eb0);
 }
 }
 }

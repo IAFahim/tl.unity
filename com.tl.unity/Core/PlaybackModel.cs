@@ -14,6 +14,7 @@ public enum PlaybackFlags : byte
     Stopping = 1 << 4,
     StopAged = 1 << 5,
     Began = 1 << 6,
+    ReenterPending = 1 << 7,
 }
 
 [StructLayout(LayoutKind.Sequential, Size = 8)]
@@ -69,6 +70,7 @@ public sealed unsafe class PlaybackTable : IDisposable
     readonly RequestQueue* _pending;
     readonly ClosingList* _closing;
     bool _disposed;
+    internal ulong LibraryGeneration;
 
     public PlaybackTable(int entityCapacity, int slotsPerEntity = 4)
     {

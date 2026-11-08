@@ -21,6 +21,20 @@ public enum AdvanceResult : byte
 
 public static unsafe class PlaybackRules
 {
+    public static bool Rebind(ref Playback slot, LibraryTimeline* timelines, int timelineCount)
+    {
+        if (slot.Timeline == 0 || (slot.Flags & PlaybackFlags.Stopping) != 0 || (uint)(slot.Timeline - 1) >= (uint)timelineCount || timelines[slot.Timeline - 1].Duration == 0)
+        {
+            slot = default;
+            return false;
+        }
+        var tl = timelines + (slot.Timeline - 1);
+        if (slot.Tick >= tl->Duration) slot.Tick = (ushort)(tl->Loop != 0 ? slot.Tick % tl->Duration : tl->Duration - 1);
+        slot.Flags &= ~PlaybackFlags.Began;
+        if ((slot.Flags & (PlaybackFlags.StartPending | PlaybackFlags.Ended)) == 0) slot.Flags |= PlaybackFlags.ReenterPending;
+        return true;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsLive(in Playback slot) => slot.Timeline != 0 && (slot.Flags & PlaybackFlags.Stopping) == 0;
 
@@ -128,6 +142,11 @@ public static unsafe class PlaybackRules
     public static AdvanceResult Advance(ref Playback slot, LibraryTimeline* timelines, int timelineCount, bool forward)
     {
         var flags = slot.Flags;
+        if ((flags & PlaybackFlags.ReenterPending) != 0)
+        {
+            slot.Flags = flags & ~(PlaybackFlags.ReenterPending | PlaybackFlags.Began | PlaybackFlags.StartPending);
+            return AdvanceResult.Kept;
+        }
         if ((flags & (PlaybackFlags.Ended | PlaybackFlags.Paused)) != 0)
         {
             slot.Flags = flags & ~PlaybackFlags.StartPending;

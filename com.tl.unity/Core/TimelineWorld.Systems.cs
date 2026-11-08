@@ -16,7 +16,8 @@ public sealed partial class TimelineWorld
     public unsafe void ApplyRequests(PlaybackTable players)
     {
         if (players is null) throw new ArgumentNullException(nameof(players));
-        players.Kinds?.Sync();
+        if (players.Kinds != null) players.Kinds.Sync();
+        else SyncPlaybacks(players);
         Drain(players, players.Consumer);
         Drain(players, players.Pending);
     }
@@ -34,6 +35,7 @@ public sealed partial class TimelineWorld
     {
         if (players is null) throw new ArgumentNullException(nameof(players));
         if (players.Kinds != null) throw new InvalidOperationException("A PlaybackTable with a KindStore advances through Tick, not Advance.");
+        SyncPlaybacks(players);
         var timelines = _view.Timelines;
         if (timelines == null) return;
         var count = _view.TimelineCount;
@@ -62,6 +64,23 @@ public sealed partial class TimelineWorld
             ApplyRecord(players, record);
         }
         RequestQueue.Clear(queue);
+    }
+
+    unsafe void SyncPlaybacks(PlaybackTable players)
+    {
+        if (players.LibraryGeneration == _generation) return;
+        for (var entity = 0; entity < players.EntityCapacity; entity++)
+        {
+            var slots = players.SlotsOf(entity);
+            var count = players.CountOf(entity);
+            for (var slot = 0; slot < count; slot++)
+            {
+                if (slots[slot].Timeline > _view.TimelineCount && (slots[slot].Flags & PlaybackFlags.Stopping) == 0)
+                    throw new ArgumentException($"Playback slot {slot} of entity {entity} names no timeline in the reloaded library.");
+                if (!PlaybackRules.Rebind(ref slots[slot], _view.Timelines, _view.TimelineCount)) players.RemoveSlot(entity, slot);
+            }
+        }
+        players.LibraryGeneration = _generation;
     }
 
     unsafe void ApplyRecord(PlaybackTable players, in RequestRecord record)

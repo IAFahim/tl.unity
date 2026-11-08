@@ -11,7 +11,6 @@ namespace Tl.Unity
     public unsafe struct TlTimelineSwapJob : IJobChunk
     {
         [NativeDisableUnsafePtrRestriction] public KindIndex Index;
-        [NativeDisableUnsafePtrRestriction] public global::Tl.LibraryView View;
         public BufferTypeHandle<Playback> PlaybackHandle;
         public ComponentTypeHandle<TimelinePlaying> PlayingHandle;
         [NativeDisableContainerSafetyRestriction] public KindHandleSet Handles;
@@ -32,21 +31,11 @@ namespace Tl.Unity
                 for (var i = 0; i < slots.Length; i++)
                 {
                     var s = slots[i];
-                    if (s.Timeline == 0 || !IsSwapped(s.Timeline) || (s.Flags & global::Tl.PlaybackFlags.Stopping) != 0)
+                    if (s.Timeline == 0 || !IsSwapped(s.Timeline))
                         continue;
-                    var tl = TimelineKernel.GetTimeline(in View, s.Timeline);
-                    if (tl == null || tl->Duration == 0)
-                        continue;
-                    var duration = (int)tl->Duration;
-                    if (s.Tick >= duration)
-                        s.Tick = (ushort)(tl->Loop != 0 ? s.Tick % duration : duration - 1);
-                    if (kinds > 0)
-                    {
-                        cursor.Purge(row, (byte)i, s.Timeline);
-                        s.Flags = (s.Flags & (global::Tl.PlaybackFlags.Reverse | global::Tl.PlaybackFlags.Paused)) | global::Tl.PlaybackFlags.StartPending;
-                    }
+                    var tables = Index.Tables;
+                    touched |= global::Tl.KindRules.Rebind(in tables, ref cursor, row, ref *(global::Tl.Playback*)&s, i);
                     slots[i] = s;
-                    touched = true;
                 }
                 if (touched && chunk.Has(ref PlayingHandle))
                     chunk.SetComponentEnabled(ref PlayingHandle, row, true);

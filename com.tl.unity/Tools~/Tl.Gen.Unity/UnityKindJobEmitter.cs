@@ -502,9 +502,9 @@ namespace Tl.Gen.Unity
                     if (active != null)
                         W(writer, consumer.ConsumerTypeName + ".ExecuteActive(" + EventArgs(events, active, index) + ");");
                     if (start != null)
-                        W(writer, "if (__tick == __def->WindowStart) " + consumer.ConsumerTypeName + ".OnClipStart(" + EventArgs(events, start, index) + ");");
+                        W(writer, "if (__tick == __def->WindowStart && (__pb->Flags & global::Tl.PlaybackFlags.ReenterPending) == 0) " + consumer.ConsumerTypeName + ".OnClipStart(" + EventArgs(events, start, index) + ");");
                     if (end != null)
-                        W(writer, "if (__tick == __def->WindowEnd - 1) " + consumer.ConsumerTypeName + ".OnClipEnd(" + EventArgs(events, end, index) + ");");
+                        W(writer, "if (__tick == __def->WindowEnd - 1 && (__pb->Flags & global::Tl.PlaybackFlags.ReenterPending) == 0) " + consumer.ConsumerTypeName + ".OnClipEnd(" + EventArgs(events, end, index) + ");");
                 }
                 W(writer, "}");
             }
@@ -534,7 +534,7 @@ namespace Tl.Gen.Unity
             else
             {
                 W(writer, "var __kflags = __backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None;");
-                W(writer, "if ((__pb->Flags & global::Tl.PlaybackFlags.StartPending) != 0 && __tick > 0) __kflags |= global::Tl.FrameFlags.Synthetic;");
+                W(writer, "if (((__pb->Flags & global::Tl.PlaybackFlags.StartPending) != 0 && __tick > 0) || (__pb->Flags & global::Tl.PlaybackFlags.ReenterPending) != 0) __kflags |= global::Tl.FrameFlags.Synthetic;");
             }
             W(writer, "if (__tick == 0) __kflags |= global::Tl.FrameFlags.TimelineStart;");
             W(writer, "if (__tick == (ushort)(__tl->Duration - 1)) __kflags |= global::Tl.FrameFlags.TimelineEnd;");
