@@ -1,0 +1,30 @@
+{
+  "name": "Tl.Demo.Motion.Tests",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Pack.Motion",
+    "Tl.Demo.Motion",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Transforms",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+  ],
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS",
+    "TL_PACK_MOTION"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.tl.pack.motion",
+      "expression": "0.0.0",
+      "define": "TL_PACK_MOTION"
+    }
+  ],
+  "autoReferenced": false
+}

@@ -1,0 +1,25 @@
+{
+  "name": "Tl.Demo.Stats",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Pack.Stats",
+    "Tl.Unity.Pack.Stats",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Entities.Hybrid",
+    "Unity.Timeline"
+  ],
+  "defineConstraints": [
+    "TL_PACK_STATS"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.tl.pack.stats",
+      "expression": "0.0.0",
+      "define": "TL_PACK_STATS"
+    }
+  ],
+  "autoReferenced": true
+}

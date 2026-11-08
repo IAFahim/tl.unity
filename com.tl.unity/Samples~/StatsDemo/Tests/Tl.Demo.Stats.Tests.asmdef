@@ -1,0 +1,29 @@
+{
+  "name": "Tl.Demo.Stats.Tests",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Pack.Stats",
+    "Tl.Demo.Stats",
+    "Unity.Collections",
+    "Unity.Entities",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+  ],
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS",
+    "TL_PACK_STATS"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.tl.pack.stats",
+      "expression": "0.0.0",
+      "define": "TL_PACK_STATS"
+    }
+  ],
+  "autoReferenced": false
+}

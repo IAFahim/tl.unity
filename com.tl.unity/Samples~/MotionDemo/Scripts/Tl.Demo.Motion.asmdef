@@ -1,0 +1,21 @@
+{
+  "name": "Tl.Demo.Motion",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Pack.Motion",
+    "Tl.Unity.Pack.Motion",
+    "Unity.Entities"
+  ],
+  "defineConstraints": [
+    "TL_PACK_MOTION"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.tl.pack.motion",
+      "expression": "0.0.0",
+      "define": "TL_PACK_MOTION"
+    }
+  ],
+  "autoReferenced": true
+}

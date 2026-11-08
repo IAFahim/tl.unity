@@ -1,0 +1,31 @@
+{
+  "name": "Tl.Demo.Stats.Editor",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Unity.Editor",
+    "Tl.Unity.Tracks",
+    "Tl.Unity.Tracks.Editor",
+    "Tl.Pack.Stats",
+    "Tl.Unity.Pack.Stats",
+    "Tl.Demo.Stats",
+    "Unity.Entities",
+    "Unity.Entities.Hybrid",
+    "Unity.Scenes",
+    "Unity.Timeline"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "defineConstraints": [
+    "TL_PACK_STATS"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.tl.pack.stats",
+      "expression": "0.0.0",
+      "define": "TL_PACK_STATS"
+    }
+  ],
+  "autoReferenced": true
+}

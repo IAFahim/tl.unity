@@ -1,5 +1,6 @@
 namespace Tl.Mathematics
 {
+    [global::System.Serializable]
     public struct float3
     {
         public float x;

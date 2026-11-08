@@ -1,0 +1,36 @@
+{
+  "name": "Tl.Unity.Pack.Motion.Editor",
+  "rootNamespace": "TlPacks.Motion.Editor",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Unity.Editor",
+    "Tl.Pack.Motion",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Entities.Graphics",
+    "Unity.Mathematics",
+    "Unity.Transforms"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "allowUnsafeCode": false,
+  "autoReferenced": true,
+  "defineConstraints": [
+    "TL_PACK_MOTION"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.tl.pack.motion",
+      "expression": "0.0.0",
+      "define": "TL_PACK_MOTION"
+    },
+    {
+      "name": "com.unity.render-pipelines.universal",
+      "expression": "0.0.0",
+      "define": "TL_URP"
+    }
+  ],
+  "noEngineReferences": false
+}

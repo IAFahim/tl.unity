@@ -31,6 +31,16 @@
       "path": "Samples~/CrowdDemo"
     },
     {
+      "displayName": "Motion demo",
+      "description": "Needs the Motion pack (git URL https://github.com/IAFahim/tl.git?path=/packs/Motion). A cube glides, a sphere breathes and turns red to yellow, a capsule spins and hops while a Priority 5 Move pulls it aside; no game code. Builder, README and a PlayMode test that checks the positions against the .NET pack reference bit for bit.",
+      "path": "Samples~/MotionDemo"
+    },
+    {
+      "displayName": "Stats demo",
+      "description": "Needs the Stats pack (git URL https://github.com/IAFahim/tl.git?path=/packs/Stats). A hero's duel timeline (hits, poison, heal) and a Haste buff change Health and Attack; read-out top left. Builder, README and a PlayMode test (Health 64, 53, 72 at steps 200, 450, 600).",
+      "path": "Samples~/StatsDemo"
+    },
+    {
       "displayName": "Demo hub",
       "description": "Builds a Tl Demos scene with a button per imported demo scene and puts them all in the build list. Import the other demos first, then Tl > Samples > Build Demo Hub.",
       "path": "Samples~/DemoHub"

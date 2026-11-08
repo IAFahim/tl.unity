@@ -16,6 +16,8 @@ public static class DemoHubBuilder
         { "Control Demo", "A Burst job starts a second timeline (Dash) from a clip field when the cube passes x 2." },
         { "Events Demo", "Strike clips raise events: sparks, damage on a dummy through a kind, a Hurt timeline on the dummy, a score." },
         { "Crowd Demo", "10k dancers on one Dance timeline, each from its own start tick. Buttons for 1k, 10k, 100k." },
+        { "Motion Demo", "Motion pack only: a cube glides, a sphere breathes and changes colour, a capsule spins and hops with a Priority override." },
+        { "Stats Demo", "Stats pack: a duel timeline of hits, poison and a heal plus a Haste buff on Health and Attack." },
     };
 
     [MenuItem("Tl/Samples/Build Demo Hub")]

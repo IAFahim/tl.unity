@@ -1,0 +1,31 @@
+{
+  "name": "Tl.Demo.Motion.Editor",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Unity.Editor",
+    "Tl.Unity.Tracks",
+    "Tl.Unity.Tracks.Editor",
+    "Tl.Pack.Motion",
+    "Tl.Demo.Motion",
+    "Unity.Entities",
+    "Unity.Entities.Hybrid",
+    "Unity.Scenes",
+    "Unity.Timeline",
+    "Unity.Timeline.Editor"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "defineConstraints": [
+    "TL_PACK_MOTION"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.tl.pack.motion",
+      "expression": "0.0.0",
+      "define": "TL_PACK_MOTION"
+    }
+  ],
+  "autoReferenced": true
+}

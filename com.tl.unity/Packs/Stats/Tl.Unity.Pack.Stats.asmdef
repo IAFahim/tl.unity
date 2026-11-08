@@ -1,0 +1,24 @@
+{
+  "name": "Tl.Unity.Pack.Stats",
+  "rootNamespace": "TlPacks.Stats",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Pack.Stats",
+    "Unity.Entities",
+    "Unity.Entities.Hybrid"
+  ],
+  "allowUnsafeCode": false,
+  "autoReferenced": true,
+  "defineConstraints": [
+    "TL_PACK_STATS"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.tl.pack.stats",
+      "expression": "0.0.0",
+      "define": "TL_PACK_STATS"
+    }
+  ],
+  "noEngineReferences": false
+}

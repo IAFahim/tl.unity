@@ -91,11 +91,19 @@ namespace Tl.Unity.Editor
 
         static string Literal(string value) => "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
 
+        static bool IsPack(string file)
+        {
+            if (!file.StartsWith("Packages/com.tl.pack.", StringComparison.Ordinal))
+                return false;
+            var slash = file.IndexOf('/', "Packages/".Length);
+            return slash > 0 && !file.Substring(slash).StartsWith("/Tests/", StringComparison.Ordinal);
+        }
+
         static HashSet<string> AssembliesCompiledFromAssets()
         {
             var names = new HashSet<string>(StringComparer.Ordinal);
             foreach (var assembly in CompilationPipeline.GetAssemblies(AssembliesType.Editor))
-                if (assembly.sourceFiles.Any(file => file.StartsWith("Assets/", StringComparison.Ordinal)))
+                if (assembly.sourceFiles.Any(file => file.StartsWith("Assets/", StringComparison.Ordinal) || IsPack(file)))
                     names.Add(assembly.name);
             return names;
         }
