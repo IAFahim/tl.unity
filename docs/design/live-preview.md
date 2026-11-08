@@ -41,6 +41,7 @@ TweenPlayables (annulusgames, `Runtime/Core/TweenAnimationTrack.cs`, `TweenAnima
   systems plus every system in `TlSimulationGroup` (Tl's request, kind tick and apply systems and the coder's own, here `ForceSystem`), then
   steps them at the project tick rate (60 per second) until the playback reaches the playhead tick, exactly as the fixed step does in Play.
   The object's `LocalTransform` is written to its `Transform`, registered with `AnimationMode` first.
+- A playhead at or past the end of a timeline shows the state after its last tick: when the playback hands over to the next timeline (When it ends: Next), the step is dropped and the earlier state is kept, so Push at 3.0 s is x 4.0333 as in Play, not the chained Return timeline's x.
 - Nothing is re-implemented: the same baked blob, library assembler, Burst kind jobs and coder systems run; only the world is private.
 - Writes happen only while Timeline is previewing (`AnimationMode`). Leaving preview restores the Transform; the scene is not dirtied.
 - The coder writes nothing for it (no file, attribute, asset or step); the five Force files preview as they are.

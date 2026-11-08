@@ -113,6 +113,76 @@ namespace ForceDemo.Tests
             Assert.IsFalse(sceneDirty, "the preview leaves no change in the scene");
         }
 
+        [UnityTest]
+        public IEnumerator ScrubbingAtTheEndOfPushShowsWhatPlayDoes()
+        {
+            var scene = Build();
+            EditorSceneManager.OpenScene(scene);
+            SubSceneUtility.EditScene(UnityEngine.Object.FindAnyObjectByType<SubScene>());
+            yield return null;
+            var director = UnityEngine.Object.FindAnyObjectByType<PlayableDirector>();
+            Assert.IsNotNull(director, "the Cube with its Playable Director is loaded");
+            var rest = director.transform.localPosition;
+            var preview = new Dictionary<double, float>();
+            AnimationMode.StartAnimationMode();
+            try
+            {
+                foreach (var time in EndTimes)
+                    preview[time] = Scrub(director, time);
+                foreach (var time in EndTimes.Reverse())
+                    Assert.AreEqual(preview[time], Scrub(director, time), 1e-5f, "a second scrub to " + time + " gives the same x");
+            }
+            finally
+            {
+                AnimationMode.StopAnimationMode();
+            }
+            Assert.AreEqual(rest, director.transform.localPosition, "leaving the preview puts the cube back");
+
+            var play = new SortedDictionary<uint, float>();
+            yield return new EnterPlayMode();
+            var entities = World.DefaultGameObjectInjectionWorld.EntityManager;
+            var query = entities.CreateEntityQuery(ComponentType.ReadOnly<TlTimelineSet>(), ComponentType.ReadOnly<Playback>(), ComponentType.ReadOnly<LocalTransform>());
+            var deadline = Time.realtimeSinceStartup + 60f;
+            var started = false;
+            while (Time.realtimeSinceStartup < deadline)
+            {
+                yield return null;
+                if (query.IsEmpty)
+                    continue;
+                var entity = query.GetSingletonEntity();
+                var playbacks = entities.GetBuffer<Playback>(entity);
+                var push = entities.GetBuffer<TlTimelineSet>(entity)[0].Id;
+                if (playbacks.Length == 0 || playbacks[0].Timeline == 0 || playbacks[0].Timeline != push)
+                {
+                    if (!started)
+                        continue;
+                    break;
+                }
+                started = true;
+                if ((playbacks[0].Flags & global::Tl.PlaybackFlags.StartPending) == 0)
+                    play[playbacks[0].Tick] = entities.GetComponentData<LocalTransform>(entity).Position.x;
+            }
+            yield return new ExitPlayMode();
+
+            var last = play.Keys.Max();
+            var line = "ForceDemo end of Push: play last tick=" + last + " x=" + play[last].ToString("0.0000", CultureInfo.InvariantCulture);
+            foreach (var time in EndTimes)
+                line += string.Format(CultureInfo.InvariantCulture, " t{0}: preview={1:0.0000} play={2}", time, preview[time], play.TryGetValue(Tick(time), out var p) ? p.ToString("0.0000", CultureInfo.InvariantCulture) : "missed");
+            Debug.Log(line);
+            Assert.GreaterOrEqual(last, 179u, "Play reached the end of Push");
+            foreach (var time in EndTimes)
+            {
+                var tick = Tick(time);
+                var expected = play.TryGetValue(tick, out var x) ? x : play[last];
+                Assert.AreEqual(expected, preview[time], 1e-3f, "same x as Play at " + time + " s (tick " + tick + ")");
+                Assert.AreEqual(4.0333f, preview[time], 0.01f, "Push has settled at " + time + " s");
+            }
+        }
+
+        static readonly double[] EndTimes = { 2.0, 2.5, 2.999, 3.0, 3.001 };
+
+        static uint Tick(double time) => (uint)Math.Round(time * 60.0);
+
         static float Scrub(PlayableDirector director, double time)
         {
             director.time = time;

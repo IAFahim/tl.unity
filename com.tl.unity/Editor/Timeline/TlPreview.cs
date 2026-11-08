@@ -174,6 +174,9 @@ namespace Tl.Unity.Editor
             var delta = 1f / TlProjectSettings.instance.TicksPerSecond;
             var result = new Result { Ran = true };
             var started = false;
+            ushort timeline = 0;
+            var handedOver = false;
+            var held = entities.GetComponentData<LocalTransform>(entity);
             var limit = (int)tick + 64;
             for (var step = 0; step < limit; step++)
             {
@@ -191,13 +194,21 @@ namespace Tl.Unity.Editor
                 }
                 started = true;
                 var playback = playbacks[0];
+                if (timeline == 0)
+                    timeline = playback.Timeline;
+                else if (playback.Timeline != timeline)
+                {
+                    handedOver = true;
+                    break;
+                }
                 if ((playback.Flags & global::Tl.PlaybackFlags.StartPending) != 0)
                     continue;
                 result.Tick = playback.Tick;
+                held = entities.GetComponentData<LocalTransform>(entity);
                 if (playback.Tick >= tick)
                     break;
             }
-            var transform = entities.GetComponentData<LocalTransform>(entity);
+            var transform = handedOver ? held : entities.GetComponentData<LocalTransform>(entity);
             result.Position = transform.Position;
             result.Rotation = transform.Rotation;
             result.Scale = transform.Scale;
