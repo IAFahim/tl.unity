@@ -21,7 +21,7 @@ namespace Tl.Gen.Unity
             context.RegisterSourceOutput(combined, static (production, pair) => Generate(production, pair.Left, pair.Right));
         }
 
-        static readonly string[] Markers = { "TimelineSystem", "TimelineKind", "TlKind", "TlClip", "Feeds", "Pulse", "ITrack", "ITlTrack", "IMarker" };
+        static readonly string[] Markers = { "TimelineSystem", "TimelineKind", "TlKind", "TlClip", "TlState", "Feeds", "Pulse", "ITrack", "ITlTrack", "IMarker" };
 
         static bool Relevant(CSharpCompilation compilation)
         {
@@ -43,16 +43,42 @@ namespace Tl.Gen.Unity
             return false;
         }
 
+        static Func<ITypeSymbol, bool> StateRule(Compilation compilation)
+        {
+            var component = compilation.GetTypeByMetadataName("Unity.Entities.IComponentData");
+            var state = compilation.GetTypeByMetadataName("Tl.TlStateAttribute");
+            return type =>
+            {
+                if (NewStyle.IsStateType(type, state))
+                    return true;
+                if (component is null || type.TypeKind != TypeKind.Struct)
+                    return false;
+                foreach (var face in type.AllInterfaces)
+                    if (SymbolEqualityComparer.Default.Equals(face, component))
+                        return true;
+                return false;
+            };
+        }
+
         static void Generate(SourceProductionContext context, ImmutableArray<UnitySystemModel?> found, Compilation compilation)
         {
             if (compilation is not CSharpCompilation csharp || !Relevant(csharp))
                 return;
             var id = Sanitize(compilation.AssemblyName ?? "Game");
+            var key = NewStyle.FeedKey(compilation.AssemblyName ?? "");
             UnityMirrorEmitter.Emit(context, csharp);
-            var analysis = UnityNewStyle.Prepare(csharp, id);
+            var analysis = NewStyle.Prepare(csharp, id, StateRule(csharp));
+            var states = UnityStateEmitter.Emit(context, analysis.States, csharp);
             var models = new List<UnitySystemModel?>(found);
-            if (analysis.Auto is not null)
-                models.Add(analysis.Auto);
+            UnitySystemModel? auto = null;
+            if (analysis.HasAuto)
+            {
+                var columns = new List<UnityColumn>();
+                foreach (var column in analysis.AutoColumns)
+                    columns.Add(new UnityColumn(column.Name, column.TypeName, !column.Writable, true));
+                auto = new UnitySystemModel(NewStyle.AutoNamespace, analysis.AutoName, columns, new List<UnityContext>(), new List<UnityContext>(), new List<UnityDiagnostic>(), false);
+                models.Add(auto);
+            }
             var read = SystemReader.Read(analysis.Compilation);
             var assignments = read.Item2;
             var failed = false;
@@ -88,10 +114,14 @@ namespace Tl.Gen.Unity
                     events.Add(evented.TypeName);
             }
             var components = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (var state in states)
+                components.Add(state);
             foreach (var element in events)
                 components.Add("global::Tl.Unity.TimelineEvent<" + element + ">");
             foreach (var kind in kinds)
             {
+                if (kind.Foreign)
+                    continue;
                 components.Add(kind.Entry);
                 components.Add(kind.Active);
                 components.Add(kind.Enabled);
@@ -103,26 +133,40 @@ namespace Tl.Gen.Unity
             if (components.Count != 0)
                 context.AddSource(UnityRegistrationEmitter.FileName, SourceText.From(UnityRegistrationEmitter.Emit(components, id), System.Text.Encoding.UTF8));
             if (kinds.Count != 0)
-            {
-                context.AddSource("TlUnity.KindTypes.g.cs", SourceText.From(UnityKindEmitter.EmitKinds(assignments, kinds, new List<string>(events), id), System.Text.Encoding.UTF8));
-            }
+                context.AddSource("TlUnity.KindTypes.g.cs", SourceText.From(UnityKindEmitter.EmitKinds(assignments, kinds, new List<string>(events), id, key), System.Text.Encoding.UTF8));
             foreach (var model in models)
             {
                 if (model is null)
                     continue;
                 var index = UnityKindPlan.AssignmentOf(assignments, model);
                 var own = new List<UnityKindInfo>();
+                var fed = new List<UnityKindInfo>();
                 if (index >= 0)
                     foreach (var kind in assignments[index].Kinds)
                         foreach (var info in kinds)
                             if (info.Name == kind.Name)
-                                own.Add(info);
-                var text = own.Count == 0
-                    ? UnitySystemEmitter.Emit(model)
-                    : UnityKindJobEmitter.Emit(model, assignments[index], index, own, analysis.TlFrameFeeders);
-                context.AddSource(UnitySystemEmitter.FileName(model), SourceText.From(text, System.Text.Encoding.UTF8));
-                if (ReferenceEquals(model, analysis.Auto) && own.Count != 0)
-                    context.AddSource(UnityAutoSystemEmitter.FileName, SourceText.From(UnityAutoSystemEmitter.Emit(model), System.Text.Encoding.UTF8));
+                                (info.Foreign ? fed : own).Add(info);
+                var isAuto = ReferenceEquals(model, auto);
+                if (own.Count != 0 || !isAuto)
+                {
+                    var text = own.Count == 0
+                        ? UnitySystemEmitter.Emit(model)
+                        : UnityKindJobEmitter.Emit(model, assignments[index], index, own, analysis.TlFrameFeeders);
+                    context.AddSource(UnitySystemEmitter.FileName(model), SourceText.From(text, System.Text.Encoding.UTF8));
+                    if (isAuto)
+                        context.AddSource(UnityAutoSystemEmitter.FileName, SourceText.From(UnityAutoSystemEmitter.Emit(model), System.Text.Encoding.UTF8));
+                }
+                if (fed.Count != 0)
+                {
+                    if (!isAuto)
+                    {
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            new DiagnosticDescriptor("TLUNITY9106", "Kind from another assembly fed by a declared system", "System '{0}' feeds kinds declared in another assembly; feed them from consumers outside [TimelineSystem] structs, which run in the generated feed system.", "Tl.Unity", DiagnosticSeverity.Error, true),
+                            Microsoft.CodeAnalysis.Location.None, model.SystemTypeName));
+                        continue;
+                    }
+                    context.AddSource(UnityFeedJobEmitter.FileName, SourceText.From(UnityFeedJobEmitter.Emit(model, assignments[index], index, fed, analysis.TlFrameFeeders, key), System.Text.Encoding.UTF8));
+                }
             }
         }
 

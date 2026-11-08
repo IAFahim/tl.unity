@@ -47,7 +47,7 @@ namespace Tl.Unity.ForceContract.Tests
         public void TheKindCapacityIsComputedWithoutAKindsFile()
         {
             var kind = Type.GetType("TlUnityGenerated.ForceKindKind" + Assembly);
-            Assert.AreEqual(16, (int)kind.GetField("InlineCapacity").GetValue(null));
+            Assert.AreEqual(6, (int)kind.GetField("InlineCapacity").GetValue(null));
         }
 
         [Test]

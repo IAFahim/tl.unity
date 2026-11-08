@@ -425,15 +425,16 @@ namespace Tl.Unity
             entry->Timeline = timeline;
             entry->Step = (ushort)window;
             entry->Slot = (byte)slot;
-            entry->Feeder = feeder->Ordinal;
+            var route = Index.Routes[feeder - Index.Sec.Feeders];
+            entry->Feeder = (byte)route;
             entry->Flags = flags;
-            entry->Reserved = 0;
+            entry->Owner = (byte)(route >> 8);
         }
 
         public global::Tl.KindEntry* AppendEntry(int row, int kind)
         {
             if ((Reach & (1ul << kind)) == 0) return null;
-            var stride = (int)Index.Sec.Kinds[kind].EntryBytes;
+            var stride = Index.EntryStride[kind];
             var buffer = Buffer(kind);
             var length = buffer->GetBufferLength(row);
             buffer->ResizeUninitialized(row, length + 1);
@@ -448,7 +449,7 @@ namespace Tl.Unity
             for (var kind = 0; kind < Index.KindCount; kind++)
             {
                 if ((Reach & (1ul << kind)) == 0) continue;
-                var stride = (int)Index.Sec.Kinds[kind].EntryBytes;
+                var stride = Index.EntryStride[kind];
                 var buffer = Buffer(kind);
                 var length = buffer->GetBufferLength(row);
                 if (length == 0) continue;
@@ -470,7 +471,7 @@ namespace Tl.Unity
         public bool RemoveSpan(int row, int kind, byte slot, ushort timeline, ushort step)
         {
             if ((Reach & (1ul << kind)) == 0) return false;
-            var stride = (int)Index.Sec.Kinds[kind].EntryBytes;
+            var stride = Index.EntryStride[kind];
             var buffer = Buffer(kind);
             var length = buffer->GetBufferLength(row);
             var data = (byte*)buffer->GetUnsafePtr(row);

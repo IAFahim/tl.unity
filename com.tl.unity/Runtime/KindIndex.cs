@@ -30,6 +30,12 @@ namespace Tl.Unity
         public int* IdKeys;
         public int* IdKinds;
         public int IdCount;
+        public ushort* Routes;
+        public int* EntryStride;
+        public int* OwnerKeys;
+        public int* OwnerKinds;
+        public int* OwnerIds;
+        public int OwnerCount;
 
         public bool IsCreated => Timelines != null || KindCount == 0 && Closure != null;
 
@@ -62,25 +68,66 @@ namespace Tl.Unity
             return tk == null ? uint.MaxValue : Sec.Windows(tk)[window].Pair;
         }
 
-        public void Verify(int kind, in KindDescriptor descriptor)
+        public int OwnerOf(int kindId, int key)
+        {
+            var kind = KindOf(kindId);
+            if (kind < 0) return -1;
+            for (var i = 0; i < OwnerCount; i++)
+                if (OwnerKinds[i] == kind && OwnerKeys[i] == key)
+                    return OwnerIds[i];
+            return -1;
+        }
+
+        void Verify(int kind, in KindDescriptor descriptor, KindRegistry registry, List<(int Kind, int Key, int Owner)> owners)
         {
             var name = Sec.NameOf(kind);
             var row = Sec.Kinds[kind];
             if (row.ValueBytes != (uint)descriptor.ValueBytes)
                 throw new InvalidOperationException("Kind '" + name + "' is " + descriptor.ValueBytes + " bytes in code but " + row.ValueBytes + " in the loaded library; the timelines were baked for other code, let the SubScene rebake after the compile.");
-            if (row.EntryBytes != (uint)descriptor.EntryBytes || UnsafeUtility.SizeOf(descriptor.Entry) != descriptor.EntryBytes)
-                throw new InvalidOperationException("Kind '" + name + "' entry is " + UnsafeUtility.SizeOf(descriptor.Entry) + " bytes in code but " + row.EntryBytes + " in the loaded library; the timelines were baked for other code, let the SubScene rebake after the compile.");
+            var size = UnsafeUtility.SizeOf(descriptor.Entry);
+            if (size != descriptor.EntryBytes || descriptor.EntryBytes < row.EntryBytes || descriptor.EntryBytes < 8 + ((descriptor.ValueBytes + 3) & ~3))
+                throw new InvalidOperationException("Kind '" + name + "' entry is " + size + " bytes in code but " + row.EntryBytes + " in the loaded library; the timelines were baked for other code, let the SubScene rebake after the compile.");
+            EntryStride[kind] = descriptor.EntryBytes;
+            var code = new Dictionary<string, ushort>(StringComparer.Ordinal);
+            var all = new List<string>();
+            Add(code, all, descriptor.Signature, 0);
+            var owner = 1;
+            for (var i = 0; i < registry.Feeds.Count; i++)
+            {
+                if (registry.Feeds[i].Name != name) continue;
+                owners.Add((kind, registry.Feeds[i].Key, owner));
+                Add(code, all, registry.Feeds[i].Signature, owner++);
+            }
             var have = new System.Text.StringBuilder();
+            var matched = 0;
+            var differs = false;
             for (var f = 0; f < Sec.FeederCount; f++)
             {
                 if (Sec.Feeders[f].Kind != kind) continue;
-                if (have.Length > 0) have.Append('\n');
-                have.Append(Sec.Text(Sec.Feeders[f].ConsumerOffset, Sec.Feeders[f].ConsumerLength)).Append('.').Append(Sec.Text(Sec.Feeders[f].MethodOffset, Sec.Feeders[f].MethodLength)).Append(':').Append(Sec.Feeders[f].Trigger);
+                var line = Sec.Text(Sec.Feeders[f].ConsumerOffset, Sec.Feeders[f].ConsumerLength) + "." + Sec.Text(Sec.Feeders[f].MethodOffset, Sec.Feeders[f].MethodLength) + ":" + Sec.Feeders[f].Trigger;
+                if (have.Length > 0) have.Append(' ');
+                have.Append(line);
+                if (code.TryGetValue(line, out var route))
+                {
+                    Routes[f] = route;
+                    matched++;
+                }
+                else differs = true;
             }
-            if (have.ToString() != descriptor.Signature)
-                throw new InvalidOperationException("Kind '" + name + "' feeders in the loaded library differ from the compiled game; the timelines were baked for other code, let the SubScene rebake after the compile.\nlibrary: " + have.ToString().Replace('\n', ' ') + "\ncode:    " + descriptor.Signature.Replace('\n', ' '));
+            if (differs || matched != all.Count)
+                throw new InvalidOperationException("Kind '" + name + "' feeders in the loaded library differ from the compiled game; the timelines were baked for other code, let the SubScene rebake after the compile.\nlibrary: " + have + "\ncode:    " + string.Join(" ", all));
         }
 
+        static void Add(Dictionary<string, ushort> code, List<string> all, string signature, int owner)
+        {
+            if (string.IsNullOrEmpty(signature)) return;
+            var lines = signature.Split('\n');
+            for (var i = 0; i < lines.Length; i++)
+            {
+                code[lines[i]] = (ushort)((owner << 8) | i);
+                all.Add(lines[i]);
+            }
+        }
         public static int IdOf(string name)
         {
             var hash = 2166136261u;
@@ -112,6 +159,9 @@ namespace Tl.Unity
             ActiveTypes = Zeroed<ComponentType>(Math.Max(1, KindCount));
             IdKeys = Zeroed<int>(Math.Max(1, KindCount));
             IdKinds = Zeroed<int>(Math.Max(1, KindCount));
+            EntryStride = Zeroed<int>(Math.Max(1, KindCount));
+            Routes = Zeroed<ushort>(Math.Max(1, KindCount == 0 ? 0 : Sec.FeederCount));
+            var owners = new List<(int Kind, int Key, int Owner)>();
             IdCount = 0;
             Bound = 0;
             var ids = new SortedDictionary<int, int>();
@@ -125,10 +175,20 @@ namespace Tl.Unity
                 var r = registry.IndexOf(name);
                 if (r < 0) continue;
                 var d = registry[r];
-                Verify(k, in d);
+                Verify(k, in d, registry, owners);
                 EntryTypes[k] = ComponentType.ReadWrite(d.Entry);
                 ActiveTypes[k] = ComponentType.ReadWrite(d.Active);
                 Bound |= 1ul << k;
+            }
+            OwnerCount = owners.Count;
+            OwnerKeys = Zeroed<int>(Math.Max(1, owners.Count));
+            OwnerKinds = Zeroed<int>(Math.Max(1, owners.Count));
+            OwnerIds = Zeroed<int>(Math.Max(1, owners.Count));
+            for (var i = 0; i < owners.Count; i++)
+            {
+                OwnerKeys[i] = owners[i].Key;
+                OwnerKinds[i] = owners[i].Kind;
+                OwnerIds[i] = owners[i].Owner;
             }
             foreach (var pair in ids)
             {
@@ -251,6 +311,11 @@ namespace Tl.Unity
             Free(ActiveTypes);
             Free(IdKeys);
             Free(IdKinds);
+            Free(Routes);
+            Free(EntryStride);
+            Free(OwnerKeys);
+            Free(OwnerKinds);
+            Free(OwnerIds);
             this = default;
         }
 

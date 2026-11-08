@@ -37,6 +37,20 @@ namespace Tl.Unity
         public readonly Type[] Columns;
     }
 
+    public readonly struct KindFeeds
+    {
+        public KindFeeds(string name, int key, string signature)
+        {
+            Name = name;
+            Key = key;
+            Signature = signature;
+        }
+
+        public readonly string Name;
+        public readonly int Key;
+        public readonly string Signature;
+    }
+
     public static class TlAssemblies
     {
         public static System.Collections.Generic.IEnumerable<System.Reflection.Assembly> Loaded()
@@ -54,6 +68,8 @@ namespace Tl.Unity
         readonly List<KindDescriptor> _kinds = new List<KindDescriptor>();
         readonly List<string> _sources = new List<string>();
         readonly List<Type> _events = new List<Type>();
+        readonly List<KindFeeds> _feeds = new List<KindFeeds>();
+        readonly List<string> _feedSources = new List<string>();
         string _source = "unknown";
 
         public int Count => _kinds.Count;
@@ -63,6 +79,19 @@ namespace Tl.Unity
         public string SourceOf(int index) => _sources[index];
 
         public IReadOnlyList<Type> EventBuffers => _events;
+
+        public IReadOnlyList<KindFeeds> Feeds => _feeds;
+
+        public string FeedSourceOf(int index) => _feedSources[index];
+
+        public void AddFeeds(KindFeeds feeds)
+        {
+            for (var i = 0; i < _feeds.Count; i++)
+                if (_feeds[i].Name == feeds.Name && _feeds[i].Key == feeds.Key)
+                    throw new ArgumentException("Kind '" + feeds.Name + "' gets feeders from assembly '" + _feedSources[i] + "' and '" + _source + "' with the same key " + feeds.Key + "; rename one of the assemblies.");
+            _feeds.Add(feeds);
+            _feedSources.Add(_source);
+        }
 
         public void AddEvents(Type buffer)
         {

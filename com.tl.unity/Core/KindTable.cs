@@ -9,6 +9,7 @@ public enum KindEntryFlags : byte
     Pulse = 2,
     Synthetic = 4,
     Interrupted = 8,
+    Ready = 16,
 }
 
 [StructLayout(LayoutKind.Sequential, Size = 8)]
@@ -19,7 +20,7 @@ public struct KindEntry
     public byte Slot;
     public byte Feeder;
     public KindEntryFlags Flags;
-    public byte Reserved;
+    public byte Owner;
 }
 
 public unsafe struct KindTable

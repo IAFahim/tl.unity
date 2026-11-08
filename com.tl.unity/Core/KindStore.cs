@@ -70,7 +70,10 @@ public sealed unsafe class KindStore : IDisposable
     int* _stageCount;
     LibraryStep*** _stepArrays;
     int _windowTotal;
-    readonly HashSet<string> _verified = new(StringComparer.Ordinal);
+    readonly Dictionary<(string, int), (nint Routes, int Part)> _joined = new();
+    readonly HashSet<string> _feeding = new(StringComparer.Ordinal);
+    ushort*[] _routes = new ushort*[0];
+    List<int>?[] _parts = Array.Empty<List<int>?>();
     bool _disposed;
     string[] _kindNames = Array.Empty<string>();
     Dictionary<string, int> _kindIndex = new(StringComparer.Ordinal);
@@ -224,25 +227,54 @@ public sealed unsafe class KindStore : IDisposable
         return tk == null ? uint.MaxValue : _sec.Windows(tk)[window].Pair;
     }
 
-    public void Verify(string kind, int valueBytes, string signature)
+    public ushort* Join(string kind, int valueBytes, string signature, int key, out int part)
     {
-        if (_verified.Contains(kind)) return;
-        var k = IndexOf(kind);
-        if (k >= 0)
+        part = 0;
+        if (_joined.TryGetValue((kind, key), out var cached))
         {
-            if (_valueBytes[k] != valueBytes) throw new InvalidOperationException($"Kind '{kind}' is {valueBytes} bytes in code but {_valueBytes[k]} in the loaded library; rebake the library with tlb.");
-            var have = new System.Text.StringBuilder();
-            if (_sec.Kinds[k].GroupNameLength != 0) have.Append('@').Append(_sec.GroupOf(k));
-            for (var f = 0; f < _sec.FeederCount; f++)
-            {
-                if (_sec.Feeders[f].Kind != k) continue;
-                if (have.Length > 0) have.Append('\n');
-                have.Append(_sec.Text(_sec.Feeders[f].ConsumerOffset, _sec.Feeders[f].ConsumerLength)).Append('.').Append(_sec.Text(_sec.Feeders[f].MethodOffset, _sec.Feeders[f].MethodLength)).Append(':').Append(_sec.Feeders[f].Trigger);
-            }
-            if (have.ToString() != signature)
-                throw new InvalidOperationException($"Kind '{kind}' feeders in the loaded library differ from the compiled game; rebake the library with tlb.\nlibrary: {have.ToString().Replace('\n', ' ')}\ncode:    {signature.Replace('\n', ' ')}");
+            part = cached.Part;
+            return (ushort*)cached.Routes;
         }
-        _verified.Add(kind);
+        var k = IndexOf(kind);
+        if (k < 0) return null;
+        if (_valueBytes[k] != valueBytes) throw new InvalidOperationException($"Kind '{kind}' is {valueBytes} bytes in code but {_valueBytes[k]} in the loaded library; rebake the library with tlb.");
+        var library = new List<string>();
+        var ordinals = new List<int>();
+        for (var f = 0; f < _sec.FeederCount; f++)
+        {
+            if (_sec.Feeders[f].Kind != k) continue;
+            library.Add(_sec.Text(_sec.Feeders[f].ConsumerOffset, _sec.Feeders[f].ConsumerLength) + "." + _sec.Text(_sec.Feeders[f].MethodOffset, _sec.Feeders[f].MethodLength) + ":" + _sec.Feeders[f].Trigger);
+            ordinals.Add(_sec.Feeders[f].Ordinal);
+        }
+        var group = _sec.Kinds[k].GroupNameLength != 0 ? "@" + _sec.GroupOf(k) : null;
+        var lines = signature.Length == 0 ? new List<string>() : new List<string>(signature.Split('\n'));
+        var routes = _routes[k];
+        if (routes == null)
+        {
+            routes = (ushort*)Zeroed(256 * 2);
+            for (var i = 0; i < 256; i++) routes[i] = 0xFFFF;
+            _routes[k] = routes;
+        }
+        var parts = _parts[k] ??= new List<int>();
+        var differs = group != null && (lines.Count == 0 || lines[0] != group);
+        if (group != null && !differs) lines.RemoveAt(0);
+        var at = new int[lines.Count];
+        for (var i = 0; i < lines.Count && !differs; i++)
+        {
+            at[i] = library.IndexOf(lines[i]);
+            differs = at[i] < 0 || routes[ordinals[at[i]]] != 0xFFFF;
+        }
+        if (differs || key == 0 && parts.Count == 0 && lines.Count != library.Count && !_feeding.Contains(kind))
+        {
+            var have = (group == null ? "" : group + " ") + string.Join(" ", library);
+            throw new InvalidOperationException($"Kind '{kind}' feeders in the loaded library differ from the compiled game; rebake the library with tlb.\nlibrary: {have}\ncode:    {signature.Replace('\n', ' ')}");
+        }
+        part = parts.Count;
+        parts.Add(key);
+        for (var i = 0; i < lines.Count; i++) routes[ordinals[at[i]]] = (ushort)((part << 8) | i);
+        if (key != 0) _feeding.Add(kind);
+        _joined[(kind, key)] = ((nint)routes, part);
+        return routes;
     }
 
     internal int RowOf(int entity, int kind)
@@ -502,7 +534,7 @@ public sealed unsafe class KindStore : IDisposable
         entry->Slot = (byte)slot;
         entry->Feeder = feeder->Ordinal;
         entry->Flags = flags;
-        entry->Reserved = 0;
+        entry->Owner = 0;
         if (_tables[feeder->Kind]->Grouped) *(ushort*)((byte*)entry + 8) = (ushort)feeder->Kind;
     }
 
@@ -593,6 +625,8 @@ public sealed unsafe class KindStore : IDisposable
         _valueBytes = new int[_kindCount];
         _accepts = new byte[_kindCount];
         _folds = new bool[_kindCount];
+        _routes = new ushort*[_kindCount];
+        _parts = new List<int>?[_kindCount];
         _kindIndex = new Dictionary<string, int>(StringComparer.Ordinal);
         for (var k = 0; k < _kindCount; k++)
         {
@@ -647,7 +681,7 @@ public sealed unsafe class KindStore : IDisposable
                 if (_owner[k] == o)
                 {
                     bits |= 1ul << k;
-                    if (_sec.Kinds[k].Accepts != 0) largest = Math.Max(largest, _sec.Kinds[k].ValueBytes);
+                    largest = Math.Max(largest, _sec.Kinds[k].ValueBytes);
                 }
             members.Clear();
             for (var e = 0; e < entities; e++)
@@ -662,7 +696,7 @@ public sealed unsafe class KindStore : IDisposable
                         if ((_mask[e] & (1ul << k)) != 0) _rows[_offset[e] + Pop(_mask[e] & ((1ul << k) - 1))] = rowIn[e];
             if (members.Count == 0) continue;
             var grouped = row.GroupNameLength != 0;
-            var table = KindTable.Create(o, members.ToArray(), (int)(grouped ? row.GroupCapacity : row.Capacity), grouped ? 12 + (int)((largest + 3u) & ~3u) : (int)row.EntryBytes, grouped);
+            var table = KindTable.Create(o, members.ToArray(), (int)(grouped ? row.GroupCapacity : row.Capacity), grouped ? 12 + (int)((largest + 3u) & ~3u) : 8 + (int)((row.ValueBytes + 3u) & ~3u), grouped);
             for (var k = o; k < _kindCount; k++)
                 if (_owner[k] == o) _tables[k] = table;
         }
@@ -761,7 +795,11 @@ public sealed unsafe class KindStore : IDisposable
             for (var k = 0; k < _kindCount; k++) if (_queues[k].Items != null) NativeMemory.AlignedFree(_queues[k].Items);
         if (_stepArrays != null)
             for (var g = 0; g < _windowTotal; g++) if (_stepArrays[g] != null) NativeMemory.AlignedFree(_stepArrays[g]);
-        _verified.Clear();
+        _joined.Clear();
+        _feeding.Clear();
+        for (var r = 0; r < _routes.Length; r++) if (_routes[r] != null) NativeMemory.AlignedFree(_routes[r]);
+        _routes = new ushort*[0];
+        _parts = Array.Empty<List<int>?>();
         foreach (var block in new void*[] { _tables, _queues, _mask, _offset, _rows, _closure, _pairs, _pairStart, _windowBase, _firstStage, _stageCount, _stepArrays })
             if (block != null) NativeMemory.AlignedFree(block);
         _tables = null;

@@ -22,7 +22,7 @@ public static void Init(global::Unity.Entities.EntityManager entities, global::U
 public static global::Tl.Unity.KindPulses<int> Pulses(global::Tl.Unity.KindPulseWriter writer) { return new global::Tl.Unity.KindPulses<int>(writer, Id); }
 }
 [InternalBufferCapacity(global::KindGame.KindCapacity.Lift)]
-[global::System.Runtime.InteropServices.StructLayout(global::System.Runtime.InteropServices.LayoutKind.Sequential, Size = 8)]
+[global::System.Runtime.InteropServices.StructLayout(global::System.Runtime.InteropServices.LayoutKind.Sequential, Size = 12)]
 public struct LiftEntry : IBufferElementData
 {
 public ushort Timeline; public ushort Step; public byte Slot; public byte Feeder; public global::Tl.KindEntryFlags Flags; public byte Reserved;
@@ -37,7 +37,7 @@ public static global::Unity.Entities.ComponentType[] Types { get { return new gl
 public static void Init(global::Unity.Entities.EntityManager entities, global::Unity.Entities.Entity entity) { entities.SetComponentEnabled<LiftActive>(entity, false); }
 }
 [InternalBufferCapacity(global::KindGame.KindCapacity.Locomotion)]
-[global::System.Runtime.InteropServices.StructLayout(global::System.Runtime.InteropServices.LayoutKind.Sequential, Size = 8)]
+[global::System.Runtime.InteropServices.StructLayout(global::System.Runtime.InteropServices.LayoutKind.Sequential, Size = 16)]
 public struct LocomotionEntry : IBufferElementData
 {
 public ushort Timeline; public ushort Step; public byte Slot; public byte Feeder; public global::Tl.KindEntryFlags Flags; public byte Reserved;
@@ -116,8 +116,8 @@ public void Register(global::Tl.Unity.KindRegistry registry)
 {
 registry.AddEvents(typeof(global::Tl.Unity.TimelineEvent<global::KindGame.Cue>));
 registry.Add(new global::Tl.Unity.KindDescriptor("Damage", typeof(global::KindGame.DamageEntry), typeof(global::KindGame.DamageActive), typeof(global::KindGame.DamageEnabled), 4, 12, "KindGame.Hit.Start:1", new global::System.Type[] { typeof(global::KindGame.Vitals_HealthData) }));
-registry.Add(new global::Tl.Unity.KindDescriptor("Lift", typeof(global::KindGame.LiftEntry), typeof(global::KindGame.LiftActive), typeof(global::KindGame.LiftEnabled), 4, 8, "KindGame.Jump.Evaluate:0", new global::System.Type[] { typeof(global::KindGame.Movement_JumpPowerData), typeof(global::KindGame.Movement_MotionData), typeof(global::KindGame.Movement_StaminaData), typeof(global::KindGame.Movement_TargetData), typeof(global::KindGame.Movement_WalkStatData) }));
-registry.Add(new global::Tl.Unity.KindDescriptor("Locomotion", typeof(global::KindGame.LocomotionEntry), typeof(global::KindGame.LocomotionActive), typeof(global::KindGame.LocomotionEnabled), 8, 8, "KindGame.Walk.Evaluate:0", new global::System.Type[] { typeof(global::KindGame.Movement_JumpPowerData), typeof(global::KindGame.Movement_MotionData), typeof(global::KindGame.Movement_StaminaData), typeof(global::KindGame.Movement_TargetData), typeof(global::KindGame.Movement_WalkStatData) }));
+registry.Add(new global::Tl.Unity.KindDescriptor("Lift", typeof(global::KindGame.LiftEntry), typeof(global::KindGame.LiftActive), typeof(global::KindGame.LiftEnabled), 4, 12, "KindGame.Jump.Evaluate:0", new global::System.Type[] { typeof(global::KindGame.Movement_JumpPowerData), typeof(global::KindGame.Movement_MotionData), typeof(global::KindGame.Movement_StaminaData), typeof(global::KindGame.Movement_TargetData), typeof(global::KindGame.Movement_WalkStatData) }));
+registry.Add(new global::Tl.Unity.KindDescriptor("Locomotion", typeof(global::KindGame.LocomotionEntry), typeof(global::KindGame.LocomotionActive), typeof(global::KindGame.LocomotionEnabled), 8, 16, "KindGame.Walk.Evaluate:0", new global::System.Type[] { typeof(global::KindGame.Movement_JumpPowerData), typeof(global::KindGame.Movement_MotionData), typeof(global::KindGame.Movement_StaminaData), typeof(global::KindGame.Movement_TargetData), typeof(global::KindGame.Movement_WalkStatData) }));
 registry.Add(new global::Tl.Unity.KindDescriptor("StatChange", typeof(global::KindGame.StatChangeEntry), typeof(global::KindGame.StatChangeActive), typeof(global::KindGame.StatChangeEnabled), 4, 12, "KindGame.ChangeStat.Start:1\nKindGame.Steps.OnStep:3", new global::System.Type[] { typeof(global::KindGame.Movement_JumpPowerData), typeof(global::KindGame.Movement_MotionData), typeof(global::KindGame.Movement_StaminaData), typeof(global::KindGame.Movement_TargetData), typeof(global::KindGame.Movement_WalkStatData) }));
 }
 }

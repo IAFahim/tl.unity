@@ -88,7 +88,7 @@ namespace Tl.Gen.Unity
                         Location.None, kind.Name, kind.ValueTypeName));
                     continue;
                 }
-                var entryBytes = kind.Accepts == 0 ? 8 : 8 + UnityLayout.Round(valueBytes, 4);
+                var entryBytes = 8 + UnityLayout.Round(valueBytes, 4);
                 infos.Add(new UnityKindInfo(kind,valueBytes, entryBytes, Capacity(compilation, kind, entryBytes, inline), (UnityKindEmitter.NamespaceOf(kind.TypeName) is { Length: > 0 } space ? space : "TlUnityGenerated"), UnityKindEmitter.Signature(assignments, kind), ColumnsOf(assignments, models, kind)));
             }
             return infos;

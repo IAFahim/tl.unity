@@ -1,0 +1,19 @@
+{
+  "name": "Tl.Unity.PushGame",
+  "rootNamespace": "PushGame",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Unity.PushPack",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Mathematics"
+  ],
+  "allowUnsafeCode": true,
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "noEngineReferences": false
+}

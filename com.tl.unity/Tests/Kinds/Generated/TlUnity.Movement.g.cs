@@ -105,6 +105,14 @@ else
 {
 var __isPulse = (__en->Flags & global::Tl.KindEntryFlags.Pulse) != 0;
 if (__isPulse) __pulses++;
+if (__en->Owner != 0)
+{
+if ((__en->Flags & global::Tl.KindEntryFlags.Ready) == 0) continue;
+__v = *(float*)((byte*)__en + 8);
+__en->Flags &= ~global::Tl.KindEntryFlags.Ready;
+}
+else
+{
 var __pb = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr() + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
@@ -146,6 +154,7 @@ break;
 }
 }
 if (!__ok) continue;
+}
 }
 if (__has) global::KindGame.Lift.Combine(ref __total, in __v);
 else { __total = __v; __has = true; }
@@ -208,6 +217,14 @@ else
 {
 var __isPulse = (__en->Flags & global::Tl.KindEntryFlags.Pulse) != 0;
 if (__isPulse) __pulses++;
+if (__en->Owner != 0)
+{
+if ((__en->Flags & global::Tl.KindEntryFlags.Ready) == 0) continue;
+__v = *(global::KindGame.Speed*)((byte*)__en + 8);
+__en->Flags &= ~global::Tl.KindEntryFlags.Ready;
+}
+else
+{
 var __pb = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr() + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
@@ -239,6 +256,7 @@ break;
 }
 }
 if (!__ok) continue;
+}
 }
 if (__has) global::KindGame.Locomotion.Combine(ref __total, in __v);
 else { __total = __v; __has = true; }
@@ -299,6 +317,14 @@ else
 {
 var __isPulse = (__en->Flags & global::Tl.KindEntryFlags.Pulse) != 0;
 if (__isPulse) __pulses++;
+if (__en->Owner != 0)
+{
+if ((__en->Flags & global::Tl.KindEntryFlags.Ready) == 0) continue;
+__v = *(int*)((byte*)__en + 8);
+__en->Flags &= ~global::Tl.KindEntryFlags.Ready;
+}
+else
+{
 var __pb = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr() + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
@@ -340,6 +366,7 @@ break;
 }
 }
 if (!__ok) continue;
+}
 }
 global::KindGame.StatChange.Apply(in __v, ref __c4[__row]);
 }

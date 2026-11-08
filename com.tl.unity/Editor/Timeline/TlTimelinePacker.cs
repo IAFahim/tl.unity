@@ -158,6 +158,8 @@ namespace Tl.Unity.Editor
             var names = new HashSet<string>(StringComparer.Ordinal);
             for (var k = 0; k < registry.Count; k++)
                 names.Add(registry.SourceOf(k));
+            for (var f = 0; f < registry.Feeds.Count; f++)
+                names.Add(registry.FeedSourceOf(f));
             return TlAssemblies.Loaded()
                 .Where(a => names.Contains(a.GetName().Name))
                 .OrderBy(a => a.GetName().Name, StringComparer.Ordinal)

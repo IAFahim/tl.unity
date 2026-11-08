@@ -1,9 +1,10 @@
 using System.Text;
+using Tl.Gen.CSharp.Analysis;
 using Tl.Gen.CSharp.Model;
 
 namespace Tl.Gen.Unity
 {
-    internal static class UnityKindJobEmitter
+    internal static partial class UnityKindJobEmitter
     {
         sealed class Shape
         {
@@ -246,7 +247,7 @@ namespace Tl.Gen.Unity
                 handles.Add((kind.Name + "EnabledHandle", "ComponentTypeHandle<" + kind.Enabled + ">", "GetComponentTypeHandle<" + kind.Enabled + ">", true));
             }
             var name = model.SystemTypeName;
-            W(writer, "public static partial class TimelineJobs");
+            W(writer, (model.Namespace == NewStyle.AutoNamespace ? "internal" : "public") + " static partial class TimelineJobs");
             W(writer, "{");
             W(writer, "public struct " + name);
             W(writer, "{");
@@ -342,6 +343,14 @@ namespace Tl.Gen.Unity
             W(writer, "{");
             W(writer, "var __isPulse = (__en->Flags & global::Tl.KindEntryFlags.Pulse) != 0;");
             W(writer, "if (__isPulse) __pulses++;");
+            W(writer, "if (__en->Owner != 0)");
+            W(writer, "{");
+            W(writer, "if ((__en->Flags & global::Tl.KindEntryFlags.Ready) == 0) continue;");
+            W(writer, "__v = *(" + value + "*)((byte*)__en + " + valueAt + ");");
+            W(writer, "__en->Flags &= ~global::Tl.KindEntryFlags.Ready;");
+            W(writer, "}");
+            W(writer, "else");
+            W(writer, "{");
             W(writer, "var __pb = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr() + __en->Slot;");
             W(writer, "if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;");
             W(writer, "var __tl = Index.Timelines + (__en->Timeline - 1);");
@@ -380,7 +389,7 @@ namespace Tl.Gen.Unity
                     if (FoldOf(consumer) != null)
                         EmitFeeds(writer, consumer, c);
                     var frameVar = "__f" + c;
-                    if (tlFrames.Contains(UnityNewStyle.FeederKey(consumer.ConsumerTypeName, feeder.MethodName)))
+                    if (tlFrames.Contains(NewStyle.FeederKey(consumer.ConsumerTypeName, feeder.MethodName)))
                     {
                         frameVar = "__tf" + c;
                         W(writer, "var " + frameVar + " = new global::Tl.TlFrame<" + consumer.ClipTypeName + ">(in __f" + c + ");");
@@ -394,6 +403,7 @@ namespace Tl.Gen.Unity
             if (feeders.Count > 0)
                 W(writer, "}");
             W(writer, "if (!__ok) continue;");
+            W(writer, "}");
             W(writer, "}");
             if (kind.Each)
                 W(writer, kind.TypeName + ".Apply(in __v" + tail + ");");
