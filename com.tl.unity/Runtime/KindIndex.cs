@@ -41,6 +41,8 @@ namespace Tl.Unity
 
         public global::Tl.LibraryKind* Kind(int kind) => Sec.Kinds + kind;
 
+        public global::Tl.KindTables Tables => new global::Tl.KindTables { Timelines = Timelines, TimelineCount = TimelineCount, Sec = Sec, KindCount = KindCount, Closure = Closure, Pairs = Pairs, PairStart = PairStart };
+
         public global::Tl.LibraryStep* StepOf(ushort timeline, int window, ushort tick)
         {
             var t = timeline - 1;

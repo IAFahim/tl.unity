@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Tl;
@@ -117,44 +118,8 @@ public sealed unsafe class PlaybackTable : IDisposable
 
     public bool IsPlaying(int entity, ushort timeline)
     {
-        var count = _counts[entity];
-        var slots = _slots + (nuint)entity * (nuint)_slotsPerEntity;
-        for (var i = 0; i < count; i++) if (slots[i].Timeline == timeline && (slots[i].Flags & PlaybackFlags.Stopping) == 0) return true;
-        return false;
-    }
-
-    internal bool TryStartImmediate(int entity, ushort timeline, ushort at, byte channel, out bool replaced)
-    {
-        replaced = false;
-        if ((uint)entity >= (uint)_entities || timeline == 0) return false;
-        var count = _counts[entity];
-        var slots = _slots + (nuint)entity * (nuint)_slotsPerEntity;
-        if (channel != 0)
-            for (var i = 0; i < count; i++)
-                if (slots[i].Timeline != 0 && slots[i].Channel == channel && (slots[i].Flags & PlaybackFlags.Stopping) == 0)
-                {
-                    CloseSlot(entity, i);
-                    count = _counts[entity];
-                    replaced = true;
-                    break;
-                }
-        var free = count;
-        for (var i = count - 1; i >= 0; i--)
-        {
-            if (slots[i].Timeline == 0) free = i;
-            else if (slots[i].Timeline == timeline && (slots[i].Flags & PlaybackFlags.Stopping) == 0) return false;
-        }
-        if (free == _slotsPerEntity)
-        {
-            if (_slotsPerEntity == MaxSlots) return false;
-            Grow();
-            slots = _slots + (nuint)entity * (nuint)_slotsPerEntity;
-        }
-        _kinds?.ValidateStart(entity, timeline);
-        slots[free] = new Playback { Timeline = timeline, Tick = at, Channel = channel, Flags = at > 0 || _kinds != null ? PlaybackFlags.StartPending : PlaybackFlags.None };
-        if (free == count) _counts[entity] = count + 1;
-        SetPlaying(entity, true);
-        return true;
+        var slots = new Slots(this, entity);
+        return PlaybackRules.IsPlaying(ref slots, timeline);
     }
 
     void Grow()
@@ -174,13 +139,8 @@ public sealed unsafe class PlaybackTable : IDisposable
     {
         var slots = _slots + (nuint)entity * (nuint)_slotsPerEntity;
         ClosingList.Add(_closing, entity, slot, in slots[slot]);
-        if (_kinds == null)
-        {
-            RemoveSlot(entity, slot);
-            return;
-        }
-        _kinds.Stop(entity, slot);
-        slots[slot].Flags = (slots[slot].Flags & (PlaybackFlags.Reverse | PlaybackFlags.Paused | PlaybackFlags.Ended | PlaybackFlags.StartPending)) | PlaybackFlags.Stopping;
+        if (_kinds == null) RemoveSlot(entity, slot);
+        else _kinds.Close(entity, slot, ref slots[slot]);
     }
 
     internal void RemoveSlot(int entity, int slot)
@@ -197,11 +157,58 @@ public sealed unsafe class PlaybackTable : IDisposable
 
     public bool Find(int entity, byte channel, out Playback playback)
     {
-        var count = _counts[entity];
-        var slots = _slots + (nuint)entity * (nuint)_slotsPerEntity;
-        for (var i = 0; i < count; i++) if (slots[i].Timeline != 0 && slots[i].Channel == channel && channel != 0 && (slots[i].Flags & PlaybackFlags.Stopping) == 0) { playback = slots[i]; return true; }
-        playback = default;
-        return false;
+        var slots = new Slots(this, entity);
+        return PlaybackRules.Find(ref slots, channel, out playback);
+    }
+
+    internal struct Slots : IPlaybackSlots
+    {
+        readonly PlaybackTable _table;
+        readonly int _entity;
+        Playback* _items;
+
+        public Slots(PlaybackTable table, int entity)
+        {
+            _table = table;
+            _entity = entity;
+            _items = table.SlotsOf(entity);
+        }
+
+        public int Length
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => _table._counts[_entity];
+        }
+
+        public ref Playback this[int index]
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => ref _items[index];
+        }
+
+        public bool StartsPending => _table._kinds != null;
+
+        public bool TryAdd(in Playback playback)
+        {
+            var count = _table._counts[_entity];
+            if (count == _table._slotsPerEntity)
+            {
+                if (count == MaxSlots) return false;
+                _table.Grow();
+                _items = _table.SlotsOf(_entity);
+            }
+            _items[count] = playback;
+            _table._counts[_entity] = count + 1;
+            return true;
+        }
+
+        public bool Admit(ushort timeline)
+        {
+            _table._kinds?.ValidateStart(_entity, timeline);
+            return true;
+        }
+
+        public void Close(int index) => _table.CloseSlot(_entity, index);
     }
 
     public void Start(int entity, ushort timeline, ushort at = 0) => RequestQueue.Add(_pending, entity, -1, timeline, at, RequestOp.Start);

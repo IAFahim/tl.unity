@@ -37,24 +37,14 @@ namespace Tl.Unity
             if (entities.Length == 0)
                 return;
             var manager = state.EntityManager;
-            var gathered = new NativeList<RequestEntry>(entities.Length * 2, Allocator.Temp);
+            var gathered = new NativeList<global::Tl.RequestRecord>(entities.Length * 2, Allocator.Temp);
             for (var e = 0; e < entities.Length; e++)
             {
                 var requests = manager.GetBuffer<TimelineRequest>(entities[e]);
                 for (var r = 0; r < requests.Length; r++)
-                {
-                    gathered.Add(new RequestEntry
-                    {
-                        Entity = entities[e].Index,
-                        Slot = requests[r].Slot,
-                        Timeline = requests[r].Timeline,
-                        At = requests[r].At,
-                        Op = requests[r].Op,
-                        Sequence = _sequence++,
-                    });
-                }
+                    gathered.Add(new global::Tl.RequestRecord(entities[e].Index, requests[r].Slot, requests[r].Timeline, requests[r].At, requests[r].Op, _sequence++));
             }
-            TimelineKernel.SortRequests((RequestEntry*)gathered.GetUnsafePtr(), gathered.Length);
+            global::Tl.RequestQueue.Sort((global::Tl.RequestRecord*)gathered.GetUnsafePtr(), gathered.Length);
             var closed = new NativeList<ClosedPlayback>(gathered.Length, Allocator.Temp);
             for (var i = 0; i < gathered.Length; i++)
             {
@@ -62,8 +52,8 @@ namespace Tl.Unity
                 var target = FindEntity(entities, entry.Entity);
                 if (target == Entity.Null)
                     continue;
-                var playbacks = manager.GetBuffer<Playback>(target);
-                ApplyEntry(ref playbacks, entry, in view, ref closed);
+                var slots = new PlaybackSlots(manager.GetBuffer<Playback>(target), entry.Entity, closed);
+                global::Tl.PlaybackRules.Apply(ref slots, view.Timelines, view.TimelineCount, entry.Op, entry.Timeline, entry.At);
                 manager.GetBuffer<TimelineRequest>(target).Clear();
             }
             if (closed.Length == 0)
@@ -82,30 +72,6 @@ namespace Tl.Unity
                 if (entities[i].Index == index)
                     return entities[i];
             return Entity.Null;
-        }
-
-        static void ApplyEntry(ref DynamicBuffer<Playback> playbacks, RequestEntry entry, in global::Tl.LibraryView view, ref NativeList<ClosedPlayback> closed)
-        {
-            var entity = entry.Entity;
-            switch (entry.Op)
-            {
-                case global::Tl.RequestOp.Start:
-                    TimelineKernel.ApplyStart(ref playbacks, entity, entry.Timeline, entry.At, in view, ref closed, out _);
-                    break;
-                case global::Tl.RequestOp.Stop:
-                    TimelineKernel.ApplyStop(ref playbacks, entity, entry.Timeline, ref closed);
-                    break;
-                case global::Tl.RequestOp.StopChannel:
-                    TimelineKernel.ApplyStopChannel(ref playbacks, entity, (byte)entry.Timeline, ref closed);
-                    break;
-                case global::Tl.RequestOp.Pause:
-                case global::Tl.RequestOp.Resume:
-                    TimelineKernel.ApplyPause(ref playbacks, entry.Timeline, entry.Op == global::Tl.RequestOp.Pause);
-                    break;
-                default:
-                    TimelineKernel.ApplyStopAll(ref playbacks, entity, ref closed);
-                    break;
-            }
         }
     }
 

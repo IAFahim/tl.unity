@@ -51,6 +51,16 @@ namespace Tl.Unity.Tests
             return new NativeList<ClosedPlayback>(8, Allocator.Temp);
         }
 
+        PlaybackSlots Slots(NativeList<ClosedPlayback> closed)
+        {
+            return new PlaybackSlots(_entities.GetBuffer<Playback>(_entity), _entity.Index, closed);
+        }
+
+        bool Start(ref PlaybackSlots slots, ushort timeline, ushort at)
+        {
+            return global::Tl.PlaybackRules.Start(ref slots, _view.Timelines, _view.TimelineCount, timeline, at, out _);
+        }
+
         [Test]
         public void Start_ThenIsPlaying()
         {
@@ -58,9 +68,10 @@ namespace Tl.Unity.Tests
             using (var closed = Closed())
             {
                 var native = closed;
-                Assert.IsTrue(TimelinePlayer.Start(ref playbacks, _entity.Index, new global::Tl.TimelineId(RunId), 0, in _view, ref native));
-                Assert.IsTrue(TimelinePlayer.IsPlaying(ref playbacks, new global::Tl.TimelineId(RunId)));
-                Assert.IsFalse(TimelinePlayer.IsPlaying(ref playbacks, new global::Tl.TimelineId(JumpId)));
+                var slots = Slots(native);
+                Assert.IsTrue(Start(ref slots, RunId, 0));
+                Assert.IsTrue(global::Tl.PlaybackRules.IsPlaying(ref slots, RunId));
+                Assert.IsFalse(global::Tl.PlaybackRules.IsPlaying(ref slots, JumpId));
             }
         }
 
@@ -71,10 +82,11 @@ namespace Tl.Unity.Tests
             using (var closed = Closed())
             {
                 var native = closed;
-                Assert.IsTrue(TimelinePlayer.Start(ref playbacks, _entity.Index, new global::Tl.TimelineId(RunId), 0, in _view, ref native));
-                Assert.IsTrue(TimelinePlayer.Start(ref playbacks, _entity.Index, new global::Tl.TimelineId(JumpId), 0, in _view, ref native));
-                Assert.IsFalse(TimelinePlayer.IsPlaying(ref playbacks, new global::Tl.TimelineId(RunId)));
-                Assert.IsTrue(TimelinePlayer.IsPlaying(ref playbacks, new global::Tl.TimelineId(JumpId)));
+                var slots = Slots(native);
+                Assert.IsTrue(Start(ref slots, RunId, 0));
+                Assert.IsTrue(Start(ref slots, JumpId, 0));
+                Assert.IsFalse(global::Tl.PlaybackRules.IsPlaying(ref slots, RunId));
+                Assert.IsTrue(global::Tl.PlaybackRules.IsPlaying(ref slots, JumpId));
                 Assert.AreEqual(1, native.Length);
                 Assert.AreEqual(RunId, native[0].Value.Timeline);
             }
@@ -87,8 +99,9 @@ namespace Tl.Unity.Tests
             using (var closed = Closed())
             {
                 var native = closed;
-                Assert.IsTrue(TimelinePlayer.Start(ref playbacks, _entity.Index, new global::Tl.TimelineId(StackId), 0, in _view, ref native));
-                Assert.IsFalse(TimelinePlayer.Start(ref playbacks, _entity.Index, new global::Tl.TimelineId(StackId), 0, in _view, ref native));
+                var slots = Slots(native);
+                Assert.IsTrue(Start(ref slots, StackId, 0));
+                Assert.IsFalse(Start(ref slots, StackId, 0));
                 Assert.AreEqual(1, playbacks.Length);
                 Assert.AreEqual(0, native.Length);
             }
@@ -101,8 +114,9 @@ namespace Tl.Unity.Tests
             using (var closed = Closed())
             {
                 var native = closed;
-                Assert.IsTrue(TimelinePlayer.Start(ref playbacks, _entity.Index, new global::Tl.TimelineId(SlideId), 5, in _view, ref native));
-                Assert.IsTrue(TimelinePlayer.Start(ref playbacks, _entity.Index, new global::Tl.TimelineId(SlideId), 1, in _view, ref native));
+                var slots = Slots(native);
+                Assert.IsTrue(Start(ref slots, SlideId, 5));
+                Assert.IsTrue(Start(ref slots, SlideId, 1));
                 Assert.AreEqual(1, playbacks.Length);
                 Assert.AreEqual(1, native.Length);
                 Assert.AreEqual(SlideId, native[0].Value.Timeline);
@@ -117,12 +131,13 @@ namespace Tl.Unity.Tests
             using (var closed = Closed())
             {
                 var native = closed;
-                TimelinePlayer.Start(ref playbacks, _entity.Index, new global::Tl.TimelineId(RunId), 0, in _view, ref native);
-                TimelinePlayer.Start(ref playbacks, _entity.Index, new global::Tl.TimelineId(SlideId), 0, in _view, ref native);
-                Assert.IsTrue(TimelinePlayer.StopChannel(ref playbacks, _entity.Index, 2, ref native));
-                Assert.IsFalse(TimelinePlayer.IsPlaying(ref playbacks, new global::Tl.TimelineId(SlideId)));
-                Assert.IsTrue(TimelinePlayer.IsPlaying(ref playbacks, new global::Tl.TimelineId(RunId)));
-                TimelinePlayer.StopAll(ref playbacks, _entity.Index, ref native);
+                var slots = Slots(native);
+                Start(ref slots, RunId, 0);
+                Start(ref slots, SlideId, 0);
+                Assert.IsTrue(global::Tl.PlaybackRules.StopChannel(ref slots, 2));
+                Assert.IsFalse(global::Tl.PlaybackRules.IsPlaying(ref slots, SlideId));
+                Assert.IsTrue(global::Tl.PlaybackRules.IsPlaying(ref slots, RunId));
+                global::Tl.PlaybackRules.StopAll(ref slots);
                 Assert.AreEqual(0, playbacks.Length);
                 Assert.AreEqual(2, native.Length);
             }
@@ -135,11 +150,12 @@ namespace Tl.Unity.Tests
             using (var closed = Closed())
             {
                 var native = closed;
-                TimelinePlayer.Start(ref playbacks, _entity.Index, new global::Tl.TimelineId(SlideId), 3, in _view, ref native);
-                Assert.IsTrue(TimelinePlayer.Find(ref playbacks, 2, out var found));
+                var slots = Slots(native);
+                Start(ref slots, SlideId, 3);
+                Assert.IsTrue(global::Tl.PlaybackRules.Find(ref slots, 2, out var found));
                 Assert.AreEqual(SlideId, found.Timeline);
                 Assert.AreEqual(3, found.Tick);
-                Assert.IsFalse(TimelinePlayer.Find(ref playbacks, 1, out _));
+                Assert.IsFalse(global::Tl.PlaybackRules.Find(ref slots, 1, out _));
             }
         }
 
@@ -150,7 +166,8 @@ namespace Tl.Unity.Tests
             using (var closed = Closed())
             {
                 var native = closed;
-                TimelinePlayer.Start(ref playbacks, _entity.Index, new global::Tl.TimelineId(RunId), 9, in _view, ref native);
+                var slots = Slots(native);
+                Start(ref slots, RunId, 9);
                 var slot = playbacks[0];
                 Assert.IsTrue(TimelineKernel.AdvancePlayback(ref slot, in _view, true, out var handover, out var removed));
                 Assert.IsFalse(handover);
@@ -166,7 +183,8 @@ namespace Tl.Unity.Tests
             using (var closed = Closed())
             {
                 var native = closed;
-                TimelinePlayer.Start(ref playbacks, _entity.Index, new global::Tl.TimelineId(JumpId), 5, in _view, ref native);
+                var slots = Slots(native);
+                Start(ref slots, JumpId, 5);
                 var slot = playbacks[0];
                 Assert.IsTrue(TimelineKernel.AdvancePlayback(ref slot, in _view, true, out var handover, out var removed));
                 Assert.IsTrue(handover);
@@ -184,7 +202,8 @@ namespace Tl.Unity.Tests
             using (var closed = Closed())
             {
                 var native = closed;
-                TimelinePlayer.Start(ref playbacks, _entity.Index, new global::Tl.TimelineId(HoldId), 3, in _view, ref native);
+                var slots = Slots(native);
+                Start(ref slots, HoldId, 3);
                 var slot = playbacks[0];
                 Assert.IsTrue(TimelineKernel.AdvancePlayback(ref slot, in _view, true, out _, out var removed));
                 Assert.IsFalse(removed);
@@ -204,7 +223,8 @@ namespace Tl.Unity.Tests
             using (var closed = Closed())
             {
                 var native = closed;
-                TimelinePlayer.Start(ref playbacks, _entity.Index, new global::Tl.TimelineId(SlideId), 7, in _view, ref native);
+                var slots = Slots(native);
+                Start(ref slots, SlideId, 7);
                 var slot = playbacks[0];
                 Assert.IsTrue(TimelineKernel.AdvancePlayback(ref slot, in _view, true, out _, out var removed));
                 Assert.IsTrue(removed);
@@ -219,7 +239,8 @@ namespace Tl.Unity.Tests
             using (var closed = Closed())
             {
                 var native = closed;
-                TimelinePlayer.Start(ref playbacks, _entity.Index, new global::Tl.TimelineId(RunId), 4, in _view, ref native);
+                var slots = Slots(native);
+                Start(ref slots, RunId, 4);
                 var slot = playbacks[0];
                 slot.Flags |= global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.StartPending;
                 Assert.IsTrue(TimelineKernel.AdvancePlayback(ref slot, in _view, true, out _, out var removed));
@@ -236,7 +257,8 @@ namespace Tl.Unity.Tests
             using (var closed = Closed())
             {
                 var native = closed;
-                TimelinePlayer.Start(ref playbacks, _entity.Index, new global::Tl.TimelineId(RunId), 4, in _view, ref native);
+                var slots = Slots(native);
+                Start(ref slots, RunId, 4);
                 var slot = playbacks[0];
                 slot.Flags |= global::Tl.PlaybackFlags.Reverse;
                 Assert.IsTrue(TimelineKernel.AdvancePlayback(ref slot, in _view, true, out _, out var removed));
@@ -248,14 +270,14 @@ namespace Tl.Unity.Tests
         [Test]
         public void SortRequests_OrdersByEntitySlotSequence()
         {
-            var items = new RequestEntry[4];
-            items[0] = new RequestEntry { Entity = 2, Slot = 0, Sequence = 0 };
-            items[1] = new RequestEntry { Entity = 0, Slot = 1, Sequence = 1 };
-            items[2] = new RequestEntry { Entity = 0, Slot = 0, Sequence = 3 };
-            items[3] = new RequestEntry { Entity = 0, Slot = 0, Sequence = 2 };
-            fixed (RequestEntry* ptr = items)
+            var items = new global::Tl.RequestRecord[4];
+            items[0] = new global::Tl.RequestRecord(2, 0, 0, 0, global::Tl.RequestOp.Start, 0);
+            items[1] = new global::Tl.RequestRecord(0, 1, 0, 0, global::Tl.RequestOp.Start, 1);
+            items[2] = new global::Tl.RequestRecord(0, 0, 0, 0, global::Tl.RequestOp.Start, 3);
+            items[3] = new global::Tl.RequestRecord(0, 0, 0, 0, global::Tl.RequestOp.Start, 2);
+            fixed (global::Tl.RequestRecord* ptr = items)
             {
-                TimelineKernel.SortRequests(ptr, items.Length);
+                global::Tl.RequestQueue.Sort(ptr, items.Length);
             }
             Assert.AreEqual(0, items[0].Entity);
             Assert.AreEqual(0, items[0].Slot);
@@ -268,17 +290,16 @@ namespace Tl.Unity.Tests
         [Test]
         public void Slots_StartFromSlot()
         {
-            var playbacks = _entities.GetBuffer<Playback>(_entity);
-            var slots = _entities.GetBuffer<TimelineSlot>(_entity);
+            var keys = _entities.GetBuffer<TimelineSlot>(_entity);
             using (var closed = Closed())
             {
-                var native = closed;
-                TimelineSlots.Set(ref slots, 7, new global::Tl.TimelineId(JumpId));
-                Assert.IsTrue(TimelineSlots.TryGetTimeline(ref slots, 7, out var id));
+                var slots = Slots(closed);
+                TimelineSlots.Set(ref keys, 7, new global::Tl.TimelineId(JumpId));
+                Assert.IsTrue(TimelineSlots.TryGetTimeline(ref keys, 7, out var id));
                 Assert.AreEqual(JumpId, id.Value);
-                Assert.IsTrue(TimelineSlots.StartFromSlot(ref playbacks, ref slots, _entity.Index, 7, 0, in _view, ref native));
-                Assert.IsTrue(TimelinePlayer.IsPlaying(ref playbacks, new global::Tl.TimelineId(JumpId)));
-                Assert.IsFalse(TimelineSlots.StartFromSlot(ref playbacks, ref slots, _entity.Index, 9, 0, in _view, ref native));
+                Assert.IsTrue(TimelineSlots.StartFromSlot(ref slots, ref keys, 7, 0, in _view));
+                Assert.IsTrue(global::Tl.PlaybackRules.IsPlaying(ref slots, JumpId));
+                Assert.IsFalse(TimelineSlots.StartFromSlot(ref slots, ref keys, 9, 0, in _view));
             }
         }
     }

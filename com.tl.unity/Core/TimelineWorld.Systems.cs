@@ -114,39 +114,10 @@ public sealed partial class TimelineWorld
     {
         if ((uint)record.Entity >= (uint)players.EntityCapacity)
             throw new ArgumentOutOfRangeException(nameof(record), $"Request names entity {record.Entity} outside the table capacity.");
-        switch (record.Op)
-        {
-            case RequestOp.Start:
-                if (record.Timeline == 0 || (uint)(record.Timeline - 1) >= (uint)_view.TimelineCount)
-                    throw new ArgumentException($"Request starts timeline {record.Timeline}; the loaded library holds {_view.TimelineCount}.");
-                var timeline = _view.Timelines + (record.Timeline - 1);
-                var duration = timeline->Duration;
-                if (duration == 0) return;
-                var at = timeline->Loop != 0 ? (ushort)(record.At % duration) : record.At < duration ? record.At : (ushort)(duration - 1);
-                players.TryStartImmediate(record.Entity, record.Timeline, at, (byte)timeline->Channel, out _);
-                return;
-            case RequestOp.Stop:
-                for (var i = 0; i < players.CountOf(record.Entity); i++)
-                    if (players.SlotsOf(record.Entity)[i].Timeline == record.Timeline && (players.SlotsOf(record.Entity)[i].Flags & PlaybackFlags.Stopping) == 0) { players.CloseSlot(record.Entity, i); return; }
-                return;
-            case RequestOp.StopChannel:
-                for (var i = 0; i < players.CountOf(record.Entity); i++)
-                    if (players.SlotsOf(record.Entity)[i].Timeline != 0 && (players.SlotsOf(record.Entity)[i].Flags & PlaybackFlags.Stopping) == 0 && players.SlotsOf(record.Entity)[i].Channel == (byte)record.Timeline) { players.CloseSlot(record.Entity, i); return; }
-                return;
-            case RequestOp.Pause:
-            case RequestOp.Resume:
-                for (var i = 0; i < players.CountOf(record.Entity); i++)
-                {
-                    var slot = players.SlotsOf(record.Entity) + i;
-                    if (slot->Timeline != record.Timeline || (slot->Flags & PlaybackFlags.Stopping) != 0) continue;
-                    slot->Flags = record.Op == RequestOp.Pause ? slot->Flags | PlaybackFlags.Paused : slot->Flags & ~PlaybackFlags.Paused;
-                    return;
-                }
-                return;
-            default:
-                for (var i = 0; i < players.CountOf(record.Entity); i++)
-                    if (players.SlotsOf(record.Entity)[i].Timeline != 0 && (players.SlotsOf(record.Entity)[i].Flags & PlaybackFlags.Stopping) == 0) players.CloseSlot(record.Entity, i);
-                return;
-        }
+        if (record.Op == RequestOp.Start && (record.Timeline == 0 || (uint)(record.Timeline - 1) >= (uint)_view.TimelineCount))
+            throw new ArgumentException($"Request starts timeline {record.Timeline}; the loaded library holds {_view.TimelineCount}.");
+        var slots = new PlaybackTable.Slots(players, record.Entity);
+        PlaybackRules.Apply(ref slots, _view.Timelines, _view.TimelineCount, record.Op, record.Timeline, record.At);
+        players.SetPlaying(record.Entity, true);
     }
 }

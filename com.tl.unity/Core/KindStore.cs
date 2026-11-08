@@ -70,6 +70,8 @@ public sealed unsafe class KindStore : IDisposable
     int* _stageCount;
     LibraryStep*** _stepArrays;
     int _windowTotal;
+    KindTables _t;
+    Rows _kindRows;
     readonly Dictionary<(string, int), (nint Routes, int Part)> _joined = new();
     readonly HashSet<string> _feeding = new(StringComparer.Ordinal);
     ushort*[] _routes = new ushort*[0];
@@ -302,25 +304,36 @@ public sealed unsafe class KindStore : IDisposable
         throw new ArgumentException($"Entity {entity} cannot reach kind '{_kindNames[Tz(missing)]}' fed by timeline {timeline} or its next chain; add the kind to the entity's reach.");
     }
 
-    internal void Stop(int entity, int slot)
+    internal void Close(int entity, int slot, ref Playback playback)
     {
-        var s = _players.SlotsOf(entity) + slot;
         _players.SetPlaying(entity, true);
-        if (_kindCount == 0 || (s->Flags & (PlaybackFlags.StartPending | PlaybackFlags.Ended)) != 0) return;
-        var id = s->Timeline;
-        var tk = _sec.Timelines + (id - 1);
-        if (tk->KindMask == 0) return;
-        var windows = _sec.Windows(tk);
-        int tick = s->Tick;
-        for (var k = _pairStart[id - 1]; k < _pairStart[id]; k++)
+        KindRules.Close(in _t, ref _kindRows, entity, ref playback, slot);
+    }
+
+    internal struct Rows : IKindRows
+    {
+        public KindTable** Tables;
+        public ulong* Mask;
+        public int* Offset;
+        public int* Row;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        int RowOf(int entity, int kind) => Row[Offset[entity] + Pop(Mask[entity] & ((1ul << kind) - 1))];
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public KindEntry* Append(int entity, LibraryFeeder* feeder)
         {
-            var w = (int)(_pairs[k] >> 16);
-            var f = (int)(_pairs[k] & 0xffff);
-            if (tick < windows[w].Start || tick >= windows[w].End) continue;
-            var feeder = _sec.Feeders + f;
-            if (feeder->Trigger == 0) _tables[feeder->Kind]->RemoveSpan(RowOf(entity, feeder->Kind), (byte)slot, id, (ushort)w, feeder->Kind);
-            else if (feeder->Trigger == 2 && tick < windows[w].End - 1) Append(entity, feeder, slot, id, w, KindEntryFlags.Pulse | KindEntryFlags.Interrupted);
+            var kind = feeder->Kind;
+            var table = Tables[kind];
+            var entry = table->Append(RowOf(entity, kind));
+            entry->Feeder = feeder->Ordinal;
+            entry->Owner = 0;
+            if (table->Grouped) *(ushort*)((byte*)entry + 8) = (ushort)kind;
+            return entry;
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void RemoveSpan(int entity, int kind, byte slot, ushort timeline, ushort step) => Tables[kind]->RemoveSpan(RowOf(entity, kind), slot, timeline, step, kind);
     }
 
     internal void Sync()
@@ -725,6 +738,8 @@ public sealed unsafe class KindStore : IDisposable
         BuildSteps();
         _pairs = (uint*)Zeroed((nuint)Math.Max(1, pairs.Count) * 4);
         for (var n = 0; n < pairs.Count; n++) _pairs[n] = pairs[n];
+        _t = new KindTables { Timelines = _tls, TimelineCount = _timelineCount, Sec = _sec, KindCount = _kindCount, Closure = _closure, Pairs = _pairs, PairStart = _pairStart };
+        _kindRows = new Rows { Tables = _tables, Mask = _mask, Offset = _offset, Row = _rows };
     }
 
     void BuildSteps()

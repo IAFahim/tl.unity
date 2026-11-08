@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using Unity.Collections;
@@ -46,9 +47,9 @@ namespace Tl.Unity
                 {
                     var queue = requests[row];
                     if (queue.Length == 0) continue;
-                    var slots = playbacks[row];
+                    var slots = new KindSlots(playbacks[row], &ctx, row);
                     for (var r = 0; r < queue.Length; r++)
-                        ctx.Apply(row, ref slots, queue[r]);
+                        global::Tl.PlaybackRules.Apply(ref slots, Index.Timelines, Index.TimelineCount, queue[r].Op, queue[r].Timeline, queue[r].At);
                     queue.Clear();
                     chunk.SetComponentEnabled(ref PlayingHandle, row, true);
                 }
@@ -74,9 +75,63 @@ namespace Tl.Unity
         }
     }
 
-    public unsafe struct KindCursor
+    public unsafe struct KindSlots : global::Tl.IPlaybackSlots
+    {
+        DynamicBuffer<Playback> _buffer;
+        global::Tl.Playback* _items;
+        int _length;
+        readonly KindCursor* _cursor;
+        readonly int _row;
+
+        public const int MaxSlots = 256;
+
+        public KindSlots(DynamicBuffer<Playback> buffer, KindCursor* cursor, int row)
+        {
+            _buffer = buffer;
+            _items = (global::Tl.Playback*)buffer.GetUnsafePtr();
+            _length = buffer.Length;
+            _cursor = cursor;
+            _row = row;
+        }
+
+        public int Length
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => _length;
+        }
+
+        public ref global::Tl.Playback this[int index]
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => ref _items[index];
+        }
+
+        public bool StartsPending => true;
+
+        public bool TryAdd(in global::Tl.Playback playback)
+        {
+            if (_length >= MaxSlots) return false;
+            var copy = playback;
+            _buffer.Add(*(Playback*)&copy);
+            _items = (global::Tl.Playback*)_buffer.GetUnsafePtr();
+            _length++;
+            return true;
+        }
+
+        public bool Admit(ushort timeline)
+        {
+            if (_cursor->Tables.Reaches(timeline, _cursor->Reach)) return true;
+            _cursor->Counters[KindCounter.DroppedStarts]++;
+            return false;
+        }
+
+        public void Close(int index) => global::Tl.KindRules.Close(in _cursor->Tables, ref *_cursor, _row, ref _items[index], index);
+    }
+
+    public unsafe struct KindCursor : global::Tl.IKindRows
     {
         public KindIndex Index;
+        public global::Tl.KindTables Tables;
         public ArchetypeChunk Chunk;
         public KindHandleSet* Handles;
         public UnsafeUntypedBufferAccessor* Buffers;
@@ -84,11 +139,10 @@ namespace Tl.Unity
         public ulong Reach;
         public ulong Taken;
 
-        const int MaxSlots = 256;
-
         public void Bind(in ArchetypeChunk chunk)
         {
             Chunk = chunk;
+            Tables = Index.Tables;
             Reach = 0;
             Taken = 0;
             for (var k = 0; k < Index.KindCount; k++)
@@ -104,121 +158,6 @@ namespace Tl.Unity
                 Taken |= 1ul << kind;
             }
             return Buffers + kind;
-        }
-
-        public void Apply(int row, ref DynamicBuffer<Playback> slots, in TimelineRequest request)
-        {
-            switch (request.Op)
-            {
-                case global::Tl.RequestOp.Start:
-                    Start(row, ref slots, request.Timeline, request.At);
-                    return;
-                case global::Tl.RequestOp.Stop:
-                    for (var i = 0; i < slots.Length; i++)
-                    {
-                        var s = slots[i];
-                        if (s.Timeline == request.Timeline && (s.Flags & global::Tl.PlaybackFlags.Stopping) == 0)
-                        {
-                            Close(row, ref slots, i);
-                            return;
-                        }
-                    }
-                    return;
-                case global::Tl.RequestOp.Pause:
-                case global::Tl.RequestOp.Resume:
-                    for (var i = 0; i < slots.Length; i++)
-                    {
-                        var s = slots[i];
-                        if (request.Timeline == 0 || s.Timeline != request.Timeline || (s.Flags & global::Tl.PlaybackFlags.Stopping) != 0) continue;
-                        s.Flags = request.Op == global::Tl.RequestOp.Pause ? s.Flags | global::Tl.PlaybackFlags.Paused : s.Flags & ~global::Tl.PlaybackFlags.Paused;
-                        slots[i] = s;
-                        return;
-                    }
-                    return;
-                case global::Tl.RequestOp.StopChannel:
-                    for (var i = 0; i < slots.Length; i++)
-                    {
-                        var s = slots[i];
-                        if (s.Timeline != 0 && (s.Flags & global::Tl.PlaybackFlags.Stopping) == 0 && s.Channel == (byte)request.Timeline)
-                        {
-                            Close(row, ref slots, i);
-                            return;
-                        }
-                    }
-                    return;
-                default:
-                    for (var i = 0; i < slots.Length; i++)
-                    {
-                        var s = slots[i];
-                        if (s.Timeline != 0 && (s.Flags & global::Tl.PlaybackFlags.Stopping) == 0)
-                            Close(row, ref slots, i);
-                    }
-                    return;
-            }
-        }
-
-        void Start(int row, ref DynamicBuffer<Playback> slots, ushort timeline, ushort at)
-        {
-            if (timeline == 0 || (uint)(timeline - 1) >= (uint)Index.TimelineCount) return;
-            var tl = Index.Timelines + (timeline - 1);
-            var duration = tl->Duration;
-            if (duration == 0) return;
-            var tick = tl->Loop != 0 ? (ushort)(at % duration) : at < duration ? at : (ushort)(duration - 1);
-            var channel = (byte)tl->Channel;
-            var count = slots.Length;
-            if (channel != 0)
-                for (var i = 0; i < count; i++)
-                {
-                    var s = slots[i];
-                    if (s.Timeline != 0 && s.Channel == channel && (s.Flags & global::Tl.PlaybackFlags.Stopping) == 0)
-                    {
-                        Close(row, ref slots, i);
-                        break;
-                    }
-                }
-            var free = count;
-            for (var i = count - 1; i >= 0; i--)
-            {
-                var s = slots[i];
-                if (s.Timeline == 0) free = i;
-                else if (s.Timeline == timeline && (s.Flags & global::Tl.PlaybackFlags.Stopping) == 0) return;
-            }
-            if (free == MaxSlots) return;
-            if (Index.KindCount != 0 && (Index.Closure[timeline - 1] & ~Reach) != 0)
-            {
-                Counters[KindCounter.DroppedStarts]++;
-                return;
-            }
-            var playback = new Playback { Timeline = timeline, Tick = tick, Channel = channel, Flags = global::Tl.PlaybackFlags.StartPending };
-            if (free == count) slots.Add(playback);
-            else slots[free] = playback;
-        }
-
-        void Close(int row, ref DynamicBuffer<Playback> slots, int slot)
-        {
-            var s = slots[slot];
-            Stop(row, slot, ref s);
-            s.Flags = (s.Flags & (global::Tl.PlaybackFlags.Reverse | global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.StartPending)) | global::Tl.PlaybackFlags.Stopping;
-            slots[slot] = s;
-        }
-
-        void Stop(int row, int slot, ref Playback s)
-        {
-            if (Index.KindCount == 0 || (s.Flags & (global::Tl.PlaybackFlags.StartPending | global::Tl.PlaybackFlags.Ended)) != 0) return;
-            var id = s.Timeline;
-            var tk = Index.Sec.Timelines + (id - 1);
-            if (tk->KindMask == 0) return;
-            var windows = Index.Sec.Windows(tk);
-            int tick = s.Tick;
-            for (var k = Index.PairStart[id - 1]; k < Index.PairStart[id]; k++)
-            {
-                var w = (int)(Index.Pairs[k] >> 16);
-                var f = (int)(Index.Pairs[k] & 0xffff);
-                if (tick < windows[w].Start || tick >= windows[w].End) continue;
-                var feeder = Index.Sec.Feeders + f;
-                if (feeder->Trigger == 0) RemoveSpan(row, feeder->Kind, (byte)slot, id, (ushort)w);
-                else if (feeder->Trigger == 2 && tick < windows[w].End - 1) Append(row, feeder, slot, id, w, global::Tl.KindEntryFlags.Pulse | global::Tl.KindEntryFlags.Interrupted);
-            }
         }
 
         public bool TickEntity(int row, ref DynamicBuffer<Playback> slots, int stepDir)
@@ -431,6 +370,17 @@ namespace Tl.Unity
             entry->Owner = (byte)(route >> 8);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public global::Tl.KindEntry* Append(int row, global::Tl.LibraryFeeder* feeder)
+        {
+            var entry = AppendEntry(row, feeder->Kind);
+            if (entry == null) return null;
+            var route = Index.Routes[feeder - Index.Sec.Feeders];
+            entry->Feeder = (byte)route;
+            entry->Owner = (byte)(route >> 8);
+            return entry;
+        }
+
         public global::Tl.KindEntry* AppendEntry(int row, int kind)
         {
             if ((Reach & (1ul << kind)) == 0) return null;
@@ -468,9 +418,9 @@ namespace Tl.Unity
             }
         }
 
-        public bool RemoveSpan(int row, int kind, byte slot, ushort timeline, ushort step)
+        public void RemoveSpan(int row, int kind, byte slot, ushort timeline, ushort step)
         {
-            if ((Reach & (1ul << kind)) == 0) return false;
+            if ((Reach & (1ul << kind)) == 0) return;
             var stride = Index.EntryStride[kind];
             var buffer = Buffer(kind);
             var length = buffer->GetBufferLength(row);
@@ -483,9 +433,8 @@ namespace Tl.Unity
                 if (tail > 0) UnsafeUtility.MemMove(data + (long)i * stride, data + (long)(i + 1) * stride, tail);
                 buffer->ResizeUninitialized(row, length - 1);
                 if (length == 1) Chunk.SetComponentEnabled(ref *KindHandleSet.Active(Handles, kind), row, false);
-                return true;
+                return;
             }
-            return false;
         }
     }
 }

@@ -49,10 +49,10 @@ public unsafe struct RequestQueue
         queue->_items[queue->_count++] = new RequestRecord(entity, slot, timeline, at, op, queue->_sequence++);
     }
 
-    public static void SortStable(RequestQueue* queue)
+    public static void SortStable(RequestQueue* queue) => Sort(queue->_items, queue->_count);
+
+    public static void Sort(RequestRecord* items, int count)
     {
-        var count = queue->_count;
-        var items = queue->_items;
         for (var i = 1; i < count; i++)
         {
             var item = items[i];
