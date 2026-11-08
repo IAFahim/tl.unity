@@ -45,6 +45,8 @@ namespace ForceDemo.Tests
                     firstProblem = message;
             }
             Application.logMessageReceived += Count;
+            var asyncShaders = ShaderUtil.allowAsyncCompilation;
+            ShaderUtil.allowAsyncCompilation = false;
             try
             {
                 yield return EditorSceneManager.LoadSceneAsyncInPlayMode(scene, new LoadSceneParameters(LoadSceneMode.Single));
@@ -110,6 +112,7 @@ namespace ForceDemo.Tests
             }
             finally
             {
+                ShaderUtil.allowAsyncCompilation = asyncShaders;
                 Application.logMessageReceived -= Count;
             }
         }
