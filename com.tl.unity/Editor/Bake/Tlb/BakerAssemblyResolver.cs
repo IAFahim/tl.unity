@@ -71,7 +71,7 @@ public sealed class BakerAssemblyResolver
             scope = candidates.Where(t => string.Equals(t.Assembly.GetName().Name, assemblyName, StringComparison.OrdinalIgnoreCase)).Distinct().ToList();
 
         if (scope.Count == 1)
-            return scope[0];
+            return Unique(scope[0]);
 
         if (scope.Count == 0)
         {
@@ -103,7 +103,7 @@ public sealed class BakerAssemblyResolver
         }
 
         if (candidates.Count == 1)
-            return candidates[0];
+            return Unique(candidates[0]);
 
         if (candidates.Count == 0)
         {
@@ -165,6 +165,18 @@ public sealed class BakerAssemblyResolver
         @namespace.Length == 0
             ? string.IsNullOrEmpty(type.Namespace)
             : string.Equals(type.Namespace, @namespace, StringComparison.Ordinal);
+
+    private Type Unique(Type picked)
+    {
+        foreach (var asm in EnumerateCandidateAssemblies())
+        {
+            Type? twin;
+            try { twin = asm.GetType(picked.FullName!, false); }
+            catch (Exception ex) when (ex is FileLoadException or FileNotFoundException or BadImageFormatException or TypeLoadException) { continue; }
+            if (twin != null && twin != picked) TypeNames.Collide(Keying.StableName(picked), picked, twin);
+        }
+        return picked;
+    }
 
     private IEnumerable<Assembly> EnumerateCandidateAssemblies()
     {

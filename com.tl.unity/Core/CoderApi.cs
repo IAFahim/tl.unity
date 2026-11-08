@@ -23,6 +23,11 @@ public sealed class TlKindAttribute : Attribute
     public int GamePulses { get; set; }
 }
 
+[AttributeUsage(AttributeTargets.Struct)]
+public sealed class TlStateAttribute : Attribute
+{
+}
+
 public interface ITlTrack<TClip> : ITrack<TlNoSettings<TClip>, TClip>
     where TClip : unmanaged
 {

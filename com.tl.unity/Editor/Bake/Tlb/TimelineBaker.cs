@@ -32,6 +32,7 @@ public static class TimelineBaker
     {
         if (timeline == null)
             throw new ArgumentNullException(nameof(timeline));
+        TypeNames.Unique(timeline.Tracks.Select(t => t.Type).Concat(timeline.Tracks.SelectMany(t => t.Clips).Select(c => c.Type)).Concat(timeline.Markers.Select(m => m.Type)).Where(t => t != null));
         return TypedBake.Bake(timeline, resolver ?? BakerAssemblyResolver.FromAssemblies([]), manifest);
     }
 

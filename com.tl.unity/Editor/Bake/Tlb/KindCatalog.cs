@@ -36,6 +36,14 @@ internal sealed class KindCatalog
     {
         var types = assemblies.Distinct().SelectMany(GetTypesSafe).OrderBy(t => t.FullName, StringComparer.Ordinal).ToArray();
         var catalog = new KindCatalog();
+        var keyed = new List<Type>();
+        foreach (var type in types)
+        {
+            var (track, marker) = Sources(type);
+            if (track != null) { keyed.Add(track.Value.Track); keyed.Add(track.Value.Clip); }
+            if (marker != null) keyed.Add(marker);
+        }
+        TypeNames.Unique(keyed);
         var kindTypes = new Dictionary<Type, int>();
         foreach (var type in types)
         {

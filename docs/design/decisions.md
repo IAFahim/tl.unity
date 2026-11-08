@@ -26,6 +26,10 @@ or one library are an error with both assembly names in the message, never a sil
 fixtures are re-pinned in the same commit; the state hashes stay identical: 13943614770702343869 (600 steps) and 6607956939547305625
 (events).
 
+Done in phase 4 (tl `f731c1de`): `Keying.StableName` and the generator front end drop the assembly name; the baker, the resolver and
+the kind catalog fail on a full-name twin with both assembly names; every TLB, library and snapshot fixture was re-pinned, the
+state hashes did not move.
+
 ## 4. Control is per playback and per channel
 
 `Seek`, `SetSpeed`, reverse and the channel verbs act on one playback or one channel, not on the whole world (IAFahim/tl#577, plan

@@ -9,7 +9,7 @@ namespace PlainGame
         public const ushort SpeedBoost = 4;
         public const ushort Stomp = 5;
         public const ushort Whistle = 6;
-        public const string LibraryDigest = "f1f8cc86a25bd410bf264f489c65407f9e60358a322b258f38fba820a9cd2e9a";
+        public const string LibraryDigest = "19cc81e9fed5ce3739eeb362a0d1d4b4791b051d41a9e033f80890817550a148";
         public const uint TickRate = 60;
     }
 }

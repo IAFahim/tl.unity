@@ -1881,19 +1881,10 @@ internal static class TimelineBakerFastCore
 
         internal static ulong MarkerKey(Type type)
         {
-            var name = MarkerStableName(type);
+            var name = Keying.StableName(type);
             ulong h = 14695981039346656037ul;
             foreach (var c in name) h = (h ^ c) * 1099511628211ul;
             return h | 1ul;
-        }
-
-        internal static string MarkerStableName(Type type)
-        {
-            var prefix = type.IsNested ? MarkerStableName(type.DeclaringType!) + "+" : type.Namespace is { } space ? space + "." : "";
-            if (!type.IsConstructedGenericType) return prefix + type.Name + ", " + type.Assembly.GetName().Name;
-            var text = prefix + type.Name + "<";
-            foreach (var a in type.GetGenericArguments()) text += MarkerStableName(a) + ",";
-            return text + ", " + type.Assembly.GetName().Name;
         }
 
         private byte[] Core(List<Lane> lanes, List<(int Track, int Clip, string Name)> labels)

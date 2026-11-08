@@ -402,7 +402,7 @@ for (var __i = 0; __i < __stage->StepCount; __i++)
 {
 var __def = __stage->Steps + __i;
 if (__tick < __def->WindowStart || __tick >= __def->WindowEnd) continue;
-if (__def->PairKey == 1713852806099589751UL)
+if (__def->PairKey == 3462762029702372951UL)
 {
 byte* __row4 = (byte*)__def->FrameRow;
 byte* __first4 = __row4 + sizeof(global::KindGame.CueTrack);

@@ -17,11 +17,9 @@ static class Keying
 
 	internal static ulong Of(string text) { var hash = Seed; foreach (var c in text) hash = (hash ^ c) * Prime; return hash | 1; }
 
-	internal static string StableName(Type type) => Name(type) + ", " + type.Assembly.GetName().Name;
-
-	static string Name(Type type)
+	internal static string StableName(Type type)
 	{
-		var prefix = type.IsNested ? Name(type.DeclaringType!) + "+" : type.Namespace is { } space ? space + "." : "";
+		var prefix = type.IsNested ? StableName(type.DeclaringType!) + "+" : type.Namespace is { } space ? space + "." : "";
 		if (!type.IsConstructedGenericType) return prefix + type.Name;
 		var text = prefix + type.Name + "<";
 		foreach (var argument in type.GetGenericArguments()) text += StableName(argument) + ",";
