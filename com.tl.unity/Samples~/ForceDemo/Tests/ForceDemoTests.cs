@@ -73,7 +73,9 @@ namespace ForceDemo.Tests
                 string shotFile = null;
                 var cameraLag = float.NaN;
                 deadline = Time.realtimeSinceStartup + 60f;
-                while (Time.realtimeSinceStartup < deadline && float.IsNaN(backX))
+                var laps = 0;
+                var inGap = false;
+                while (Time.realtimeSinceStartup < deadline && (float.IsNaN(backX) || graphics && picture != "ok" && laps < 3))
                 {
                     yield return null;
                     var playbacks = entities.GetBuffer<Playback>(entity);
@@ -81,11 +83,16 @@ namespace ForceDemo.Tests
                         continue;
                     var playback = playbacks[0];
                     var x = entities.GetComponentData<LocalTransform>(entity).Position.x;
-                    if (playback.Timeline == push && playback.Tick >= 165 && playback.Tick <= 178 && float.IsNaN(pushedX))
+                    var gap = playback.Timeline == push && playback.Tick >= 165 && playback.Tick <= 178;
+                    if (gap && !inGap)
                     {
-                        pushedX = x;
-                        cameraLag = Camera.main != null ? Camera.main.transform.position.x - x : float.NaN;
-                        if (graphics)
+                        laps++;
+                        if (float.IsNaN(pushedX))
+                        {
+                            pushedX = x;
+                            cameraLag = Camera.main != null ? Camera.main.transform.position.x - x : float.NaN;
+                        }
+                        if (graphics && picture != "ok")
                         {
                             var shot = Render();
                             pictureError = Centroid(shot, new Vector3(x, 0.5f, 0f));
@@ -94,11 +101,12 @@ namespace ForceDemo.Tests
                             UnityEngine.Object.Destroy(shot);
                         }
                     }
-                    if (playback.Timeline == back && playback.Tick >= 125 && playback.Tick <= 175 && !float.IsNaN(pushedX))
+                    inGap = gap;
+                    if (playback.Timeline == back && playback.Tick >= 125 && playback.Tick <= 175 && !float.IsNaN(pushedX) && float.IsNaN(backX))
                         backX = x;
                 }
-                var line = string.Format(CultureInfo.InvariantCulture, "TL-DEMO force x={0:0.0000} back={1:0.0000} expected={2:0.0000} warnings={3} errors={4} picture={5} pictureError={6:0.0000} cameraLag={7:0.000} shot={8}",
-                    pushedX - StartX, backX, ExpectedPush, warnings, errors, picture, pictureError, cameraLag, shotFile ?? "none");
+                var line = string.Format(CultureInfo.InvariantCulture, "TL-DEMO force x={0:0.0000} back={1:0.0000} expected={2:0.0000} warnings={3} errors={4} picture={5} pictureError={6:0.0000} cameraLag={7:0.000} pictureLap={8} shot={9}",
+                    pushedX - StartX, backX, ExpectedPush, warnings, errors, picture, pictureError, cameraLag, laps, shotFile ?? "none");
                 Debug.Log(line);
                 Assert.AreEqual(ExpectedPush, pushedX - StartX, 0.0005f, "Strength 4 for 2 s with a falling linear curve pushes 4.0333 m, then the 1 s gap holds it there");
                 Assert.AreEqual(0f, backX, 0.0005f, "Return (Play next) pushes the cube back to where it started");

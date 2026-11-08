@@ -56,6 +56,7 @@ namespace CrowdDemo.Tests
                 }
                 for (var i = 0; i < 30; i++)
                     yield return null;
+                Shot("CrowdDemo-" + count + ".png");
                 Measure(group, entities, Steps, count, out _, out _);
                 Measure(group, entities, Steps, count, out var ns, out var allocated);
                 var line = string.Format(CultureInfo.InvariantCulture, "TL-BENCH crowd entities={0} ns/entity={1:0.0} warmB={2} playing={3} steps={4} burst={5} workers={6}",
@@ -84,6 +85,28 @@ namespace CrowdDemo.Tests
             var after = GC.GetAllocatedBytesForCurrentThread();
             allocated = after - before;
             ns = watch.Elapsed.TotalMilliseconds * 1000000.0 / ((double)count * steps);
+        }
+
+        static string Shot(string file)
+        {
+            var camera = Camera.main;
+            if (camera == null || SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null)
+                return "none";
+            var target = RenderTexture.GetTemporary(960, 540, 24);
+            var previous = RenderTexture.active;
+            camera.targetTexture = target;
+            camera.Render();
+            RenderTexture.active = target;
+            var image = new Texture2D(960, 540, TextureFormat.RGB24, false);
+            image.ReadPixels(new Rect(0, 0, 960, 540), 0, 0);
+            image.Apply();
+            camera.targetTexture = null;
+            RenderTexture.active = previous;
+            RenderTexture.ReleaseTemporary(target);
+            var path = Path.GetFullPath(Path.Combine("Logs", file));
+            File.WriteAllBytes(path, image.EncodeToPNG());
+            UnityEngine.Object.Destroy(image);
+            return path;
         }
 
         static int Playing(EntityManager entities, EntityQuery dancers)

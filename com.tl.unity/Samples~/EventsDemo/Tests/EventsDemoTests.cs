@@ -56,11 +56,14 @@ namespace EventsDemo.Tests
                 var sawSpark = false;
                 var sawHurt = false;
                 var mismatch = -1;
+                var shot = "none";
                 deadline = Time.realtimeSinceStartup + 60f;
                 while (Time.realtimeSinceStartup < deadline)
                 {
                     yield return null;
                     var score = entities.GetComponentData<Score>(knight);
+                    if (!sawSpark && !sparks.IsEmpty)
+                        shot = Shot("EventsDemo.png");
                     sawSpark |= !sparks.IsEmpty;
                     foreach (var playback in entities.GetBuffer<Playback>(dummy))
                         sawHurt |= playback.Timeline != 0;
@@ -72,8 +75,8 @@ namespace EventsDemo.Tests
                 }
                 var final = entities.GetComponentData<Score>(knight);
                 var finalHealth = entities.GetComponentData<DummyHealth>(dummy).Max - entities.GetComponentData<Wounds>(dummy).Taken;
-                Debug.Log(string.Format(CultureInfo.InvariantCulture, "TL-DEMO events strikes={0} health={1} hurt={2} sparks={3} ticks={4} sawSpark={5} sawHurt={6} healthMismatchAt={7} warnings={8} errors={9}",
-                    final.Strikes, finalHealth, final.Hurts, final.Sparks, final.Ticks, sawSpark, sawHurt, mismatch, warnings, errors));
+                Debug.Log(string.Format(CultureInfo.InvariantCulture, "TL-DEMO events strikes={0} health={1} hurt={2} sparks={3} ticks={4} sawSpark={5} sawHurt={6} healthMismatchAt={7} warnings={8} errors={9} shot={10}",
+                    final.Strikes, finalHealth, final.Hurts, final.Sparks, final.Ticks, sawSpark, sawHurt, mismatch, warnings, errors, shot));
                 Assert.That(final.Ticks, Is.InRange(Steps, Steps + 19), "the test read the numbers within the first 20 ticks after step 600");
                 Assert.AreEqual(ExpectedStrikes, final.Strikes, "Combo loops every 120 ticks with strikes at 20, 50 and 80: 5 loops, 15 strikes");
                 Assert.AreEqual(ExpectedHealth, finalHealth, "each strike sends 6 damage to the dummy: 100 - 15 x 6");
@@ -89,6 +92,28 @@ namespace EventsDemo.Tests
             {
                 Application.logMessageReceived -= Count;
             }
+        }
+
+        static string Shot(string file)
+        {
+            var camera = Camera.main;
+            if (camera == null || SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null)
+                return "none";
+            var target = RenderTexture.GetTemporary(960, 540, 24);
+            var previous = RenderTexture.active;
+            camera.targetTexture = target;
+            camera.Render();
+            RenderTexture.active = target;
+            var image = new Texture2D(960, 540, TextureFormat.RGB24, false);
+            image.ReadPixels(new Rect(0, 0, 960, 540), 0, 0);
+            image.Apply();
+            camera.targetTexture = null;
+            RenderTexture.active = previous;
+            RenderTexture.ReleaseTemporary(target);
+            var path = Path.GetFullPath(Path.Combine("Logs", file));
+            File.WriteAllBytes(path, image.EncodeToPNG());
+            UnityEngine.Object.Destroy(image);
+            return path;
         }
 
         static string Describe(EntityManager entities)
