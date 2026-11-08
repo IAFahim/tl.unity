@@ -50,6 +50,17 @@ namespace AutoKinds
         public int Rings;
     }
 
+    public struct Bell
+    {
+        public int Rings;
+    }
+
+    public struct BellMarker : IMarker<Bell>
+    {
+        [Pulse(typeof(ChimeKind), On = ClipEvent.Marker)]
+        public static int Ring(in MarkerFrame<Bell> marker) => marker.Direction * marker.Marker.Rings;
+    }
+
     public struct ChimeTrack : ITlTrack<ChimeClip>
     {
         [Pulse(typeof(ChimeKind), On = ClipEvent.Start)]

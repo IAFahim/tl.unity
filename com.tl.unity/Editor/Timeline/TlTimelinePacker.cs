@@ -52,7 +52,7 @@ namespace Tl.Unity.Editor
             return TimelineJson.Export(typed, manifest);
         }
 
-        static TypedTimeline Typed(TimelineAsset timeline, uint tickRate, ref TlBaker baker, UnityEngine.Object context, out List<TimelineAsset> refs, out string[] channels, out List<(TypedClip clip, TlClipData data)> written)
+        static TypedTimeline Typed(TimelineAsset timeline, uint tickRate, ref TlBaker baker, UnityEngine.Object context, out List<TimelineAsset> refs, out string[] channels, out List<(object item, TlClipData data)> written)
         {
             var name = timeline.name;
             var typed = new TypedTimeline { Name = name, Duration = Ticks(timeline.duration, tickRate) };
@@ -74,7 +74,7 @@ namespace Tl.Unity.Editor
                     typed.Channel = channels[channels.Length - 1];
                 }
             }
-            written = new List<(TypedClip clip, TlClipData data)>();
+            written = new List<(object item, TlClipData data)>();
             TlClipData.AssetResolver = AssetResolver;
             foreach (var track in timeline.GetOutputTracks())
             {
@@ -113,26 +113,52 @@ namespace Tl.Unity.Editor
                 if (typedTrack.Clips.Count > 0)
                     typed.Tracks.Add(typedTrack);
             }
+            foreach (var marker in TlDirectorTimelines.Markers(timeline).OrderBy(m => m.time))
+            {
+                var data = marker.Data;
+                try
+                {
+                    if (baker.IsActive)
+                        data.Bake(ref baker);
+                }
+                catch (Exception error)
+                {
+                    Debug.LogWarning(TlMenu.ShortName(data.MenuName) + " baking failed on the marker at " + Seconds(marker.time) + " in " + name + " (" + NameOf(context) + "): " + error.Message + " The marker is skipped.", marker);
+                    continue;
+                }
+                foreach (var target in TlDirectorTimelines.IdFields(data))
+                    if (!refs.Contains(target))
+                        refs.Add(target);
+                var tick = Ticks(marker.time, tickRate);
+                var typedMarker = new TypedMarker { Type = data.ClipType, Tick = tick };
+                typed.Markers.Add(typedMarker);
+                written.Add((typedMarker, data));
+                typed.Duration = Math.Max(typed.Duration, tick + 1);
+            }
             return typed;
         }
 
         const ushort Marker = 0x8000;
 
-        static byte[] Bake(TypedTimeline typed, LibraryManifest manifest, List<(TypedClip clip, TlClipData data)> written, List<TimelineAsset> refs, ushort marker)
+        static byte[] Bake(TypedTimeline typed, LibraryManifest manifest, List<(object item, TlClipData data)> written, List<TimelineAsset> refs, ushort marker)
         {
             Fill(written, refs, marker);
             return LibraryBake.BakeTyped(typed, manifest);
         }
 
-        static void Fill(List<(TypedClip clip, TlClipData data)> written, List<TimelineAsset> refs, ushort marker)
+        static void Fill(List<(object item, TlClipData data)> written, List<TimelineAsset> refs, ushort marker)
         {
             TlClipData.LocalIdResolver = asset => asset is TimelineAsset target && refs.IndexOf(target) is var index && index >= 0 ? (ushort)((index + 1) | marker) : (ushort)0;
             try
             {
-                foreach (var (clip, data) in written)
+                foreach (var (item, data) in written)
                 {
-                    clip.Data = new byte[data.ClipSize];
-                    data.WriteClip(clip.Data, 0);
+                    var bytes = new byte[data.ClipSize];
+                    data.WriteClip(bytes, 0);
+                    if (item is TypedClip clip)
+                        clip.Data = bytes;
+                    else
+                        ((TypedMarker)item).Data = bytes;
                 }
             }
             finally

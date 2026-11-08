@@ -59,10 +59,35 @@ namespace Tl.Unity.Editor
                     }
                     tracks++;
                 }
+                foreach (var marker in Markers(timeline))
+                {
+                    baker.DependsOn(marker);
+                    if (marker.parent != null)
+                        baker.DependsOn(marker.parent);
+                    tracks++;
+                }
                 if (tracks > 0)
                     result.Add(timeline);
             }
             return result;
+        }
+
+        public static IEnumerable<TlMarker> Markers(TimelineAsset timeline)
+        {
+            if (timeline == null)
+                yield break;
+            if (timeline.markerTrack != null)
+                foreach (var marker in timeline.markerTrack.GetMarkers())
+                    if (marker is TlMarker tl && tl.Data != null)
+                        yield return tl;
+            foreach (var track in timeline.GetOutputTracks())
+            {
+                if (track == timeline.markerTrack || track.mutedInHierarchy)
+                    continue;
+                foreach (var marker in track.GetMarkers())
+                    if (marker is TlMarker tl && tl.Data != null)
+                        yield return tl;
+            }
         }
 
         public static IEnumerable<TimelineAsset> Targets(TlClipData data)

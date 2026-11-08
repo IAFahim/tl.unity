@@ -159,6 +159,55 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
+        public void TheMarkerMenuStubBecomesATlMarkerInOneUndoStep()
+        {
+            var timeline = Timeline("Bells");
+            timeline.CreateMarkerTrack();
+            Undo.IncrementCurrentGroup();
+            var stub = timeline.markerTrack.CreateMarker<TestBellMenu>(0.5);
+            new TlMenuMarkerEditor().OnCreate(stub, null);
+            var markers = timeline.markerTrack.GetMarkers().ToList();
+            Assert.AreEqual(1, markers.Count);
+            var marker = markers[0] as TlMarker;
+            Assert.IsNotNull(marker, "the stub was replaced by a TlMarker");
+            Assert.AreEqual(0.5, marker.time, 1e-9);
+            Assert.AreEqual("Bell", marker.name);
+            Assert.IsInstanceOf<AutoKinds_Bell_TlMarkerData>(marker.Data);
+            Undo.PerformUndo();
+            Assert.AreEqual(0, timeline.markerTrack.GetMarkers().Count(), "one undo removes the whole add");
+        }
+
+        [Test]
+        public void MarkersPlacedInTheTimelineReachTheKindJobAtTheirTicks()
+        {
+            var timeline = Timeline("Bells");
+            timeline.CreateMarkerTrack();
+            var stub = timeline.markerTrack.CreateMarker<TestBellMenu>(0.5);
+            new TlMenuMarkerEditor().OnCreate(stub, null);
+            ((AutoKinds_Bell_TlMarkerData)timeline.markerTrack.GetMarkers().OfType<TlMarker>().Single().Data).Rings = 3;
+            var track = timeline.CreateTrack<TlTrack>(null, "Chime");
+            track.Template = new AutoKinds_ChimeClip_TlData();
+            var onTrack = track.CreateMarker<TlMarker>(1.0);
+            onTrack.Data = new AutoKinds_Bell_TlMarkerData { Rings = 4 };
+            using var baked = new Baked(Director("Bell", timeline).gameObject);
+            var entities = baked.World.EntityManager;
+            var entity = baked.Single<TlTimelineSet>();
+            Assert.IsTrue(entities.HasComponent<AutoKinds.Chime>(entity), "a timeline with only markers still adds the kind they pulse");
+            var live = new LiveWorld(baked.World, false, typeof(TlKindSystem<>).MakeGenericType(Type.GetType("Tl.Generated.TlAuto_Tl_Unity_AutoKinds_Jobs, Tl.Unity.AutoKinds", true)));
+            var rang = new List<string>();
+            var last = 0;
+            for (var step = 0; step < 90; step++)
+            {
+                live.Step(1);
+                var count = entities.GetComponentData<AutoKinds.Chime>(entity).Count;
+                if (count != last)
+                    rang.Add(entities.GetBuffer<Playback>(entity)[0].Tick + ":" + count);
+                last = count;
+            }
+            CollectionAssert.AreEqual(new[] { "30:3", "60:7" }, rang, string.Join(", ", rang));
+        }
+
+        [Test]
         public void ADirectorWithoutTlTracksBakesNothingOfTl()
         {
             var timeline = Timeline("Plain");
@@ -392,7 +441,7 @@ namespace Tl.Unity.Tracks.Tests
             readonly World _world;
             readonly SystemHandle[] _systems;
 
-            public LiveWorld(World world, bool control = false)
+            public LiveWorld(World world, bool control = false, Type apply = null)
             {
                 _world = world;
                 var systems = new List<SystemHandle>
@@ -407,6 +456,8 @@ namespace Tl.Unity.Tracks.Tests
                     systems.Add(world.CreateSystem<TlRequestResolveSystem>());
                 }
                 systems.Add(world.CreateSystem<TimelineKindTickSystem>());
+                if (apply != null)
+                    systems.Add(world.CreateSystem(apply));
                 _systems = systems.ToArray();
             }
 

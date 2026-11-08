@@ -42,6 +42,7 @@ namespace TlPacks.Tests
             foreach (var stub in new[] { "Tl_Pack_Motion_MoveClip_TlMenu.cs", "Tl_Pack_Motion_ScaleClip_TlMenu.cs", "Tl_Pack_Motion_SpinClip_TlMenu.cs", "Tl_Pack_Motion_TintClip_TlMenu.cs", "Tl_Pack_Stats_HitClip_TlMenu.cs", "Tl_Pack_Stats_HealClip_TlMenu.cs", "Tl_Pack_Stats_PoisonClip_TlMenu.cs", "Tl_Pack_Stats_BuffClip_TlMenu.cs", "Tl_Pack_Inventory_GiveClip_TlMenu.cs", "Tl_Pack_Inventory_CraftClip_TlMenu.cs", "Tl_Pack_Force_ForceClip_TlMenu.cs" })
                 Assert.IsTrue(wanted.ContainsKey(stub), stub);
             StringAssert.Contains("\"Motion/Tint\"", wanted["Tl_Pack_Motion_TintClip_TlMenu.cs"]);
+            StringAssert.Contains("TlMenuMarker", wanted["Tl_Pack_Inventory_PickupMarker_TlMarkerMenu.cs"]);
         }
 
         [Test]
