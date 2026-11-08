@@ -20,8 +20,8 @@ Other guides:
    `https://github.com/IAFahim/tl.unity.git?path=/com.tl.unity#main`.
 3. Optional: Package Manager > **Tl Unity Playback** > **Samples** > **Force demo** > **Import**. The scene opens by itself; press Play.
 
-Or from a terminal: the installers in IAFahim/tl (`install/unity.sh`, `install/unity.ps1`) create a URP project with the package and the
-Force demo ready (section 8).
+Or from a terminal: the installers in IAFahim/tl (`install/unity.sh`, `install/unity.ps1`) create a URP project with the package and all
+demos ready in one hub scene (section 8).
 
 ## 2. The coder's part: five small files
 
@@ -249,5 +249,6 @@ The tick path allocates nothing (0 B per warm frame) and holds no managed refere
 ## 8. Installers
 
 `install/unity.ps1` (Windows) and `install/unity.sh` (Linux, macOS, Git Bash) in IAFahim/tl create a URP project with the newest Unity 7
-editor, add the package from its git URL, import the Force demo, build its scene with a camera and run its PlayMode test. Nothing else is
-installed.
+editor, add the package from its git URL, import every demo sample (Force, Events, Crowd) and the Demo hub, build the demo scenes and a
+**Tl Demos** hub scene, run every demo's PlayMode test and print one line per demo with actual and expected numbers. Nothing else is
+installed. Each demo folder has a README: the first 10 minutes, what the designer builds in the Timeline window, what the coder writes.
