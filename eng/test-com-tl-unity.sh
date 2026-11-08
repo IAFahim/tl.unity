@@ -25,6 +25,15 @@ if [ ! -f "$probe/ProjectSettings/ProjectVersion.txt" ]; then
   "$unity" -batchmode -nographics -quit -createProject "$(native "$probe")" -logFile "$(native "$out")/create.log" || { echo "project creation failed: $out/create.log" >&2; exit 1; }
 fi
 platform=""
+packs=""
+testables='"com.tl.unity"'
+if [ "${TL_UNITY_PACKS:-0}" = 1 ]; then
+  for pack in "$root"/external/tl-kinds/packs/*/package.json; do
+    name="$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$pack" | head -1)"
+    packs="$packs    \"$name\": \"file:$(native "$(dirname "$pack")")\","$'\n'
+    if [ "$testables" = '"com.tl.unity"' ]; then testables="\"$name\""; else testables="$testables, \"$name\""; fi
+  done
+fi
 if [ "$(uname -s)" = Linux ]; then
   platform=$',\n    "com.unity.sdk.linux-x86_64": "1.1.1",\n    "com.unity.toolchain.linux-x86_64-linux": "1.1.1"'
 fi
@@ -32,13 +41,13 @@ cat > "$probe/Packages/manifest.json" <<JSON
 {
   "dependencies": {
     "com.tl.unity": "file:$(native "$root")/com.tl.unity",
-    "com.unity.burst": "1.8.25",
+${packs}    "com.unity.burst": "1.8.25",
     "com.unity.collections": "6.7.0",
     "com.unity.entities": "6.7.0",
     "com.unity.test-framework": "1.6.0",
     "com.unity.test-framework.performance": "6.7.0"$platform
   },
-  "testables": ["com.tl.unity"]
+  "testables": [$testables]
 }
 JSON
 [ "$#" -gt 0 ] || set -- EditMode PlayMode
