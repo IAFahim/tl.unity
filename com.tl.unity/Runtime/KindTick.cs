@@ -127,6 +127,8 @@ namespace Tl.Unity
         }
 
         public void Close(int index) => global::Tl.KindRules.Close(in _cursor->Tables, ref *_cursor, _row, ref _items[index], index);
+
+        public void Purge(int index) => _cursor->Purge(_row, (byte)index, _items[index].Timeline);
     }
 
     public unsafe struct KindCursor : global::Tl.IKindRows

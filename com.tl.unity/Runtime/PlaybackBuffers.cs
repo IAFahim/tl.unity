@@ -57,6 +57,36 @@ namespace Tl.Unity
         {
             return new TimelineRequest { Slot = slot, Timeline = timeline, Op = global::Tl.RequestOp.Resume };
         }
+
+        public static TimelineRequest Seek(int slot, ushort timeline, ushort tick)
+        {
+            return new TimelineRequest { Slot = slot, Timeline = timeline, At = tick, Op = global::Tl.RequestOp.Seek };
+        }
+
+        public static TimelineRequest Reverse(int slot, ushort timeline, bool reverse)
+        {
+            return new TimelineRequest { Slot = slot, Timeline = timeline, At = reverse ? (ushort)1 : (ushort)0, Op = global::Tl.RequestOp.Reverse };
+        }
+
+        public static TimelineRequest PauseChannel(int slot, byte channel)
+        {
+            return new TimelineRequest { Slot = slot, Timeline = channel, Op = global::Tl.RequestOp.PauseChannel };
+        }
+
+        public static TimelineRequest ResumeChannel(int slot, byte channel)
+        {
+            return new TimelineRequest { Slot = slot, Timeline = channel, Op = global::Tl.RequestOp.ResumeChannel };
+        }
+
+        public static TimelineRequest SeekChannel(int slot, byte channel, ushort tick)
+        {
+            return new TimelineRequest { Slot = slot, Timeline = channel, At = tick, Op = global::Tl.RequestOp.SeekChannel };
+        }
+
+        public static TimelineRequest ReverseChannel(int slot, byte channel, bool reverse)
+        {
+            return new TimelineRequest { Slot = slot, Timeline = channel, At = reverse ? (ushort)1 : (ushort)0, Op = global::Tl.RequestOp.ReverseChannel };
+        }
     }
 
     [InternalBufferCapacity(8)]

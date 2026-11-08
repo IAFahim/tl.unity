@@ -10,6 +10,7 @@ public interface IPlaybackSlots
     bool TryAdd(in Playback playback);
     bool Admit(ushort timeline);
     void Close(int index);
+    void Purge(int index);
 }
 
 public enum AdvanceResult : byte
@@ -57,6 +58,24 @@ public static unsafe class PlaybackRules
                 return;
             case RequestOp.Resume:
                 Pause(ref slots, timeline, false);
+                return;
+            case RequestOp.Seek:
+                Seek(ref slots, timelines, timelineCount, Find(ref slots, timeline), at);
+                return;
+            case RequestOp.Reverse:
+                Reverse(ref slots, timelines, timelineCount, Find(ref slots, timeline), at != 0);
+                return;
+            case RequestOp.PauseChannel:
+                PauseAt(ref slots, FindChannel(ref slots, (byte)timeline), true);
+                return;
+            case RequestOp.ResumeChannel:
+                PauseAt(ref slots, FindChannel(ref slots, (byte)timeline), false);
+                return;
+            case RequestOp.SeekChannel:
+                Seek(ref slots, timelines, timelineCount, FindChannel(ref slots, (byte)timeline), at);
+                return;
+            case RequestOp.ReverseChannel:
+                Reverse(ref slots, timelines, timelineCount, FindChannel(ref slots, (byte)timeline), at != 0);
                 return;
             default:
                 StopAll(ref slots);
@@ -125,6 +144,60 @@ public static unsafe class PlaybackRules
     {
         for (var i = 0; i < slots.Length; i++)
             if (IsLive(in slots[i])) slots.Close(i);
+    }
+
+    public static int Find<TSlots>(ref TSlots slots, ushort timeline) where TSlots : struct, IPlaybackSlots
+    {
+        for (var i = 0; i < slots.Length; i++)
+            if (slots[i].Timeline == timeline && IsLive(in slots[i])) return i;
+        return -1;
+    }
+
+    public static int FindChannel<TSlots>(ref TSlots slots, byte channel) where TSlots : struct, IPlaybackSlots
+    {
+        if (channel == 0) return -1;
+        for (var i = 0; i < slots.Length; i++)
+            if (IsLive(in slots[i]) && slots[i].Channel == channel) return i;
+        return -1;
+    }
+
+    public static bool Seek<TSlots>(ref TSlots slots, LibraryTimeline* timelines, int timelineCount, int index, ushort at) where TSlots : struct, IPlaybackSlots
+    {
+        if (index < 0) return false;
+        ref var slot = ref slots[index];
+        if ((uint)(slot.Timeline - 1) >= (uint)timelineCount) return false;
+        var tl = timelines + (slot.Timeline - 1);
+        var duration = tl->Duration;
+        if (duration == 0) return false;
+        var tick = tl->Loop != 0 ? (ushort)(at % duration) : at < duration ? at : (ushort)(duration - 1);
+        if ((slot.Flags & PlaybackFlags.StartPending) != 0)
+        {
+            slot.Tick = tick;
+            return true;
+        }
+        slots.Purge(index);
+        slot.Tick = tick;
+        slot.Flags = (slot.Flags & (PlaybackFlags.Reverse | PlaybackFlags.Paused)) | PlaybackFlags.ReenterPending;
+        return true;
+    }
+
+    public static bool Reverse<TSlots>(ref TSlots slots, LibraryTimeline* timelines, int timelineCount, int index, bool reverse) where TSlots : struct, IPlaybackSlots
+    {
+        if (index < 0) return false;
+        ref var slot = ref slots[index];
+        var flags = reverse ? slot.Flags | PlaybackFlags.Reverse : slot.Flags & ~PlaybackFlags.Reverse;
+        if ((flags & PlaybackFlags.Ended) != 0 && (uint)(slot.Timeline - 1) < (uint)timelineCount && slot.Tick == (reverse ? timelines[slot.Timeline - 1].Duration - 1 : 0))
+            flags = (flags & ~PlaybackFlags.Ended) | PlaybackFlags.StartPending;
+        slot.Flags = flags;
+        return true;
+    }
+
+    public static bool PauseAt<TSlots>(ref TSlots slots, int index, bool pause) where TSlots : struct, IPlaybackSlots
+    {
+        if (index < 0) return false;
+        ref var slot = ref slots[index];
+        slot.Flags = pause ? slot.Flags | PlaybackFlags.Paused : slot.Flags & ~PlaybackFlags.Paused;
+        return true;
     }
 
     public static bool Pause<TSlots>(ref TSlots slots, ushort timeline, bool pause) where TSlots : struct, IPlaybackSlots

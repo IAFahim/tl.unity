@@ -304,6 +304,11 @@ public sealed unsafe class KindStore : IDisposable
         throw new ArgumentException($"Entity {entity} cannot reach kind '{_kindNames[Tz(missing)]}' fed by timeline {timeline} or its next chain; add the kind to the entity's reach.");
     }
 
+    internal void Purge(int entity, int slot, in Playback playback)
+    {
+        if (playback.Timeline != 0) _kindRows.Purge(entity, (byte)slot, playback.Timeline);
+    }
+
     internal void Close(int entity, int slot, ref Playback playback)
     {
         _players.SetPlaying(entity, true);
