@@ -36,63 +36,17 @@ public sealed partial class TimelineWorld
         if (players.Kinds != null) throw new InvalidOperationException("A PlaybackTable with a KindStore advances through Tick, not Advance.");
         var timelines = _view.Timelines;
         if (timelines == null) return;
-        var count = (uint)_view.TimelineCount;
+        var count = _view.TimelineCount;
         for (var entity = 0; entity < players.EntityCapacity; entity++)
         {
             var slots = players.SlotsOf(entity);
             var slotsCount = players.CountOf(entity);
-            if (slotsCount == 0) continue;
             for (var i = 0; i < slotsCount; i++)
             {
-                var current = slots + i;
-                if (current->Timeline == 0) continue;
-                var flags = current->Flags;
-                if ((flags & (PlaybackFlags.Ended | PlaybackFlags.Paused)) != 0)
-                {
-                    current->Flags = flags & ~PlaybackFlags.StartPending;
-                    continue;
-                }
-                if (current->Timeline == 0 || (uint)(current->Timeline - 1) >= count)
-                    throw new ArgumentException($"Playback slot {i} of entity {entity} names no timeline in the loaded library.");
-                var timeline = timelines + (current->Timeline - 1);
-                var duration = timeline->Duration;
-                var reverse = (flags & PlaybackFlags.Reverse) != 0;
-                var handover = false;
-                if (duration == 0)
-                {
-                    current->Flags = (flags | PlaybackFlags.Ended) & ~PlaybackFlags.StartPending;
-                }
-                else if (reverse == forward)
-                {
-                    if (current->Tick == 0)
-                    {
-                        if (timeline->Loop != 0) current->Tick = (ushort)(duration - 1);
-                        else if (timeline->Hold != 0) current->Flags = flags | PlaybackFlags.Ended;
-                        else { players.RemoveSlot(entity, i); continue; }
-                    }
-                    else current->Tick--;
-                }
-                else if ((uint)current->Tick + 1u >= duration)
-                {
-                    if (timeline->Loop != 0) current->Tick = 0;
-                    else if (timeline->Next != 0 && (uint)(timeline->Next - 1) < count)
-                    {
-                        var next = timelines + (timeline->Next - 1);
-                        current->Timeline = timeline->Next;
-                        current->Tick = 0;
-                        current->Channel = (byte)next->Channel;
-                        handover = true;
-                    }
-                    else if (timeline->Hold != 0)
-                    {
-                        current->Tick = (ushort)(duration - 1);
-                        current->Flags = flags | PlaybackFlags.Ended;
-                    }
-                    else { players.RemoveSlot(entity, i); continue; }
-                }
-                else current->Tick++;
-                current->Flags &= ~PlaybackFlags.StartPending;
-                if (handover) current->Flags |= PlaybackFlags.StartPending;
+                if (slots[i].Timeline == 0) continue;
+                var result = PlaybackRules.Advance(ref slots[i], timelines, count, forward);
+                if (result == AdvanceResult.Removed) players.RemoveSlot(entity, i);
+                else if (result == AdvanceResult.Unknown) throw new ArgumentException($"Playback slot {i} of entity {entity} names no timeline in the loaded library.");
             }
         }
         ClosingList.Clear(players.Closing);

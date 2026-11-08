@@ -159,112 +159,76 @@ namespace Tl.Unity.Tests
             }
         }
 
+        global::Tl.AdvanceResult Advance(ref global::Tl.Playback slot)
+        {
+            return global::Tl.PlaybackRules.Advance(ref slot, _view.Timelines, _view.TimelineCount, true);
+        }
+
+        global::Tl.Playback Started(ushort timeline, ushort at)
+        {
+            using (var closed = Closed())
+            {
+                var slots = Slots(closed);
+                Assert.IsTrue(Start(ref slots, timeline, at));
+                return slots[0];
+            }
+        }
+
         [Test]
         public void Advance_WrapsLoop()
         {
-            var playbacks = _entities.GetBuffer<Playback>(_entity);
-            using (var closed = Closed())
-            {
-                var native = closed;
-                var slots = Slots(native);
-                Start(ref slots, RunId, 9);
-                var slot = playbacks[0];
-                Assert.IsTrue(TimelineKernel.AdvancePlayback(ref slot, in _view, true, out var handover, out var removed));
-                Assert.IsFalse(handover);
-                Assert.IsFalse(removed);
-                Assert.AreEqual(0, slot.Tick);
-            }
+            var slot = Started(RunId, 9);
+            Assert.AreEqual(global::Tl.AdvanceResult.Kept, Advance(ref slot));
+            Assert.AreEqual(0, slot.Tick);
         }
 
         [Test]
         public void Advance_NextHandover()
         {
-            var playbacks = _entities.GetBuffer<Playback>(_entity);
-            using (var closed = Closed())
-            {
-                var native = closed;
-                var slots = Slots(native);
-                Start(ref slots, JumpId, 5);
-                var slot = playbacks[0];
-                Assert.IsTrue(TimelineKernel.AdvancePlayback(ref slot, in _view, true, out var handover, out var removed));
-                Assert.IsTrue(handover);
-                Assert.IsFalse(removed);
-                Assert.AreEqual(RunId, slot.Timeline);
-                Assert.AreEqual(0, slot.Tick);
-                Assert.IsTrue((slot.Flags & global::Tl.PlaybackFlags.StartPending) != 0);
-            }
+            var slot = Started(JumpId, 5);
+            Assert.AreEqual(global::Tl.AdvanceResult.Kept, Advance(ref slot));
+            Assert.AreEqual(RunId, slot.Timeline);
+            Assert.AreEqual(0, slot.Tick);
+            Assert.AreEqual(1, slot.Channel);
+            Assert.IsTrue((slot.Flags & global::Tl.PlaybackFlags.StartPending) != 0);
         }
 
         [Test]
         public void Advance_HoldEndsAndStays()
         {
-            var playbacks = _entities.GetBuffer<Playback>(_entity);
-            using (var closed = Closed())
-            {
-                var native = closed;
-                var slots = Slots(native);
-                Start(ref slots, HoldId, 3);
-                var slot = playbacks[0];
-                Assert.IsTrue(TimelineKernel.AdvancePlayback(ref slot, in _view, true, out _, out var removed));
-                Assert.IsFalse(removed);
-                Assert.IsTrue((slot.Flags & global::Tl.PlaybackFlags.Ended) != 0);
-                Assert.AreEqual(3, slot.Tick);
-                var frozen = slot;
-                Assert.IsTrue(TimelineKernel.AdvancePlayback(ref slot, in _view, true, out _, out removed));
-                Assert.IsFalse(removed);
-                Assert.AreEqual(frozen.Tick, slot.Tick);
-            }
+            var slot = Started(HoldId, 3);
+            Assert.AreEqual(global::Tl.AdvanceResult.Kept, Advance(ref slot));
+            Assert.IsTrue((slot.Flags & global::Tl.PlaybackFlags.Ended) != 0);
+            Assert.AreEqual(3, slot.Tick);
+            var frozen = slot;
+            Assert.AreEqual(global::Tl.AdvanceResult.Kept, Advance(ref slot));
+            Assert.AreEqual(frozen.Tick, slot.Tick);
         }
 
         [Test]
         public void Advance_FiniteEndRemovesWithoutClose()
         {
-            var playbacks = _entities.GetBuffer<Playback>(_entity);
-            using (var closed = Closed())
-            {
-                var native = closed;
-                var slots = Slots(native);
-                Start(ref slots, SlideId, 7);
-                var slot = playbacks[0];
-                Assert.IsTrue(TimelineKernel.AdvancePlayback(ref slot, in _view, true, out _, out var removed));
-                Assert.IsTrue(removed);
-                Assert.AreEqual(0, native.Length);
-            }
+            var slot = Started(SlideId, 7);
+            Assert.AreEqual(global::Tl.AdvanceResult.Removed, Advance(ref slot));
         }
 
         [Test]
         public void Advance_PausedStaysAndClearsPending()
         {
-            var playbacks = _entities.GetBuffer<Playback>(_entity);
-            using (var closed = Closed())
-            {
-                var native = closed;
-                var slots = Slots(native);
-                Start(ref slots, RunId, 4);
-                var slot = playbacks[0];
-                slot.Flags |= global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.StartPending;
-                Assert.IsTrue(TimelineKernel.AdvancePlayback(ref slot, in _view, true, out _, out var removed));
-                Assert.IsFalse(removed);
-                Assert.AreEqual(4, slot.Tick);
-                Assert.IsTrue((slot.Flags & global::Tl.PlaybackFlags.StartPending) == 0);
-            }
+            var slot = Started(RunId, 4);
+            slot.Flags |= global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.StartPending;
+            Assert.AreEqual(global::Tl.AdvanceResult.Kept, Advance(ref slot));
+            Assert.AreEqual(4, slot.Tick);
+            Assert.IsTrue((slot.Flags & global::Tl.PlaybackFlags.StartPending) == 0);
         }
 
         [Test]
         public void Advance_ReverseStepsBackward()
         {
-            var playbacks = _entities.GetBuffer<Playback>(_entity);
-            using (var closed = Closed())
-            {
-                var native = closed;
-                var slots = Slots(native);
-                Start(ref slots, RunId, 4);
-                var slot = playbacks[0];
-                slot.Flags |= global::Tl.PlaybackFlags.Reverse;
-                Assert.IsTrue(TimelineKernel.AdvancePlayback(ref slot, in _view, true, out _, out var removed));
-                Assert.IsFalse(removed);
-                Assert.AreEqual(3, slot.Tick);
-            }
+            var slot = Started(RunId, 4);
+            slot.Flags |= global::Tl.PlaybackFlags.Reverse;
+            Assert.AreEqual(global::Tl.AdvanceResult.Kept, Advance(ref slot));
+            Assert.AreEqual(3, slot.Tick);
         }
 
         [Test]

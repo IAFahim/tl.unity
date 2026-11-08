@@ -1,12 +1,13 @@
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 
 namespace Tl.Unity
 {
     [BurstCompile]
-    public partial struct TimelineAdvanceJob : IJobChunk
+    public unsafe partial struct TimelineAdvanceJob : IJobChunk
     {
         [global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public global::Tl.LibraryView View;
         public BufferTypeHandle<Playback> PlaybackHandle;
@@ -17,16 +18,21 @@ namespace Tl.Unity
             for (var row = 0; row < chunk.Count; row++)
             {
                 var slots = playbacks[row];
-                for (var i = 0; i < slots.Length; i++)
+                var cells = (global::Tl.Playback*)slots.GetUnsafePtr();
+                var length = slots.Length;
+                var removed = false;
+                for (var i = 0; i < length; i++)
                 {
-                    var slot = slots[i];
-                    if (!TimelineKernel.AdvancePlayback(ref slot, in View, true, out _, out var removed))
+                    if (cells[i].Timeline == 0 || global::Tl.PlaybackRules.Advance(ref cells[i], View.Timelines, View.TimelineCount, true) != global::Tl.AdvanceResult.Removed)
                         continue;
-                    if (removed)
-                        slots.RemoveAt(i--);
-                    else
-                        slots[i] = slot;
+                    cells[i] = default;
+                    removed = true;
                 }
+                if (!removed)
+                    continue;
+                while (length > 0 && cells[length - 1].Timeline == 0)
+                    length--;
+                slots.ResizeUninitialized(length);
             }
         }
     }
