@@ -59,6 +59,10 @@ namespace Tl.Unity
             while (_length > 0 && _items[_length - 1].Timeline == 0) _length--;
             _buffer.ResizeUninitialized(_length);
         }
+
+        public void Purge(int index)
+        {
+        }
     }
 
     public static class TimelineSlots

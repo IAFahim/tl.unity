@@ -255,6 +255,31 @@ namespace Tl.Unity.Tests
         }
 
         [Test]
+        public void AHeldPlaybackLeavesItsHoldWhenReversedAndSeekLandsWithoutCrossing()
+        {
+            using var closed = Closed();
+            var slots = Slots(closed);
+            Assert.IsTrue(Start(ref slots, HoldId, 3));
+            var buffer = _entities.GetBuffer<Playback>(_entity);
+            var value = buffer[0];
+            value.Flags = global::Tl.PlaybackFlags.Ended;
+            buffer[0] = value;
+            slots = Slots(closed);
+            global::Tl.PlaybackRules.Apply(ref slots, _view.Timelines, _view.TimelineCount, global::Tl.RequestOp.ReverseChannel, 3, 0);
+            Assert.AreEqual(global::Tl.PlaybackFlags.Ended, slots[0].Flags);
+            global::Tl.PlaybackRules.Apply(ref slots, _view.Timelines, _view.TimelineCount, global::Tl.RequestOp.Reverse, HoldId, 1);
+            Assert.AreEqual(global::Tl.PlaybackFlags.Reverse | global::Tl.PlaybackFlags.StartPending, slots[0].Flags);
+            Assert.AreEqual(3, slots[0].Tick);
+            var slot = slots[0];
+            Assert.AreEqual(global::Tl.AdvanceResult.Kept, global::Tl.PlaybackRules.Advance(ref slot, _view.Timelines, _view.TimelineCount, true));
+            Assert.AreEqual(2, slot.Tick);
+            slots[0] = slot;
+            global::Tl.PlaybackRules.Apply(ref slots, _view.Timelines, _view.TimelineCount, global::Tl.RequestOp.Seek, HoldId, 40);
+            Assert.AreEqual(3, slots[0].Tick);
+            Assert.AreEqual(global::Tl.PlaybackFlags.Reverse | global::Tl.PlaybackFlags.ReenterPending, slots[0].Flags);
+        }
+
+        [Test]
         public void Advance_FiniteEndRemovesWithoutClose()
         {
             var slot = Started(SlideId, 7);

@@ -10,6 +10,12 @@ public enum RequestOp : byte
     StopAll = 3,
     Pause = 4,
     Resume = 5,
+    Seek = 6,
+    Reverse = 7,
+    PauseChannel = 8,
+    ResumeChannel = 9,
+    SeekChannel = 10,
+    ReverseChannel = 11,
 }
 
 public readonly struct RequestRecord
@@ -183,4 +189,10 @@ public readonly unsafe struct Requests
     public void StopAll() => RequestQueue.Add(_queue, _entity, _slot, 0, 0, RequestOp.StopAll);
     public void Pause(ushort timeline) => RequestQueue.Add(_queue, _entity, _slot, timeline, 0, RequestOp.Pause);
     public void Resume(ushort timeline) => RequestQueue.Add(_queue, _entity, _slot, timeline, 0, RequestOp.Resume);
+    public void Seek(ushort timeline, ushort tick) => RequestQueue.Add(_queue, _entity, _slot, timeline, tick, RequestOp.Seek);
+    public void Reverse(ushort timeline, bool reverse) => RequestQueue.Add(_queue, _entity, _slot, timeline, reverse ? (ushort)1 : (ushort)0, RequestOp.Reverse);
+    public void PauseChannel(byte channel) => RequestQueue.Add(_queue, _entity, _slot, channel, 0, RequestOp.PauseChannel);
+    public void ResumeChannel(byte channel) => RequestQueue.Add(_queue, _entity, _slot, channel, 0, RequestOp.ResumeChannel);
+    public void SeekChannel(byte channel, ushort tick) => RequestQueue.Add(_queue, _entity, _slot, channel, tick, RequestOp.SeekChannel);
+    public void ReverseChannel(byte channel, bool reverse) => RequestQueue.Add(_queue, _entity, _slot, channel, reverse ? (ushort)1 : (ushort)0, RequestOp.ReverseChannel);
 }

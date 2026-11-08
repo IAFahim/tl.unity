@@ -211,6 +211,8 @@ public sealed unsafe class PlaybackTable : IDisposable
         }
 
         public void Close(int index) => _table.CloseSlot(_entity, index);
+
+        public void Purge(int index) => _table._kinds?.Purge(_entity, index, in _items[index]);
     }
 
     public void Start(int entity, ushort timeline, ushort at = 0) => RequestQueue.Add(_pending, entity, -1, timeline, at, RequestOp.Start);
@@ -219,6 +221,12 @@ public sealed unsafe class PlaybackTable : IDisposable
     public void StopAll(int entity) => RequestQueue.Add(_pending, entity, -1, 0, 0, RequestOp.StopAll);
     public void Pause(int entity, ushort timeline) => RequestQueue.Add(_pending, entity, -1, timeline, 0, RequestOp.Pause);
     public void Resume(int entity, ushort timeline) => RequestQueue.Add(_pending, entity, -1, timeline, 0, RequestOp.Resume);
+    public void Seek(int entity, ushort timeline, ushort tick) => RequestQueue.Add(_pending, entity, -1, timeline, tick, RequestOp.Seek);
+    public void Reverse(int entity, ushort timeline, bool reverse) => RequestQueue.Add(_pending, entity, -1, timeline, reverse ? (ushort)1 : (ushort)0, RequestOp.Reverse);
+    public void PauseChannel(int entity, byte channel) => RequestQueue.Add(_pending, entity, -1, channel, 0, RequestOp.PauseChannel);
+    public void ResumeChannel(int entity, byte channel) => RequestQueue.Add(_pending, entity, -1, channel, 0, RequestOp.ResumeChannel);
+    public void SeekChannel(int entity, byte channel, ushort tick) => RequestQueue.Add(_pending, entity, -1, channel, tick, RequestOp.SeekChannel);
+    public void ReverseChannel(int entity, byte channel, bool reverse) => RequestQueue.Add(_pending, entity, -1, channel, reverse ? (ushort)1 : (ushort)0, RequestOp.ReverseChannel);
 
     public void Dispose()
     {
