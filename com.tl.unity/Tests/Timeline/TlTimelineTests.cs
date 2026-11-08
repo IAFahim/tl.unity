@@ -127,7 +127,7 @@ namespace Tl.Unity.Tracks.Tests
             CollectionAssert.AreEqual(new[] { typeof(AutoKinds.Chime) }, chime.Columns);
             var timeline = Timeline("GlowOnly");
             var track = timeline.CreateTrack<TlTrack>(null, "Glow");
-            track.Template = new GlowClip_TlData();
+            track.Template = new AutoKinds_GlowClip_TlData();
             var clip = track.CreateClip<TlClip>();
             clip.start = 0;
             clip.duration = 1;
@@ -149,7 +149,7 @@ namespace Tl.Unity.Tracks.Tests
             Assert.IsNotNull(system, "the auto kind system of the fixture");
             var timeline = Timeline("Chimes");
             var track = timeline.CreateTrack<TlTrack>(null, "Chime");
-            track.Template = new ChimeClip_TlData();
+            track.Template = new AutoKinds_ChimeClip_TlData();
             var clip = track.CreateClip<TlClip>();
             clip.start = 0;
             clip.duration = 1;

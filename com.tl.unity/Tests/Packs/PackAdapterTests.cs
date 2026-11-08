@@ -39,9 +39,18 @@ namespace TlPacks.Tests
         public void EveryPackClipGetsATimelineMenuEntry()
         {
             var wanted = TlMenuStubFiles.Wanted();
-            foreach (var stub in new[] { "MoveClip_TlMenu.cs", "ScaleClip_TlMenu.cs", "SpinClip_TlMenu.cs", "TintClip_TlMenu.cs", "HitClip_TlMenu.cs", "HealClip_TlMenu.cs", "PoisonClip_TlMenu.cs", "BuffClip_TlMenu.cs", "GiveClip_TlMenu.cs", "CraftClip_TlMenu.cs", "ForceClip_TlMenu.cs" })
+            foreach (var stub in new[] { "Tl_Pack_Motion_MoveClip_TlMenu.cs", "Tl_Pack_Motion_ScaleClip_TlMenu.cs", "Tl_Pack_Motion_SpinClip_TlMenu.cs", "Tl_Pack_Motion_TintClip_TlMenu.cs", "Tl_Pack_Stats_HitClip_TlMenu.cs", "Tl_Pack_Stats_HealClip_TlMenu.cs", "Tl_Pack_Stats_PoisonClip_TlMenu.cs", "Tl_Pack_Stats_BuffClip_TlMenu.cs", "Tl_Pack_Inventory_GiveClip_TlMenu.cs", "Tl_Pack_Inventory_CraftClip_TlMenu.cs", "Tl_Pack_Force_ForceClip_TlMenu.cs" })
                 Assert.IsTrue(wanted.ContainsKey(stub), stub);
-            StringAssert.Contains("\"Motion/Tint\"", wanted["TintClip_TlMenu.cs"]);
+            StringAssert.Contains("\"Motion/Tint\"", wanted["Tl_Pack_Motion_TintClip_TlMenu.cs"]);
+        }
+
+        [Test]
+        public void SameNamedClipsInTwoNamespacesGetTwoMirrors()
+        {
+            var pack = Type.GetType("Tl.Generated.Tl_Pack_Force_ForceClip_TlData, Tl.Pack.Force", true);
+            var game = Type.GetType("Tl.Generated.ForceClip_TlData, Tl.Unity.ForceContract", true);
+            Assert.AreEqual("Tl.Pack.Force.ForceClip", ((TlClipData)Activator.CreateInstance(pack)).ClipType.FullName);
+            Assert.AreEqual("ForceClip", ((TlClipData)Activator.CreateInstance(game)).ClipType.FullName);
         }
 
         [Test]
@@ -50,12 +59,12 @@ namespace TlPacks.Tests
             _timeline = ScriptableObject.CreateInstance<TimelineAsset>();
             _timeline.name = "Breathe";
             var scale = _timeline.CreateTrack<TlTrack>(null, "Scale");
-            scale.Template = new ScaleClip_TlData();
+            scale.Template = new Tl_Pack_Motion_ScaleClip_TlData();
             var clip = scale.CreateClip<TlClip>();
             clip.start = 0;
             clip.duration = 1;
             var tint = _timeline.CreateTrack<TlTrack>(null, "Tint");
-            tint.Template = new TintClip_TlData();
+            tint.Template = new Tl_Pack_Motion_TintClip_TlData();
             clip = tint.CreateClip<TlClip>();
             clip.start = 0;
             clip.duration = 1;
@@ -79,7 +88,7 @@ namespace TlPacks.Tests
             _timeline = ScriptableObject.CreateInstance<TimelineAsset>();
             _timeline.name = "Duel";
             var hits = _timeline.CreateTrack<TlTrack>(null, "Hit");
-            hits.Template = new HitClip_TlData();
+            hits.Template = new Tl_Pack_Stats_HitClip_TlData();
             var clip = hits.CreateClip<TlClip>();
             clip.start = 0;
             clip.duration = 1;

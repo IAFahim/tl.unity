@@ -139,20 +139,20 @@ public static class StatsDemoBuilder
     static void CreateDuel(string path)
     {
         var timeline = Timeline(path, 600, TlEnd.Hold, 0);
-        var hits = Track(timeline, "Hit", new HitClip_TlData());
+        var hits = Track(timeline, "Hit", new Tl_Pack_Stats_HitClip_TlData());
         foreach (var tick in new[] { 60, 120, 180 })
-            Clip<HitClip_TlData>(hits, tick, tick + 1).Amount = 12;
-        var poison = Clip<PoisonClip_TlData>(Track(timeline, "Poison", new PoisonClip_TlData()), 240, 480);
+            Clip<Tl_Pack_Stats_HitClip_TlData>(hits, tick, tick + 1).Amount = 12;
+        var poison = Clip<Tl_Pack_Stats_PoisonClip_TlData>(Track(timeline, "Poison", new Tl_Pack_Stats_PoisonClip_TlData()), 240, 480);
         poison.Amount = 1;
         poison.Every = 20;
-        Clip<HealClip_TlData>(Track(timeline, "Heal", new HealClip_TlData()), 500, 501).Amount = 20;
+        Clip<Tl_Pack_Stats_HealClip_TlData>(Track(timeline, "Heal", new Tl_Pack_Stats_HealClip_TlData()), 500, 501).Amount = 20;
         Save(timeline);
     }
 
     static void CreateHaste(string path)
     {
         var timeline = Timeline(path, 300, TlEnd.Stop, 1);
-        Clip<BuffClip_TlData>(Track(timeline, "Buff", new BuffClip_TlData()), 0, 300).AttackBonus = 10;
+        Clip<Tl_Pack_Stats_BuffClip_TlData>(Track(timeline, "Buff", new Tl_Pack_Stats_BuffClip_TlData()), 0, 300).AttackBonus = 10;
         Save(timeline);
     }
 

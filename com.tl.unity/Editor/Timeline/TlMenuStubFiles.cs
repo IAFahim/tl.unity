@@ -65,6 +65,7 @@ namespace Tl.Unity.Editor
         public static Dictionary<string, string> Wanted()
         {
             var result = new Dictionary<string, string>(StringComparer.Ordinal);
+            var mirrors = new Dictionary<string, string>(StringComparer.Ordinal);
             var inAssets = AssembliesCompiledFromAssets();
             foreach (var type in TypeCache.GetTypesDerivedFrom<TlClipData>())
             {
@@ -72,7 +73,11 @@ namespace Tl.Unity.Editor
                     continue;
                 var menu = ((TlClipData)Activator.CreateInstance(type)).MenuName;
                 var stub = type.Name.Substring(0, type.Name.Length - MirrorSuffix.Length) + StubSuffix;
-                result[stub + ".cs"] = Text(stub, menu, type.FullName + ", " + type.Assembly.GetName().Name);
+                var mirror = type.FullName + ", " + type.Assembly.GetName().Name;
+                if (mirrors.TryGetValue(stub, out var other))
+                    throw new InvalidOperationException("Tl: two clips map to the Timeline menu stub " + stub + " (" + other + " and " + mirror + "); rename one clip");
+                mirrors.Add(stub, mirror);
+                result[stub + ".cs"] = Text(stub, menu, mirror);
             }
             return result;
         }

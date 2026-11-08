@@ -130,6 +130,8 @@ namespace Tl.Gen.Unity
                 parts.Push(current.Name);
                 current = current.ContainingType;
             }
+            if (!type.ContainingNamespace.IsGlobalNamespace)
+                builder.Append(type.ContainingNamespace.ToDisplayString().Replace('.', '_')).Append('_');
             builder.Append(string.Join("_", parts));
             return builder.Append("_TlData").ToString();
         }

@@ -156,12 +156,12 @@ public static class MotionDemoBuilder
     static void CreateGlide(string path)
     {
         var timeline = Timeline(path, 120);
-        var move = Track(timeline, "Move", new MoveClip_TlData());
-        var right = Clip<MoveClip_TlData>(move, 0, 60);
+        var move = Track(timeline, "Move", new Tl_Pack_Motion_MoveClip_TlData());
+        var right = Clip<Tl_Pack_Motion_MoveClip_TlData>(move, 0, 60);
         right.From = new float3(-2f, 0f, 0f);
         right.To = new float3(2f, 0f, 0f);
         right.Ease = Ramp();
-        var left = Clip<MoveClip_TlData>(move, 60, 120);
+        var left = Clip<Tl_Pack_Motion_MoveClip_TlData>(move, 60, 120);
         left.From = new float3(2f, 0f, 0f);
         left.To = new float3(-2f, 0f, 0f);
         left.Ease = Ramp();
@@ -171,11 +171,11 @@ public static class MotionDemoBuilder
     static void CreateBreathe(string path)
     {
         var timeline = Timeline(path, 90);
-        var swell = Clip<ScaleClip_TlData>(Track(timeline, "Scale", new ScaleClip_TlData()), 0, 90);
+        var swell = Clip<Tl_Pack_Motion_ScaleClip_TlData>(Track(timeline, "Scale", new Tl_Pack_Motion_ScaleClip_TlData()), 0, 90);
         swell.From = new float3(1f, 1f, 1f);
         swell.To = new float3(1.5f, 1.5f, 1.5f);
         swell.Ease = Triangle();
-        var glow = Clip<TintClip_TlData>(Track(timeline, "Tint", new TintClip_TlData()), 0, 90);
+        var glow = Clip<Tl_Pack_Motion_TintClip_TlData>(Track(timeline, "Tint", new Tl_Pack_Motion_TintClip_TlData()), 0, 90);
         glow.From = new Rgba(1f, 0f, 0f, 1f);
         glow.To = new Rgba(1f, 1f, 0f, 1f);
         glow.Ease = Triangle();
@@ -185,15 +185,15 @@ public static class MotionDemoBuilder
     static void CreateHop(string path)
     {
         var timeline = Timeline(path, 120);
-        var turn = Clip<SpinClip_TlData>(Track(timeline, "Spin", new SpinClip_TlData()), 0, 120);
+        var turn = Clip<Tl_Pack_Motion_SpinClip_TlData>(Track(timeline, "Spin", new Tl_Pack_Motion_SpinClip_TlData()), 0, 120);
         turn.FromYaw = 0f;
         turn.ToYaw = 360f;
         turn.Ease = Ramp();
-        var jump = Clip<MoveClip_TlData>(Track(timeline, "Jump", new MoveClip_TlData()), 0, 120);
+        var jump = Clip<Tl_Pack_Motion_MoveClip_TlData>(Track(timeline, "Jump", new Tl_Pack_Motion_MoveClip_TlData()), 0, 120);
         jump.From = new float3(4f, 0f, 0f);
         jump.To = new float3(4f, 1f, 0f);
         jump.Ease = Triangle();
-        var pull = Clip<MoveClip_TlData>(Track(timeline, "Pull", new MoveClip_TlData()), 40, 80);
+        var pull = Clip<Tl_Pack_Motion_MoveClip_TlData>(Track(timeline, "Pull", new Tl_Pack_Motion_MoveClip_TlData()), 40, 80);
         pull.From = new float3(4f, 0f, 0f);
         pull.To = new float3(5.5f, 0f, 0f);
         pull.Ease = Ramp();
