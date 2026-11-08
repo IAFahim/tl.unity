@@ -11,6 +11,8 @@
     "Tl.Pack.Stats",
     "Tl.Unity.Pack.Motion",
     "Tl.Unity.Pack.Stats",
+    "Tl.Pack.Inventory",
+    "Tl.Unity.Pack.Inventory",
     "Unity.Collections",
     "Unity.Entities",
     "Unity.Entities.Hybrid",
@@ -33,7 +35,8 @@
   "defineConstraints": [
     "UNITY_INCLUDE_TESTS",
     "TL_PACK_MOTION",
-    "TL_PACK_STATS"
+    "TL_PACK_STATS",
+    "TL_PACK_INVENTORY"
   ],
   "versionDefines": [
     {
@@ -45,6 +48,11 @@
       "name": "com.tl.pack.stats",
       "expression": "0.0.0",
       "define": "TL_PACK_STATS"
+    },
+    {
+      "name": "com.tl.pack.inventory",
+      "expression": "0.0.0",
+      "define": "TL_PACK_INVENTORY"
     },
     {
       "name": "com.unity.render-pipelines.universal",

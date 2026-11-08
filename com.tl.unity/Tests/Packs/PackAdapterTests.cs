@@ -109,6 +109,30 @@ namespace TlPacks.Tests
             Assert.AreEqual(7, entities.GetComponentData<Attack>(entity).Base);
         }
 
+        [Test]
+        public void TlBagKeepsTheDesignersStartingItemsAndAPickupMarkerReachesTheBag()
+        {
+            _timeline = ScriptableObject.CreateInstance<TimelineAsset>();
+            _timeline.name = "Loot";
+            _timeline.CreateMarkerTrack();
+            var pickup = _timeline.markerTrack.CreateMarker<TlMarker>(0.5);
+            pickup.Data = new Tl_Pack_Inventory_PickupMarker_TlMarkerData { Item = Tl.Pack.Inventory.Item.Coin, Count = 10 };
+            _made = new GameObject("Backpack");
+            var director = _made.AddComponent<PlayableDirector>();
+            director.playableAsset = _timeline;
+            var bag = _made.AddComponent<TlPacks.Inventory.TlBagAuthoring>();
+            bag.Stone = 2;
+            bag.Key = 1;
+            using var baked = new Baked(_made);
+            var entities = baked.World.EntityManager;
+            var entity = baked.Single<TlTimelineSet>();
+            var start = entities.GetComponentData<Tl.Pack.Inventory.Bag>(entity);
+            Assert.AreEqual(2, start.Stone);
+            Assert.AreEqual(1, start.Key);
+            Assert.AreEqual(0, start.Coin);
+            Assert.IsTrue(entities.HasComponent(entity, ComponentType.ReadWrite(TimelineKindSets.Registry[TimelineKindSets.Registry.IndexOf("Tl.Pack.Inventory.InventoryItems")].Entry)), "the pickup marker reaches the InventoryItems kind");
+        }
+
         sealed class Baked : IDisposable
         {
             public readonly World World;

@@ -1,0 +1,31 @@
+{
+  "name": "Tl.Demo.Inventory.Editor",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Unity.Editor",
+    "Tl.Unity.Tracks",
+    "Tl.Unity.Tracks.Editor",
+    "Tl.Pack.Inventory",
+    "Tl.Unity.Pack.Inventory",
+    "Tl.Demo.Inventory",
+    "Unity.Entities",
+    "Unity.Entities.Hybrid",
+    "Unity.Scenes",
+    "Unity.Timeline"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "defineConstraints": [
+    "TL_PACK_INVENTORY"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.tl.pack.inventory",
+      "expression": "0.0.0",
+      "define": "TL_PACK_INVENTORY"
+    }
+  ],
+  "autoReferenced": true
+}

@@ -1,0 +1,24 @@
+{
+  "name": "Tl.Unity.Pack.Inventory",
+  "rootNamespace": "TlPacks.Inventory",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Pack.Inventory",
+    "Unity.Entities",
+    "Unity.Entities.Hybrid"
+  ],
+  "allowUnsafeCode": false,
+  "autoReferenced": true,
+  "defineConstraints": [
+    "TL_PACK_INVENTORY"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.tl.pack.inventory",
+      "expression": "0.0.0",
+      "define": "TL_PACK_INVENTORY"
+    }
+  ],
+  "noEngineReferences": false
+}

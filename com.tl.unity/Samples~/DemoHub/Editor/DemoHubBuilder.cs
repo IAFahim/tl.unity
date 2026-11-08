@@ -18,6 +18,7 @@ public static class DemoHubBuilder
         { "Crowd Demo", "10k dancers on one Dance timeline, each from its own start tick. Buttons for 1k, 10k, 100k." },
         { "Motion Demo", "Motion pack only: a cube glides, a sphere breathes and changes colour, a capsule spins and hops with a Priority override." },
         { "Stats Demo", "Stats pack: a duel timeline of hits, poison and a heal plus a Haste buff on Health and Attack." },
+        { "Inventory Demo", "Inventory pack: give, take and craft clips plus two pickup markers fill a bag over 600 steps." },
     };
 
     [MenuItem("Tl/Samples/Build Demo Hub")]

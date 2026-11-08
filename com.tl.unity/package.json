@@ -41,6 +41,11 @@
       "path": "Samples~/StatsDemo"
     },
     {
+      "displayName": "Inventory demo",
+      "description": "Needs the Inventory pack (git URL https://github.com/IAFahim/tl.git?path=/packs/Inventory). A backpack's Loot Run timeline gives, takes and crafts items and two Pickup markers drop Coins and a Gem; read-out top left, no game code. Builder, README and a PlayMode test (final bag Wood 1 Stone 3 Plank 2 Potion 1 Sword 1 Coin 10 Key 0 Gem 1).",
+      "path": "Samples~/InventoryDemo"
+    },
+    {
       "displayName": "Demo hub",
       "description": "Builds a Tl Demos scene with a button per imported demo scene and puts them all in the build list. Import the other demos first, then Tl > Samples > Build Demo Hub.",
       "path": "Samples~/DemoHub"

@@ -1,0 +1,29 @@
+{
+  "name": "Tl.Demo.Inventory.Tests",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Pack.Inventory",
+    "Tl.Demo.Inventory",
+    "Unity.Collections",
+    "Unity.Entities",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+  ],
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS",
+    "TL_PACK_INVENTORY"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.tl.pack.inventory",
+      "expression": "0.0.0",
+      "define": "TL_PACK_INVENTORY"
+    }
+  ],
+  "autoReferenced": false
+}

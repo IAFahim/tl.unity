@@ -3,7 +3,7 @@
 # Imports every com.tl.unity sample into the project, builds every demo scene and the hub, runs the PlayMode tests and checks the
 # demo numbers (Force 4.0333 m, Events 15 strikes and health 10, Crowd two rows at 0 B) and that no second timeline library appears.
 # TL_UNITY_PACKS=1 first adds every pack under external/tl-kinds/packs to the project (the Force pack next to the Force demo's own
-# ForceClip) and also checks the Motion (0 mismatches) and Stats demos.
+# ForceClip) and also checks the Motion (0 mismatches), Stats and Inventory (final bag, pickups at ticks 420 and 480) demos.
 set -uo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 case "$(uname -s)" in MINGW* | MSYS* | CYGWIN*) windows=1 ;; *) windows=0 ;; esac
@@ -48,7 +48,7 @@ public static class TlCheckSamples
     {
         var builders = "ForceDemoBuilder|Build;ForceDemoBuilder|BuildControl;EventsDemoBuilder|Build;CrowdDemoBuilder|Build";
         if (Environment.GetEnvironmentVariable("TL_UNITY_PACKS") == "1")
-            builders += ";MotionDemoBuilder|Build;StatsDemoBuilder|Build";
+            builders += ";MotionDemoBuilder|Build;StatsDemoBuilder|Build;InventoryDemoBuilder|Build";
         foreach (var name in (builders + ";DemoHubBuilder|Build").Split(';'))
         {
             var parts = name.Split('|');
@@ -79,8 +79,9 @@ extra=""
 if [ "$packs" = 1 ]; then
   motion="$(grep -o 'TL-DEMO motion samples=[0-9]* mismatches=[0-9]*' "$out/play.log" | tail -n 1)"
   stats="$(grep -o 'TL-DEMO stats health200=64/20 health450=53/20 health600=72/10' "$out/play.log" | tail -n 1)"
-  extra=" ${motion:-motion=none} ${stats:-stats=none}"
-  printf '%s' "$motion" | grep -q ' mismatches=0$' && [ -n "$stats" ] || status=1
+  inventory="$(grep -o 'TL-DEMO inventory final=Wood_1_Stone_3_Plank_2_Potion_1_Sword_1_Coin_10_Key_0_Gem_1 coinAt=420 gemAt=480' "$out/play.log" | tail -n 1)"
+  extra=" ${motion:-motion=none} ${stats:-stats=none} ${inventory:-inventory=none}"
+  printf '%s' "$motion" | grep -q ' mismatches=0$' && [ -n "$stats" ] && [ -n "$inventory" ] || status=1
 fi
 echo "samples packs=$packs imported=$imported built=$built errorCS=$errors forceX=${moved:-none} ${events:-events=none} crowdRowsAt0B=$crowd libraryClash=$clash$extra playmode passed=${passed:-0} failed=${failed:-?}"
 [ "$imported" -ge 6 ] && [ "$built" = 1 ] && [ "$errors" -eq 0 ] && [ "$moved" = 4.0333 ] && [ "$events" = "TL-DEMO events strikes=15 health=10" ] && [ "$crowd" -eq 2 ] && [ "$clash" -eq 0 ] && [ "${failed:-1}" = 0 ] || status=1
