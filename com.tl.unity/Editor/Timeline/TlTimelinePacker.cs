@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Tl.Gen.Tlb;
-using Tl.Unity.Bake;
 using Unity.Entities;
 using UnityEditor;
 using UnityEngine;
@@ -17,9 +16,9 @@ namespace Tl.Unity.Editor
 #endif
     public static class TlTimelinePacker
     {
-        static TlKindCatalog s_Catalog;
+        static BakeKinds s_Catalog;
 
-        public static TlKindCatalog Catalog => s_Catalog ??= TlBake.Catalog(KindAssemblies());
+        public static BakeKinds Catalog => s_Catalog ??= LibraryBake.Kinds(KindAssemblies());
 
         [InitializeOnLoadMethod]
         static void InstallResolvers()
@@ -28,7 +27,7 @@ namespace Tl.Unity.Editor
             TlBaking.TickRateResolver = () => TlProjectSettings.instance.TicksPerSecond;
         }
 
-        public static BlobAssetReference<TlTimelineBlob> Pack(TimelineAsset timeline, uint tickRate, TlKindCatalog catalog, ref TlBaker baker, UnityEngine.Object context, out ulong kindMask)
+        public static BlobAssetReference<TlTimelineBlob> Pack(TimelineAsset timeline, uint tickRate, BakeKinds catalog, ref TlBaker baker, UnityEngine.Object context, out ulong kindMask)
         {
             var name = timeline.name;
             var typed = new TypedTimeline { Name = name, Duration = Ticks(timeline.duration, tickRate) };
@@ -92,13 +91,13 @@ namespace Tl.Unity.Editor
             var names = new string[refs.Count];
             for (var i = 0; i < names.Length; i++)
                 names[i] = i == 0 && typed.Next != null ? typed.Next : "~" + i;
-            var manifest = TlBake.Manifest(names, channels, tickRate);
+            var manifest = LibraryBake.Manifest(names, channels, tickRate);
             var timelineBytes = Bake(typed, manifest, written, refs, 0);
             uint[] sites = null;
             if (written.Any(w => TlDirectorTimelines.IdFields(w.data).Any()))
                 sites = Sites(timelineBytes, Bake(typed, manifest, written, refs, Marker), refs.Count);
-            kindMask = TlBake.Analyze(name, timelineBytes, catalog).KindMask;
-            return TlTimelineBlobs.Create(AssetOf(timeline), tickRate, name, timelineBytes, TlBake.KindBytes(name, timelineBytes, catalog), refs.Select(AssetOf).ToArray(), sites);
+            kindMask = LibraryBake.KindMask(name, timelineBytes, catalog);
+            return TlTimelineBlobs.Create(AssetOf(timeline), tickRate, name, timelineBytes, LibraryBake.KindPayload(name, timelineBytes, catalog), refs.Select(AssetOf).ToArray(), sites);
         }
 
         const ushort Marker = 0x8000;
@@ -118,7 +117,7 @@ namespace Tl.Unity.Editor
             {
                 TlClipData.LocalIdResolver = null;
             }
-            return TlBake.BakeTyped(typed, manifest);
+            return LibraryBake.BakeTyped(typed, manifest);
         }
 
         static uint[] Sites(byte[] plain, byte[] marked, int count)

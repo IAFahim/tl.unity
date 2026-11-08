@@ -23,16 +23,16 @@ namespace Tl.Unity
 
         readonly List<Entry> _entries = new List<Entry>();
         readonly Dictionary<Hash128, ushort> _ids = new Dictionary<Hash128, ushort>();
-        readonly TlLibrarySettings _settings;
+        readonly global::Tl.LibrarySettings _settings;
         global::Tl.TimelineWorld _world;
         KindIndex _kinds;
         bool _disposed;
 
-        public TlLibrary() : this(TlLibrarySettings.Default)
+        public TlLibrary() : this(global::Tl.LibrarySettings.Default)
         {
         }
 
-        public TlLibrary(TlLibrarySettings settings)
+        public TlLibrary(global::Tl.LibrarySettings settings)
         {
             _settings = settings;
         }
@@ -128,7 +128,7 @@ namespace Tl.Unity
             byte[] bytes;
             try
             {
-                bytes = TlLibraryAssembler.Assemble(Parts(entries), tickRate, _settings);
+                bytes = global::Tl.LibraryAssembler.Assemble(Parts(entries), tickRate, _settings);
             }
             catch (InvalidOperationException e)
             {
@@ -199,14 +199,14 @@ namespace Tl.Unity
             return result;
         }
 
-        List<TlLibraryPart> Parts(List<Entry> entries)
+        List<global::Tl.LibraryPart> Parts(List<Entry> entries)
         {
             var ids = new Dictionary<Hash128, ushort>();
             for (var i = 0; i < entries.Count; i++)
                 ids[entries[i].Asset] = (ushort)(i + 1);
-            var parts = new List<TlLibraryPart>(entries.Count);
+            var parts = new List<global::Tl.LibraryPart>(entries.Count);
             foreach (var entry in entries)
-                parts.Add(new TlLibraryPart { Name = entry.Stored, Tlb = entry.Tlb, Kinds = entry.Kinds, Next = NextId(entry, ids), Refs = RefIds(entry, ids) });
+                parts.Add(new global::Tl.LibraryPart { Name = entry.Stored, Tlb = entry.Tlb, Kinds = entry.Kinds, Next = NextId(entry, ids), Refs = RefIds(entry, ids) });
             return parts;
         }
 
@@ -234,7 +234,7 @@ namespace Tl.Unity
 
         static ushort NextId(Entry entry, Dictionary<Hash128, ushort> ids)
         {
-            var local = TlLibraryAssembler.NextOf(entry.Tlb);
+            var local = global::Tl.LibraryAssembler.NextOf(entry.Tlb);
             if (local == 0 || local > entry.Next.Length)
                 return 0;
             return ids.TryGetValue(entry.Next[local - 1], out var id) ? id : (ushort)0;
@@ -273,11 +273,11 @@ namespace Tl.Unity
 
         static bool SameLayout(Entry before, Entry after)
         {
-            TlKindPayload a, b;
+            global::Tl.KindPayload a, b;
             try
             {
-                a = TlKindPayload.Read(before.Kinds, before.Name);
-                b = TlKindPayload.Read(after.Kinds, after.Name);
+                a = global::Tl.KindPayload.Read(before.Kinds, before.Name);
+                b = global::Tl.KindPayload.Read(after.Kinds, after.Name);
             }
             catch (InvalidOperationException)
             {

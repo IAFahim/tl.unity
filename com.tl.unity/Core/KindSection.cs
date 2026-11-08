@@ -116,7 +116,7 @@ public unsafe struct KindSectionView
 
 internal static unsafe class KindSectionReader
 {
-    internal const uint Magic = 0x444E494Bu;
+    internal const uint Magic = LibraryLayout.SectionMagic;
 
     internal static KindSectionView Create(byte* section, uint length, int timelineCount, LibraryTimeline* timelines)
     {

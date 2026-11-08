@@ -9,7 +9,7 @@ internal enum KindRule : byte { Combine, Each }
 
 internal enum FeederTrigger : byte { Span, Start, End, Marker }
 
-internal sealed record KindInfo(string Name, string FullName, Type Value, int ValueBytes, KindAccepts Accepts, KindRule Mode, int Order, string? Group, bool Folds, int? Inline = null)
+internal sealed record KindInfo(string Name, string FullName, Type Value, int ValueBytes, KindAccepts Accepts, KindRule Mode, int Order, string? Group, bool Folds, int? Inline = null, int GamePulses = 0)
 {
     public int EntryBytes => KindCatalog.EntryBytes(Accepts, ValueBytes);
 }
@@ -63,7 +63,7 @@ internal sealed class KindCatalog
             if (catalog.Kinds.Any(k => k.Name == type.Name)) throw Bad($"{where}: another kind is already named '{type.Name}'; kind names must be unique.");
             if (catalog.Kinds.Count == 64) throw Bad($"{where}: more than 64 kinds; merge rare kinds into a kind group.");
             kindTypes[type] = catalog.Kinds.Count;
-            catalog.Kinds.Add(new KindInfo(type.Name, type.FullName!, value, bytes, accepts, mode, Named(attribute, "Order", 0), string.IsNullOrEmpty(group) ? null : group, folds, Inline(attribute)));
+            catalog.Kinds.Add(new KindInfo(type.Name, type.FullName!, value, bytes, accepts, mode, Named(attribute, "Order", 0), string.IsNullOrEmpty(group) ? null : group, folds, Inline(attribute), Math.Max(0, Named(attribute, "GamePulses", 0))));
         }
         foreach (var g in catalog.Kinds.Where(k => k.Group != null).Select(k => k.Group!).Distinct(StringComparer.Ordinal))
             if (catalog.Kinds.Any(k => k.Name == g)) throw Bad($"kind group '{g}' has the same name as a kind.");

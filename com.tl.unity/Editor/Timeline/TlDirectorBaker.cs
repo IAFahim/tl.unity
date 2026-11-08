@@ -54,7 +54,7 @@ namespace Tl.Unity.Editor
             AddComponent<TlUnregistered>(entity);
             if (director.playOnAwake && ReferenceEquals(director.playableAsset, timelines[0]))
                 AddComponent(entity, new TlPlayOnAwake { Slot = 0, At = (ushort)Math.Min(ushort.MaxValue, TlTimelinePacker.Ticks(director.initialTime, rate)) });
-            TlKindBaking.AddReached(this, entity, mask, catalog.Kinds, added, director.name);
+            TlKindBaking.AddReached(this, entity, mask, catalog.Names, added, director.name);
         }
     }
 }

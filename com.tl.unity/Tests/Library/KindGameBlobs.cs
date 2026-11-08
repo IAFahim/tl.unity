@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Tl.Unity.Bake;
+using Tl.Gen.Tlb;
 using Tl.Unity.Bake.Tests;
 using Unity.Entities;
 
@@ -21,18 +21,18 @@ namespace Tl.Unity.Library.Tests
             Names = fixture.Names;
             TickRate = tickRate == 0 ? fixture.TickRate : tickRate;
             GameTlib = File.ReadAllBytes(Path.Combine(KindGameFixture.Folder, "game.tlib"));
-            var overrides = new Dictionary<string, TlKindKnobs> { ["Damage"] = new TlKindKnobs(11, 8) };
-            var catalog = TlBake.Catalog(new[] { KindGameFixture.Game }, overrides);
+            var overrides = new Dictionary<string, global::Tl.KindOverride> { ["Damage"] = new global::Tl.KindOverride(11, 8) };
+            var catalog = LibraryBake.Kinds(new[] { KindGameFixture.Game }, overrides);
             for (var i = 0; i < Names.Count; i++)
                 Assets.Add(AssetOf(Names[i]));
             for (var i = 0; i < Names.Count; i++)
             {
                 var timeline = fixture.Timelines[i];
                 var next = timeline.Next == null ? Array.Empty<string>() : new[] { timeline.Next };
-                var manifest = TlBake.Manifest(next, fixture.Channels, TickRate);
-                var tlb = TlBake.BakeTyped(timeline, manifest);
+                var manifest = LibraryBake.Manifest(next, fixture.Channels, TickRate);
+                var tlb = LibraryBake.BakeTyped(timeline, manifest);
                 var nextAssets = timeline.Next == null ? Array.Empty<Hash128>() : new[] { AssetOf(timeline.Next) };
-                Blobs.Add(TlTimelineBlobs.Create(Assets[i], TickRate, Names[i], tlb, TlBake.KindBytes(Names[i], tlb, catalog), nextAssets));
+                Blobs.Add(TlTimelineBlobs.Create(Assets[i], TickRate, Names[i], tlb, LibraryBake.KindPayload(Names[i], tlb, catalog), nextAssets));
             }
         }
 

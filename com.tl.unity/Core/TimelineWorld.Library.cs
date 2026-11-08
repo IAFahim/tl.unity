@@ -79,7 +79,7 @@ namespace Tl
         unsafe void LoadLibrary(ReadOnlySpan<byte> library)
         {
             if (library.Length < 96) throw new ArgumentException("game.tlib truncated.");
-            if (BinaryPrimitives.ReadUInt32LittleEndian(library) != 0x42494C54u) throw new ArgumentException("game.tlib magic invalid; rebake with current tlb.");
+            if (BinaryPrimitives.ReadUInt32LittleEndian(library) != LibraryLayout.LibraryMagic) throw new ArgumentException("game.tlib magic invalid; rebake with current tlb.");
             var version = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(4));
             if (version != 1u && version != 2u) throw new ArgumentException("game.tlib version invalid; rebake with current tlb.");
             var count = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(8));

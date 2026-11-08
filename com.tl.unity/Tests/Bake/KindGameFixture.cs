@@ -13,7 +13,7 @@ namespace Tl.Unity.Bake.Tests
         public readonly List<string> Names = new List<string>();
         public readonly List<string> Channels = new List<string>();
         public readonly List<TypedTimeline> Timelines = new List<TypedTimeline>();
-        public readonly KindSettings Settings = new KindSettings();
+        public LibrarySettings Settings = LibrarySettings.Default;
         public uint TickRate = 60;
         public LibraryManifest Manifest = null!;
 
@@ -28,11 +28,12 @@ namespace Tl.Unity.Bake.Tests
             var root = library.RootElement;
             if (root.TryGetProperty("tickRate", out var rate)) fixture.TickRate = rate.GetUInt32();
             foreach (var channel in root.GetProperty("channels").EnumerateArray()) fixture.Channels.Add(channel.GetString()!);
+            var overrides = new Dictionary<string, KindOverride>(StringComparer.Ordinal);
+            fixture.Settings.Kinds = overrides;
             if (root.TryGetProperty("kinds", out var kinds))
                 foreach (var kind in kinds.EnumerateObject())
                 {
-                    int? inline = null, maxInline = null;
-                    var pulses = 0;
+                    int? inline = null, maxInline = null, pulses = null;
                     foreach (var field in kind.Value.EnumerateObject())
                     {
                         if (field.Name == "inline") inline = field.Value.GetInt32();
@@ -40,7 +41,7 @@ namespace Tl.Unity.Bake.Tests
                         else if (field.Name == "maxInlineBytes") maxInline = field.Value.GetInt32();
                         else throw new InvalidOperationException("unknown kinds key " + field.Name);
                     }
-                    fixture.Settings.Kinds[kind.Name] = (inline, pulses, maxInline);
+                    overrides[kind.Name] = new KindOverride(inline, pulses, maxInline);
                 }
             var docs = new List<(string Name, byte[] Json)>();
             foreach (var file in root.GetProperty("timelines").EnumerateArray())
@@ -51,8 +52,8 @@ namespace Tl.Unity.Bake.Tests
             }
             docs.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
             fixture.Names.AddRange(docs.Select(d => d.Name));
-            fixture.Manifest = TlBake.Manifest(fixture.Names, fixture.Channels, fixture.TickRate);
-            foreach (var (_, json) in docs) fixture.Timelines.Add(Typed(json, fixture.Manifest));
+            fixture.Manifest = LibraryBake.Manifest(fixture.Names, fixture.Channels, fixture.TickRate);
+            foreach (var (_, json) in docs) fixture.Timelines.Add(Typed(json, fixture.Names));
             return fixture;
         }
 
@@ -72,7 +73,7 @@ namespace Tl.Unity.Bake.Tests
             return result;
         }
 
-        static TypedTimeline Typed(byte[] json, LibraryManifest manifest)
+        static TypedTimeline Typed(byte[] json, List<string> names)
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
@@ -88,11 +89,11 @@ namespace Tl.Unity.Bake.Tests
             foreach (var t in root.GetProperty("tracks").EnumerateArray())
             {
                 var trackType = TypeOf(t);
-                var track = new TypedTrack { Name = Text(t, "name"), Type = trackType, Data = Bytes(trackType, t, manifest) };
+                var track = new TypedTrack { Name = Text(t, "name"), Type = trackType, Data = Bytes(trackType, t, names) };
                 foreach (var c in t.GetProperty("clips").EnumerateArray())
                 {
                     var clipType = TypeOf(c);
-                    track.Clips.Add(new TypedClip { Name = Text(c, "name"), Type = clipType, Start = c.GetProperty("start").GetUInt32(), End = c.GetProperty("end").GetUInt32(), Data = Bytes(clipType, c, manifest) });
+                    track.Clips.Add(new TypedClip { Name = Text(c, "name"), Type = clipType, Start = c.GetProperty("start").GetUInt32(), End = c.GetProperty("end").GetUInt32(), Data = Bytes(clipType, c, names) });
                 }
                 timeline.Tracks.Add(track);
             }
@@ -100,7 +101,7 @@ namespace Tl.Unity.Bake.Tests
                 foreach (var m in markers.EnumerateArray())
                 {
                     var markerType = TypeOf(m);
-                    timeline.Markers.Add(new TypedMarker { Type = markerType, Tick = m.GetProperty("tick").GetUInt32(), Data = Bytes(markerType, m, manifest) });
+                    timeline.Markers.Add(new TypedMarker { Type = markerType, Tick = m.GetProperty("tick").GetUInt32(), Data = Bytes(markerType, m, names) });
                 }
             return timeline;
         }
@@ -110,7 +111,7 @@ namespace Tl.Unity.Bake.Tests
         static Type TypeOf(JsonElement e)
             => Game.GetType(e.GetProperty("namespace").GetString() + "." + e.GetProperty("type").GetString(), true)!;
 
-        static byte[] Bytes(Type type, JsonElement e, LibraryManifest manifest)
+        static byte[] Bytes(Type type, JsonElement e, List<string> names)
         {
             var box = Activator.CreateInstance(type)!;
             if (e.TryGetProperty("data", out var data))
@@ -118,7 +119,7 @@ namespace Tl.Unity.Bake.Tests
                 {
                     var field = type.GetField(p.Name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!;
                     object value = field.FieldType == typeof(bool) ? p.Value.GetBoolean()
-                        : field.FieldType == typeof(TimelineId) ? new TimelineId(manifest.Timelines[p.Value.GetString()!])
+                        : field.FieldType == typeof(TimelineId) ? new TimelineId((ushort)(names.IndexOf(p.Value.GetString()!) + 1))
                         : field.FieldType.IsEnum ? Enum.ToObject(field.FieldType, p.Value.GetInt64())
                         : Convert.ChangeType(p.Value.GetDouble(), field.FieldType);
                     field.SetValue(box, value);
