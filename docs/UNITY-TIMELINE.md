@@ -61,8 +61,8 @@ draws Entities' own Editor world.
 [USING-PLAIN-CSHARP.md](USING-PLAIN-CSHARP.md).
 
 `Tl > Export` writes the same selection as portable JSON into a folder: one `<timeline>.json` per timeline and a `tl.project.json`
-(schema 1, the format of tl's `docs/json-format.md`). It goes through the same packer as baking, so `tlb bake tl.project.json` on that
-folder bakes each timeline to the same TLB bytes the Editor packs (checked by `ExportWritesJsonThatBakesToTheSamePackedBytes`), and `tlb decode` gives the JSON back. Channels are written as their numbers (`"1"`, `"2"`).
+(schema 1, the format of tl's `docs/json-format.md`). It goes through the same packer as baking, so `tl bake tl.project.json` on that
+folder bakes each timeline to the same TLB bytes the Editor packs (checked by `ExportWritesJsonThatBakesToTheSamePackedBytes`), and `tl decode` gives the JSON back. Channels are written as their numbers (`"1"`, `"2"`).
 Kinds are identified by full type name (`Tl.Pack.Force.ForceKind` and a game's `ForceKind` are two kinds).
 
 ## Not supported yet

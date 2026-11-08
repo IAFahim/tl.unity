@@ -79,9 +79,9 @@ namespace Tl
         unsafe void LoadLibrary(ReadOnlySpan<byte> library)
         {
             if (library.Length < 96) throw new ArgumentException("game.tlib truncated.");
-            if (BinaryPrimitives.ReadUInt32LittleEndian(library) != LibraryLayout.LibraryMagic) throw new ArgumentException("game.tlib magic invalid; rebake with current tlb.");
+            if (BinaryPrimitives.ReadUInt32LittleEndian(library) != LibraryLayout.LibraryMagic) throw new ArgumentException("game.tlib magic invalid; rebake with current tl.");
             var version = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(4));
-            if (version != 1u && version != 2u) throw new ArgumentException("game.tlib version invalid; rebake with current tlb.");
+            if (version != 1u && version != 2u) throw new ArgumentException("game.tlib version invalid; rebake with current tl.");
             var count = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(8));
             var manifestOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(12));
             var blobOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(16));
@@ -93,7 +93,7 @@ namespace Tl
             if (count > 65535) throw new ArgumentException("game.tlib declares more than 65535 timelines.");
             var kindOff = version == 2u ? BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(28)) : 0u;
             var kindLen = version == 2u ? BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(32)) : 0u;
-            if (version == 2u && (kindOff % 8 != 0 || kindOff < blobOff || kindLen < 64 || (ulong)kindOff + kindLen > total - 32u)) throw new ArgumentException("game.tlib kind section out of bounds; rebake with current tlb.");
+            if (version == 2u && (kindOff % 8 != 0 || kindOff < blobOff || kindLen < 64 || (ulong)kindOff + kindLen > total - 32u)) throw new ArgumentException("game.tlib kind section out of bounds; rebake with current tl.");
             var digestAt = (int)(total - 32u);
 #if NET
             Span<byte> calc = stackalloc byte[32];

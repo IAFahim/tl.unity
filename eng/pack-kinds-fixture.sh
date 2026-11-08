@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# usage: TL_TLB=<tlb or Tl.Bake.dll> eng/pack-kinds-fixture.sh <Library/ScriptAssemblies of a project that compiled the package tests> [--check]
+# usage: TL_TLB=<tl or Tl.Bake.dll> eng/pack-kinds-fixture.sh <Library/ScriptAssemblies of a project that compiled the package tests> [--check]
 # Packs com.tl.unity/Tests/Kinds/Timelines~ against the Unity test game assembly Tl.Unity.Kinds, so the
 # fixture's pair keys are the Unity types' keys, and writes game.tlib, Timelines.g.cs and KindLibraryBytes.g.cs.
 set -euo pipefail
@@ -8,7 +8,7 @@ case "$(uname -s)" in MINGW* | MSYS* | CYGWIN*) windows=1 ;; *) windows=0 ;; esa
 native() { if [ "$windows" = 1 ]; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
 assemblies="${1:?usage: eng/pack-kinds-fixture.sh <ScriptAssemblies folder> [--check]}"
 [ -f "$assemblies/Tl.Unity.Kinds.dll" ] || { echo "no Tl.Unity.Kinds.dll in $assemblies" >&2; exit 1; }
-tlb="${TL_TLB:?set TL_TLB to tlb or Tl.Bake.dll}"
+tlb="${TL_TLB:?set TL_TLB to tl or Tl.Bake.dll}"
 run() { case "$tlb" in *.dll) dotnet "$tlb" "$@" ;; *) "$tlb" "$@" ;; esac; }
 kinds="$root/com.tl.unity/Tests/Kinds"
 stage="$(mktemp -d)"

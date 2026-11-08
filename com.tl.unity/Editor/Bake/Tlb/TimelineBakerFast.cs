@@ -1532,8 +1532,8 @@ internal static class TimelineBakerFastCore
                 throw new BakeDiagnosticException("hold is incompatible with loop:true; a looping timeline never ends.");
             if (doc.Manifest == null)
             {
-                if (doc.NextName != null) throw new BakeDiagnosticException($"timeline reference without manifest: root 'next' names timeline '{doc.NextName}' but no library manifest is available; bake via `tlb library`.");
-                if (doc.ChannelName != null) throw new BakeDiagnosticException($"channel without manifest: root 'channel' names channel '{doc.ChannelName}' but no library manifest is available; bake via `tlb library`.");
+                if (doc.NextName != null) throw new BakeDiagnosticException($"timeline reference without manifest: root 'next' names timeline '{doc.NextName}' but no library manifest is available; bake via `tl library`.");
+                if (doc.ChannelName != null) throw new BakeDiagnosticException($"channel without manifest: root 'channel' names channel '{doc.ChannelName}' but no library manifest is available; bake via `tl library`.");
             }
             else
             {

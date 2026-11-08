@@ -125,7 +125,7 @@ public sealed class BakerAssemblyResolver
         {
             var built = CoreSkew(asm.GetReferencedAssemblies(), tool);
             if (built != null)
-                throw new BakeDiagnosticException($"tool skew: '{asm.GetName().Name}' was built against Tl.Core {built}, but this tlb loads Tl.Core {tool}, so its timeline types cannot load for {context}; update the tool (dotnet tool update --global Tl.Bake, or the local tool manifest) or bake with the tlb that matches the game's Tl.Core.");
+                throw new BakeDiagnosticException($"tool skew: '{asm.GetName().Name}' was built against Tl.Core {built}, but this tl loads Tl.Core {tool}, so its timeline types cannot load for {context}; update the tool (dotnet tool update --global Tl.Bake, or the local tool manifest) or bake with the tl that matches the game's Tl.Core.");
         }
         foreach (var asm in _referenced)
         {
@@ -136,7 +136,7 @@ public sealed class BakerAssemblyResolver
             catch (ReflectionTypeLoadException ex)
             {
                 var first = ex.LoaderExceptions.FirstOrDefault(static e => e != null)?.Message ?? "unknown loader failure";
-                throw new BakeDiagnosticException($"type load failure: {ex.Types.Count(static t => t == null)} types of '{asm.GetName().Name}' cannot load in this tlb for {context}, so their names are invisible to resolution; first loader error: {first} Rebuild the game against the Tl.Core this tlb ships ({tool}) or bake with the matching tlb.");
+                throw new BakeDiagnosticException($"type load failure: {ex.Types.Count(static t => t == null)} types of '{asm.GetName().Name}' cannot load in this tl for {context}, so their names are invisible to resolution; first loader error: {first} Rebuild the game against the Tl.Core this tl ships ({tool}) or bake with the matching tlb.");
             }
         }
     }

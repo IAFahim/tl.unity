@@ -192,5 +192,5 @@ internal static unsafe class KindSectionReader
         }
     }
 
-    static ArgumentException Fail(string reason) => new($"game.tlib kind section {reason}; rebake with current tlb.");
+    static ArgumentException Fail(string reason) => new($"game.tlib kind section {reason}; rebake with current tl.");
 }

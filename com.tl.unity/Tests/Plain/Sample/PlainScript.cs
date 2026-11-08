@@ -15,15 +15,15 @@ namespace PlainGame
             return state;
         }
 
-        static ulong Mix(ulong h, float v) => (h ^ (ulong)System.BitConverter.SingleToInt32Bits(v)) * 1099511628211UL;
+        static ulong Mix(ulong h, float v) { var s = new global::Tl.TlStateHash { Value = h }; s.FloatLane(v); return s.Value; }
 
-        static ulong MixInt(ulong h, int v) => (h ^ (ulong)(uint)v) * 1099511628211UL;
+        static ulong MixInt(ulong h, int v) { var s = new global::Tl.TlStateHash { Value = h }; s.Int(v); return s.Value; }
 
         public static ulong Play(PlainHost host, int steps)
         {
             var ids = new ushort[] { Timelines.Jump, Timelines.PotionHop, Timelines.Run, Timelines.SpeedBoost, Timelines.Stomp };
             var rng = 0x2545F491u;
-            var h = 14695981039346656037UL;
+            var h = global::Tl.TlStateHash.Seed;
             for (var step = 0; step < steps; step++)
             {
                 var forward = !(step >= 200 && step < 240);
@@ -70,7 +70,7 @@ namespace PlainGame
         {
             var ids = new ushort[] { Timelines.Jump, Timelines.PotionHop, Timelines.Run, Timelines.SpeedBoost, Timelines.Stomp, Timelines.Whistle };
             var rng = 0x9E3779B9u;
-            var h = 14695981039346656037UL;
+            var h = global::Tl.TlStateHash.Seed;
             for (var step = 0; step < steps; step++)
             {
                 var forward = !(step >= 200 && step < 240);

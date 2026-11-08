@@ -7,7 +7,7 @@ public sealed class BulletsSample : MonoBehaviour
 
     int _failures;
 
-    static ulong MixInt(ulong h, int v) => (h ^ (ulong)(uint)v) * 1099511628211UL;
+    static ulong MixInt(ulong h, int v) { var s = new global::Tl.TlStateHash { Value = h }; s.Int(v); return s.Value; }
 
     void Check(bool condition, string what, string detail)
     {
@@ -31,7 +31,7 @@ public sealed class BulletsSample : MonoBehaviour
 
     ulong Play(KindWorld game)
     {
-        var h = 14695981039346656037UL;
+        var h = global::Tl.TlStateHash.Seed;
         game.Start(0, KindWorld.Stomp);
         game.Step();
         h = Hash(game, h);

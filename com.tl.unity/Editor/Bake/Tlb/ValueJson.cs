@@ -30,7 +30,7 @@ internal static class ValueJson
             {
                 var name = element.GetString()!;
                 if (name.Length == 0) return default(TimelineId);
-                if (manifest == null) throw new BakeDiagnosticException($"timeline reference without manifest: field '{field}' in {owner} names timeline '{name}' but no library manifest is available; bake via `tlb library`.");
+                if (manifest == null) throw new BakeDiagnosticException($"timeline reference without manifest: field '{field}' in {owner} names timeline '{name}' but no library manifest is available; bake via `tl library`.");
                 if (manifest != null && manifest.Timelines.TryGetValue(name, out var id)) return new TimelineId(id);
                 throw new BakeDiagnosticException($"unknown timeline: field '{field}' in {owner} names unknown timeline '{name}'.");
             }

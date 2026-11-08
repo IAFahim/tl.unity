@@ -239,7 +239,7 @@ public sealed unsafe class KindStore : IDisposable
         }
         var k = IndexOf(kind);
         if (k < 0) return null;
-        if (_valueBytes[k] != valueBytes) throw new InvalidOperationException($"Kind '{kind}' is {valueBytes} bytes in code but {_valueBytes[k]} in the loaded library; rebake the library with tlb.");
+        if (_valueBytes[k] != valueBytes) throw new InvalidOperationException($"Kind '{kind}' is {valueBytes} bytes in code but {_valueBytes[k]} in the loaded library; rebake the library with tl.");
         var library = new List<string>();
         var ordinals = new List<int>();
         for (var f = 0; f < _sec.FeederCount; f++)
@@ -269,7 +269,7 @@ public sealed unsafe class KindStore : IDisposable
         if (differs || key == 0 && parts.Count == 0 && lines.Count != library.Count && !_feeding.Contains(kind))
         {
             var have = (group == null ? "" : group + " ") + string.Join(" ", library);
-            throw new InvalidOperationException($"Kind '{kind}' feeders in the loaded library differ from the compiled game; rebake the library with tlb.\nlibrary: {have}\ncode:    {signature.Replace('\n', ' ')}");
+            throw new InvalidOperationException($"Kind '{kind}' feeders in the loaded library differ from the compiled game; rebake the library with tl.\nlibrary: {have}\ncode:    {signature.Replace('\n', ' ')}");
         }
         part = parts.Count;
         parts.Add(key);
