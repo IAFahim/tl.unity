@@ -45,9 +45,16 @@ namespace AutoKinds
         public static float Evaluate(in TlFrame<GlowClip> frame) => frame.Clip.Amount;
     }
 
+    public struct Ding
+    {
+        public int Rings;
+    }
+
     public struct ChimeTrack : ITlTrack<ChimeClip>
     {
         [Pulse(typeof(ChimeKind), On = ClipEvent.Start)]
         public static int Ring(in TlFrame<ChimeClip> frame) => frame.Direction * frame.Clip.Rings;
+
+        public static void OnClipStart(in TlFrame<ChimeClip> frame, ref Events<Ding> dings) => dings.Raise(new Ding { Rings = frame.Clip.Rings });
     }
 }

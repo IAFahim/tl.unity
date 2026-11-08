@@ -14,9 +14,8 @@ public struct Lunge : IComponentData
     public float Value;
 }
 
-public struct Strikes : IComponentData
+public struct Strike
 {
-    public int Count;
     public int Amount;
 }
 
@@ -27,23 +26,14 @@ public struct ArenaLunge
     public static void Apply(in float total, ref Lunge lunge) => lunge.Value += total;
 }
 
-[TlKind(Accepts = KindEntries.Pulses, Mode = KindMode.Each)]
-public struct ArenaStrike
-{
-    public static void Apply(in int amount, ref Strikes strikes)
-    {
-        if (amount <= 0)
-            return;
-        strikes.Count++;
-        strikes.Amount += amount;
-    }
-}
-
 public struct StrikeTrack : ITlTrack<StrikeClip>
 {
     [Feeds(typeof(ArenaLunge))]
     public static float Evaluate(in TlFrame<StrikeClip> frame) => frame.Clip.Reach * math.sin(frame.Progress * math.PI);
 
-    [Pulse(typeof(ArenaStrike), On = ClipEvent.Start)]
-    public static int Strike(in TlFrame<StrikeClip> frame) => frame.Direction > 0 ? frame.Clip.Amount : 0;
+    public static void OnClipStart(in TlFrame<StrikeClip> frame, ref Events<Strike> strikes)
+    {
+        if (frame.Direction > 0)
+            strikes.Raise(new Strike { Amount = frame.Clip.Amount });
+    }
 }

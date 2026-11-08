@@ -141,6 +141,24 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
+        public void ClipStartEventsOfAnAutoTrackReachTheTimelineEventBuffer()
+        {
+            var registry = TimelineKindSets.Registry;
+            CollectionAssert.Contains(registry.EventBuffers, typeof(TimelineEvent<AutoKinds.Ding>));
+            var system = Type.GetType("Tl.Generated.TlAuto_Tl_Unity_AutoKinds_Jobs, Tl.Unity.AutoKinds");
+            Assert.IsNotNull(system, "the auto kind system of the fixture");
+            var timeline = Timeline("Chimes");
+            var track = timeline.CreateTrack<TlTrack>(null, "Chime");
+            track.Template = new ChimeClip_TlData();
+            var clip = track.CreateClip<TlClip>();
+            clip.start = 0;
+            clip.duration = 1;
+            using var baked = new Baked(Director("Bell", timeline).gameObject);
+            var entity = baked.Single<TlTimelineSet>();
+            Assert.IsTrue(baked.World.EntityManager.HasBuffer<TimelineEvent<AutoKinds.Ding>>(entity), "the bell gets the Ding event buffer");
+        }
+
+        [Test]
         public void ADirectorWithoutTlTracksBakesNothingOfTl()
         {
             var timeline = Timeline("Plain");

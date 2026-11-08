@@ -1,7 +1,7 @@
 # Events demo (G): clip events drive gameplay
 
-A red knight plays an attack combo on a loop. Each Strike clip makes the knight lunge, and at the moment the clip starts it sends a
-strike pulse. Gameplay code reads the strike and: sends 6 damage to the training dummy, starts the dummy's own **Hurt** timeline (it
+A red knight plays an attack combo on a loop. Each Strike clip makes the knight lunge, and at the moment the clip starts it raises a
+`Strike` event. Gameplay code reads the strike and: sends 6 damage to the training dummy, starts the dummy's own **Hurt** timeline (it
 squashes), spawns a spark, and counts the strike. Top left: `Strikes 7   Dummy health 58 / 100   Sparks 7`.
 
 ## First 10 minutes
@@ -28,20 +28,18 @@ squashes), spawns a spark, and counts the strike. Top left: `Strikes 7   Dummy h
 
 | File | Lines that matter |
 |---|---|
-| `Strike.cs` | `StrikeClip` (Amount, Reach). `StrikeTrack` feeds the `ArenaLunge` kind (the knight's forward step) and, with `[Pulse(typeof(ArenaStrike), On = ClipEvent.Start)]`, sends the clip's Amount once when the clip starts (forward only). `ArenaStrike` (`Accepts = Pulses, Mode = Each`) writes every strike of the tick into the knight's `Strikes` component. |
+| `Strike.cs` | `StrikeClip` (Amount, Reach). `StrikeTrack` feeds the `ArenaLunge` kind (the knight's forward step) and, in `OnClipStart(in TlFrame<StrikeClip>, ref Events<Strike>)`, raises one `Strike` with the clip's Amount when the clip starts (forward only). Tl adds a `TimelineEvent<Strike>` buffer to the knight by itself. |
 | `Dummy.cs` | `ArenaDamage`: a kind that accepts **game pulses** (`Accepts = Pulses, GamePulses = 8`) and subtracts the sum from `DummyHealth` once per tick. `SquashTrack` feeds `ArenaSquash` for the Hurt timeline. |
-| `StrikeSystem.cs` | Runs last in `TlSimulationGroup`, after Tl applied the tick's kinds. Its job reads `Strikes` and, per strike: `ArenaDamageKind.Pulses(writer).To(target, amount)`, `requests.Start(attacker.Hurt)` on the dummy's request buffer, an ECB `Instantiate` of the spark at the dummy, `score.Strikes++`; then clears `Strikes`. |
+| `StrikeSystem.cs` | Runs last in `TlSimulationGroup`, after Tl applied the tick's kinds. Its job reads the knight's `TimelineEvent<Strike>` buffer and, per strike: `ArenaDamageKind.Pulses(writer).To(target, amount)`, `requests.Start(attacker.Hurt)` on the dummy's request buffer, an ECB `Instantiate` of the spark at the dummy, `score.Strikes++`; then clears the buffer. |
 | `ArenaAttackerAuthoring.cs` | Bakes `Attacker { Target, Spark, Hurt }`. `TlBaking.GetTimeline(this, authoring.Hurt)` turns the dragged timeline into a `TlTimeline`. |
-| `ArenaDummyAuthoring.cs` | Bakes `DummyHealth` and the `ArenaDamage` kind's buffers (`ArenaDamageKind.Types`), because no timeline on the dummy feeds that kind; without them the pulses are dropped. |
+| `ArenaDummyAuthoring.cs` | Bakes `DummyHealth`, `Wounds` and the `ArenaDamage` kind's buffers (`ArenaDamageKind.Types`), because no timeline on the dummy feeds that kind; Tl adds a kind's components only to objects whose timelines reach it. |
 | `ArenaPresentation.cs` | Burst jobs: lunge to position, squash to scale, spark fade and destroy. |
 | `EventsOverlay.cs` | The only MonoBehaviour: reads `Score` and `DummyHealth` for the text. |
 
-The event path: clip start -> the track's `[Pulse]` method -> Tl's kind system applies `ArenaStrike` to the knight's `Strikes` (one entry
-per strike, in order) -> your job, the same tick. Read it inside `TlSimulationGroup` after Tl's systems and clear it, so each strike is seen
-once. Damage sent this tick is applied by Tl at the next tick, together with any timeline damage, as one write.
-
-The planned path is `Events<Strike>` raised in `OnClipStart` and read from a `TimelineEvent<Strike>` buffer. The zero-config generator does
-not dispatch it for `ITlTrack` yet (IAFahim/tl.unity#25); the demo switches to it when that lands, the numbers stay the same.
+The event path: clip start -> the track's `OnClipStart` raises `Strike` into `Events<Strike>` -> Tl writes one record per strike, in
+order, into the knight's `TimelineEvent<Strike>` buffer in its kind job -> your job reads it the same tick (inside `TlSimulationGroup`,
+after Tl's systems). Tl refills the buffer every tick, so each strike is seen once. Damage sent this tick is applied by Tl at the next
+tick, together with any timeline damage, as one write.
 What not to do: no `SystemBase`, no managed callbacks or `UnityEvent`s, no searching objects by name; drag references into the authoring
 components instead.
 

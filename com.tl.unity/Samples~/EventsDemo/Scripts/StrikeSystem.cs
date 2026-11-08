@@ -16,7 +16,7 @@ public partial struct StrikeSystem : ISystem
 
     public void OnCreate(ref SystemState state)
     {
-        _attackers = SystemAPI.QueryBuilder().WithAll<Attacker>().WithAllRW<Score, Strikes>().Build();
+        _attackers = SystemAPI.QueryBuilder().WithAll<Attacker>().WithAllRW<Score, TimelineEvent<Strike>>().Build();
         _tick = new EntityQueryBuilder(Allocator.Temp).WithAllRW<TimelineKindTick>().WithOptions(EntityQueryOptions.IncludeSystems).Build(ref state);
         state.RequireForUpdate(_attackers);
         state.RequireForUpdate(_tick);
@@ -60,13 +60,16 @@ public partial struct ReactToStrikes : IJobEntity, IJobEntityChunkBeginEnd
         Writer.End();
     }
 
-    void Execute(in Attacker attacker, ref Score score, ref Strikes strikes)
+    void Execute(in Attacker attacker, ref Score score, ref DynamicBuffer<TimelineEvent<Strike>> strikes)
     {
         score.Ticks++;
-        if (strikes.Count == 0)
+        if (strikes.Length == 0)
             return;
-        Damage.To(attacker.Target, strikes.Amount);
-        for (var i = 0; i < strikes.Count; i++)
+        var amount = 0;
+        for (var i = 0; i < strikes.Length; i++)
+            amount += strikes[i].Record.Value.Amount;
+        Damage.To(attacker.Target, amount);
+        for (var i = 0; i < strikes.Length; i++)
         {
             score.Strikes++;
             if (Requests.HasBuffer(attacker.Target) && attacker.Hurt.IsValid)
@@ -81,6 +84,6 @@ public partial struct ReactToStrikes : IJobEntity, IJobEntityChunkBeginEnd
                 score.Sparks++;
             }
         }
-        strikes = default;
+        strikes.Clear();
     }
 }

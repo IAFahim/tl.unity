@@ -272,7 +272,7 @@ namespace Tl.Gen.Unity
             for (var k = 0; k < kinds.Count; k++)
                 EmitKind(writer, shape, assignment, assignmentIndex, kinds[k], k, tlFrames);
             if (events.Count != 0)
-                EmitEvents(writer, events, eventConsumers, assignmentIndex);
+                EmitEvents(writer, events, eventConsumers, assignmentIndex, tlFrames);
             W(writer, "}");
             EmitEntry(writer, model, events, kinds);
             W(writer, "}");
@@ -516,9 +516,9 @@ namespace Tl.Gen.Unity
             return null;
         }
 
-        static string EventArgs(IReadOnlyList<UnityContext> events, ConsumerMethod method, int index)
+        static string EventArgs(IReadOnlyList<UnityContext> events, ConsumerMethod method, int index, SystemConsumer consumer, ISet<string> tlFrames)
         {
-            var args = new StringBuilder("in __f" + index);
+            var args = new StringBuilder(tlFrames.Contains(NewStyle.FeederKey(consumer.ConsumerTypeName, method.Kind.ToString())) ? "new global::Tl.TlFrame<" + consumer.ClipTypeName + ">(in __f" + index + ")" : "in __f" + index);
             for (var p = 1; p < method.Params.Count; p++)
             {
                 var element = UnityKindPlan.EventElement(method.Params[p].TypeName);
@@ -531,7 +531,7 @@ namespace Tl.Gen.Unity
             return args.ToString();
         }
 
-        static void EmitEventSteps(StringBuilder writer, IReadOnlyList<UnityContext> events, List<(int index, SystemConsumer consumer)> consumers, int assignment, bool closing)
+        static void EmitEventSteps(StringBuilder writer, IReadOnlyList<UnityContext> events, List<(int index, SystemConsumer consumer)> consumers, int assignment, bool closing, ISet<string> tlFrames)
         {
             W(writer, "for (var __i = 0; __i < __stage->StepCount; __i++)");
             W(writer, "{");
@@ -548,15 +548,15 @@ namespace Tl.Gen.Unity
                 W(writer, "{");
                 EmitMaterialize(writer, consumer, assignment, index);
                 if (closing)
-                    W(writer, consumer.ConsumerTypeName + ".OnClipEnd(" + EventArgs(events, end!, index) + ");");
+                    W(writer, consumer.ConsumerTypeName + ".OnClipEnd(" + EventArgs(events, end!, index, consumer, tlFrames) + ");");
                 else
                 {
                     if (active != null)
-                        W(writer, consumer.ConsumerTypeName + ".ExecuteActive(" + EventArgs(events, active, index) + ");");
+                        W(writer, consumer.ConsumerTypeName + ".ExecuteActive(" + EventArgs(events, active, index, consumer, tlFrames) + ");");
                     if (start != null)
-                        W(writer, "if (__tick == __def->WindowStart && (__pb->Flags & global::Tl.PlaybackFlags.ReenterPending) == 0) " + consumer.ConsumerTypeName + ".OnClipStart(" + EventArgs(events, start, index) + ");");
+                        W(writer, "if (__tick == __def->WindowStart && (__pb->Flags & global::Tl.PlaybackFlags.ReenterPending) == 0) " + consumer.ConsumerTypeName + ".OnClipStart(" + EventArgs(events, start, index, consumer, tlFrames) + ");");
                     if (end != null)
-                        W(writer, "if (__tick == __def->WindowEnd - 1 && (__pb->Flags & global::Tl.PlaybackFlags.ReenterPending) == 0) " + consumer.ConsumerTypeName + ".OnClipEnd(" + EventArgs(events, end, index) + ");");
+                        W(writer, "if (__tick == __def->WindowEnd - 1 && (__pb->Flags & global::Tl.PlaybackFlags.ReenterPending) == 0) " + consumer.ConsumerTypeName + ".OnClipEnd(" + EventArgs(events, end, index, consumer, tlFrames) + ");");
                 }
                 W(writer, "}");
             }
@@ -594,7 +594,7 @@ namespace Tl.Gen.Unity
                 W(writer, "__eb" + e + ".Bind(0, __s);");
         }
 
-        static void EmitEvents(StringBuilder writer, IReadOnlyList<UnityContext> events, List<(int index, SystemConsumer consumer)> consumers, int assignment)
+        static void EmitEvents(StringBuilder writer, IReadOnlyList<UnityContext> events, List<(int index, SystemConsumer consumer)> consumers, int assignment, ISet<string> tlFrames)
         {
             var closes = false;
             foreach (var (_, consumer) in consumers)
@@ -633,11 +633,11 @@ namespace Tl.Gen.Unity
             if (closes)
             {
                 EmitSlotHeader(writer, events, true);
-                EmitEventSteps(writer, events, consumers, assignment, true);
+                EmitEventSteps(writer, events, consumers, assignment, true, tlFrames);
                 W(writer, "}");
             }
             EmitSlotHeader(writer, events, false);
-            EmitEventSteps(writer, events, consumers, assignment, false);
+            EmitEventSteps(writer, events, consumers, assignment, false, tlFrames);
             W(writer, "}");
             var retry = new StringBuilder();
             for (var e = 0; e < events.Count; e++)

@@ -12,6 +12,7 @@ public sealed class ArenaDummyBaker : Baker<ArenaDummyAuthoring>
     {
         var entity = GetEntity(TransformUsageFlags.Dynamic | TransformUsageFlags.NonUniformScale);
         AddComponent(entity, new DummyHealth { Max = authoring.Health });
+        AddComponent(entity, new Wounds());
         foreach (var type in TlUnityGenerated.ArenaDamageKind.Types)
             AddComponent(entity, type);
         SetComponentEnabled<TlUnityGenerated.ArenaDamageActive>(entity, false);
