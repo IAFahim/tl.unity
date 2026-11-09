@@ -2,7 +2,7 @@ using Tl;
 
 namespace PushPack
 {
-    [TlState]
+    [TlColumn]
     public partial struct Push
     {
         public float X;

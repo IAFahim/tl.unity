@@ -31,7 +31,7 @@ namespace Tl.Gen.Unity
                 if (state.ContainingType is not null || !IsPartial(state))
                 {
                     context.ReportDiagnostic(Diagnostic.Create(
-                        new DiagnosticDescriptor("TLUNITY9107", "TlState needs a partial top-level struct", "[TlState] struct '{0}' must be a partial struct declared directly in a namespace; Tl adds IComponentData to it.", "Tl.Unity", DiagnosticSeverity.Error, true),
+                        new DiagnosticDescriptor("TLUNITY9107", "TlColumn needs a partial top-level struct", "[TlColumn] struct '{0}' must be a partial struct declared directly in a namespace; Tl adds IComponentData to it.", "Tl.Unity", DiagnosticSeverity.Error, true),
                         state.Locations.FirstOrDefault() ?? Location.None, full));
                     continue;
                 }

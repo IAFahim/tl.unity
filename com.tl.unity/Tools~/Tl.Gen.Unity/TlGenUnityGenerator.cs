@@ -21,7 +21,7 @@ namespace Tl.Gen.Unity
             context.RegisterSourceOutput(combined, static (production, pair) => Generate(production, pair.Left, pair.Right));
         }
 
-        static readonly string[] Markers = { "TimelineSystem", "TimelineKind", "TlKind", "TlClip", "TlState", "Feeds", "Pulse", "ITrack", "ITlTrack", "IMarker" };
+        static readonly string[] Markers = { "TimelineSystem", "TimelineKind", "TlKind", "TlClip", "TlColumn", "Feeds", "Pulse", "ITrack", "ITlTrack", "IMarker" };
 
         static bool Relevant(CSharpCompilation compilation)
         {
@@ -46,7 +46,7 @@ namespace Tl.Gen.Unity
         static Func<ITypeSymbol, bool> StateRule(Compilation compilation)
         {
             var component = compilation.GetTypeByMetadataName("Unity.Entities.IComponentData");
-            var state = compilation.GetTypeByMetadataName("Tl.TlStateAttribute");
+            var state = compilation.GetTypeByMetadataName("Tl.TlColumnAttribute");
             return type =>
             {
                 if (NewStyle.IsStateType(type, state))

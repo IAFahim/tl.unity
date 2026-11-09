@@ -24,7 +24,7 @@ public sealed class TlKindAttribute : Attribute
 }
 
 [AttributeUsage(AttributeTargets.Struct)]
-public sealed class TlStateAttribute : Attribute
+public sealed class TlColumnAttribute : Attribute
 {
 }
 
