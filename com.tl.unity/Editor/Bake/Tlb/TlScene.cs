@@ -87,6 +87,13 @@ public sealed class TlScene
         var entity = item.GetProperty("entity").GetInt32();
         var tick = item.TryGetProperty("tick", out var t) ? (ushort)t.GetInt32() : (ushort)0;
         var reverse = item.TryGetProperty("reverse", out var r) && r.GetBoolean() ? (ushort)1 : (ushort)0;
+        ushort Speed()
+        {
+            var value = item.GetProperty("speed").GetDouble() * 16;
+            var sixteenths = Math.Round(value);
+            if (sixteenths < 1 || sixteenths > 255 || Math.Abs(value - sixteenths) > 1e-9) throw new BakeDiagnosticException($"scene request speed {item.GetProperty("speed").GetRawText()} is not a multiple of 1/16 between 1/16 and 15.9375.");
+            return (ushort)sixteenths;
+        }
         ushort Line() => Timeline(manifest, item.GetProperty("timeline").GetString()!);
         ushort Lane()
         {
@@ -107,7 +114,9 @@ public sealed class TlScene
             "ResumeChannel" => new Request(step, entity, RequestOp.ResumeChannel, Lane(), 0),
             "SeekChannel" => new Request(step, entity, RequestOp.SeekChannel, Lane(), tick),
             "SetReverseChannel" => new Request(step, entity, RequestOp.ReverseChannel, Lane(), reverse),
-            var op => throw new BakeDiagnosticException($"scene request '{op}' cannot run yet: playback speed is not implemented (IAFahim/tl#577).")
+            "SetSpeed" => new Request(step, entity, RequestOp.Speed, Line(), Speed()),
+            "SetSpeedChannel" => new Request(step, entity, RequestOp.SpeedChannel, Lane(), Speed()),
+            var op => throw new BakeDiagnosticException($"scene request '{op}' is not a known operation.")
         };
     }
 
