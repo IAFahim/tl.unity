@@ -89,7 +89,7 @@ namespace KindGame
         }
 
         [Test]
-        public void ReversingOnePlaybackUndoesItsTicksExactlyAndEndsAtTheStart()
+        public void ReversingOnePlaybackUndoesItsTicksExactlyParksAtTheStartAndPlaysAgain()
         {
             _game.Start(0, KindWorld.Jump);
             _game.Start(1, KindWorld.Jump);
@@ -101,11 +101,26 @@ namespace KindGame
             Assert.AreEqual(7, _game.Slots(1)[0].Tick);
             Steps(5);
             Expect(0, 1f, 6f, 10);
-            Steps(1);
-            var slots = _game.Slots(0);
-            Assert.IsTrue(slots.Length == 0 || slots[0].Timeline == 0);
-            Assert.AreEqual(1f, _game.Motion(0).X);
-            Assert.AreEqual(6f, _game.Motion(0).Y);
+            _game.StopAll(1);
+            Steps(3);
+            Assert.AreEqual(KindWorld.Jump, _game.Slots(0)[0].Timeline);
+            Assert.AreEqual(global::Tl.PlaybackRules.Parked | global::Tl.PlaybackFlags.Reverse, _game.Slots(0)[0].Flags);
+            Expect(0, 1f, 6f, 10);
+            var other = _game.Slots(1);
+            Assert.IsTrue(other.Length == 0 || other[0].Timeline == 0);
+            _game.Entities.SetComponentData(_game.Rows[1], _game.Entities.GetComponentData<Movement_MotionData>(_game.Rows[0]));
+            _game.Entities.SetComponentData(_game.Rows[1], _game.Entities.GetComponentData<Movement_StaminaData>(_game.Rows[0]));
+            _game.Start(1, KindWorld.Jump);
+            Send(0, TimelineRequest.Reverse(0, KindWorld.Jump, false));
+            for (var s = 0; s < 7; s++)
+            {
+                Steps(1);
+                Assert.AreEqual(_game.Slots(1)[0].Tick, _game.Slots(0)[0].Tick);
+                Assert.AreEqual(_game.Motion(1).X, _game.Motion(0).X);
+                Assert.AreEqual(_game.Motion(1).Y, _game.Motion(0).Y);
+                Assert.AreEqual(_game.Stamina(1), _game.Stamina(0));
+            }
+            Expect(6, 8f, 48f, 19);
         }
 
         [Test]

@@ -97,6 +97,7 @@ public static unsafe class KindRules
             s->Flags |= PlaybackFlags.StopAged;
             return true;
         }
+        if (PlaybackRules.IsParked(s->Flags) && !PlaybackRules.Unpark(ref *s, stepDir > 0)) return true;
         if ((s->Flags & PlaybackFlags.StartPending) != 0)
         {
             Begin(in t, ref rows, row, i, s, stepDir);
@@ -130,6 +131,12 @@ public static unsafe class KindRules
             return true;
         }
         RemoveActiveSpans(in t, ref rows, row, i, s);
+        if (tick < 0 && stepDir > 0)
+        {
+            s->Tick = 0;
+            s->Flags |= PlaybackRules.Parked;
+            return true;
+        }
         if (tl->Next != 0)
         {
             var next = t.Timelines + (tl->Next - 1);

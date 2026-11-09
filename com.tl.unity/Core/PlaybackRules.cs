@@ -36,6 +36,21 @@ public static unsafe class PlaybackRules
         return true;
     }
 
+    public const PlaybackFlags Parked = PlaybackFlags.StartPending | PlaybackFlags.Ended;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsParked(PlaybackFlags flags) => (flags & Parked) == Parked;
+
+    public static bool Resumes(PlaybackFlags flags, bool forward)
+        => (flags & (Parked | PlaybackFlags.Paused | PlaybackFlags.Stopping)) == Parked && ((flags & PlaybackFlags.Reverse) != 0) != forward;
+
+    public static bool Unpark(ref Playback slot, bool forward)
+    {
+        if (!Resumes(slot.Flags, forward)) return false;
+        slot.Flags &= ~PlaybackFlags.Ended;
+        return true;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsLive(in Playback slot) => slot.Timeline != 0 && (slot.Flags & PlaybackFlags.Stopping) == 0;
 
@@ -173,6 +188,7 @@ public static unsafe class PlaybackRules
         if ((slot.Flags & PlaybackFlags.StartPending) != 0)
         {
             slot.Tick = tick;
+            slot.Flags &= ~PlaybackFlags.Ended;
             return true;
         }
         slots.Purge(index);
@@ -186,7 +202,7 @@ public static unsafe class PlaybackRules
         if (index < 0) return false;
         ref var slot = ref slots[index];
         var flags = reverse ? slot.Flags | PlaybackFlags.Reverse : slot.Flags & ~PlaybackFlags.Reverse;
-        if ((flags & PlaybackFlags.Ended) != 0 && (uint)(slot.Timeline - 1) < (uint)timelineCount && slot.Tick == (reverse ? timelines[slot.Timeline - 1].Duration - 1 : 0))
+        if ((flags & Parked) == PlaybackFlags.Ended && (uint)(slot.Timeline - 1) < (uint)timelineCount && slot.Tick == (reverse ? timelines[slot.Timeline - 1].Duration - 1 : 0))
             flags = (flags & ~PlaybackFlags.Ended) | PlaybackFlags.StartPending;
         slot.Flags = flags;
         return true;
@@ -220,6 +236,11 @@ public static unsafe class PlaybackRules
             slot.Flags = flags & ~(PlaybackFlags.ReenterPending | PlaybackFlags.Began | PlaybackFlags.StartPending);
             return AdvanceResult.Kept;
         }
+        if (IsParked(flags))
+        {
+            if (!Unpark(ref slot, forward)) return AdvanceResult.Kept;
+            flags = slot.Flags;
+        }
         if ((flags & (PlaybackFlags.Ended | PlaybackFlags.Paused)) != 0)
         {
             slot.Flags = flags & ~PlaybackFlags.StartPending;
@@ -239,6 +260,11 @@ public static unsafe class PlaybackRules
             if (slot.Tick == 0)
             {
                 if (tl->Loop != 0) slot.Tick = (ushort)(duration - 1);
+                else if (forward)
+                {
+                    slot.Flags = flags | Parked;
+                    return AdvanceResult.Kept;
+                }
                 else if (tl->Hold != 0) slot.Flags = flags | PlaybackFlags.Ended;
                 else return AdvanceResult.Removed;
             }
