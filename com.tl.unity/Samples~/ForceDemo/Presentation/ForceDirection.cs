@@ -3,7 +3,7 @@ using Unity.Burst;
 using Unity.Entities;
 
 [BurstCompile]
-[UpdateInGroup(typeof(TlSimulationGroup), OrderLast = true)]
+[UpdateInGroup(typeof(Tl.TlSimulationGroup), OrderLast = true)]
 [UpdateBefore(typeof(ForceSystem))]
 public partial struct ForceDirectionSystem : ISystem
 {
