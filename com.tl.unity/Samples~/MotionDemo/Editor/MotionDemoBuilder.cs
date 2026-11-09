@@ -88,6 +88,7 @@ public static class MotionDemoBuilder
         ground.transform.position = new Vector3(1.5f, -0.75f, 1f);
         ground.transform.localScale = new Vector3(1.4f, 1f, 0.8f);
         new GameObject("Overlay").AddComponent<MotionOverlay>();
+        new GameObject("Tl Panel").AddComponent<Tl.Unity.TlPanel>().Origin = new Vector2(12f, 62f);
         var host = new GameObject("Motion Demo Objects");
         var subScene = host.AddComponent<SubScene>();
         subScene.SceneAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(folder + "/" + ObjectsName);

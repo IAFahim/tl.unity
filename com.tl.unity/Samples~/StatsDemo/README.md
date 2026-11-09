@@ -18,6 +18,13 @@ Needs the Stats pack next to `com.tl.unity`: Package Manager > **+** > **Add pac
 4. Read `Scripts/Haste.cs`: one Burst job starts the Haste timeline (dragged into **Haste Authoring** and **Tl Also Plays**) at duel ticks
    100 and 250.
 
+## Pause, speed and rewind
+
+The **Tl Panel** under the readout (Game view) controls the hero's timelines: **Pause**, **Reverse**, **Speed** 0.25x to 4x. Click
+**World: forward** to rewind: Health climbs back and the Haste bonus drops off. Checked: after 300 steps forward and 300 steps back, Health is
+100 and Attack is 10 again (and Health at step 400 equals Health at step 200). It stays exact because Health is not clamped: a clamp cannot be
+undone, so a game clamps when it draws.
+
 ## What the designer builds
 
 | Asset / object | Content |

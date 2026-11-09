@@ -82,6 +82,7 @@ public static class EventsDemoBuilder
         UnityEngine.Object.DestroyImmediate(ground.GetComponent<Collider>());
         ground.transform.localScale = new Vector3(0.8f, 1f, 0.6f);
         new GameObject("Overlay").AddComponent<EventsOverlay>();
+        new GameObject("Tl Panel").AddComponent<Tl.Unity.TlPanel>();
         var host = new GameObject("Events Demo Objects");
         var subScene = host.AddComponent<SubScene>();
         subScene.SceneAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(folder + "/" + ObjectsName);

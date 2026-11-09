@@ -14,6 +14,12 @@ squashes), spawns a spark, and counts the strike. Top left: `Strikes 7   Dummy h
 4. Stop Play, add a fourth Strike clip to Combo (right-click the track > **Add Tl Clip**), press Play: one more spark per loop.
 5. Read `Scripts/StrikeSystem.cs` (one Burst job does all four reactions).
 
+## Pause, speed and rewind
+
+The **Tl Panel** (Game view) has **Pause**, **Reverse**, **Speed** 0.25x to 4x and **World: rewinding**. Strikes are raised only while time runs
+forward (`if (frame.Direction > 0)` in `Strike.cs`), so rewinding adds no strikes, and it does not take back the ones already counted: the
+score and the dummy's health stay. Sparks are game code and are not taken back either.
+
 ## What the designer builds
 
 | Asset / object | Content |

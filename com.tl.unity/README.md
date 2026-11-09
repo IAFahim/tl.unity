@@ -1,8 +1,9 @@
 # Tl for Unity (`com.tl.unity`)
 
 Timelines for Unity ECS with Burst. Designers build timelines in Unity's Timeline window with Tl tracks; a Playable Director in a SubScene
-bakes them; Burst `ISystem`s play them on unmanaged data. Several timelines play on one entity, rewind is exact, and the editor shows the
-result while you scrub, without Play.
+bakes them; Burst `ISystem`s play them on unmanaged data. Several timelines play on one entity, pulses (give, take, damage, markers) rewind
+exactly, and the editor shows the result while you scrub, without Play. What comes back on rewind and what does not is in
+[REWIND-AND-SPEED.md](Documentation~/REWIND-AND-SPEED.md).
 
 Tested on the newest Unity 7 editor (7000.0.0a16), Entities 7.0.0, Entities Graphics 7.0.0, URP.
 
@@ -46,6 +47,7 @@ fields the designer fills by drag and drop.
 - [USING-PLAIN-CSHARP.md](https://github.com/IAFahim/tl.unity/blob/main/docs/USING-PLAIN-CSHARP.md)
 - [KINDS.md](https://github.com/IAFahim/tl.unity/blob/main/docs/KINDS.md)
 - [Glossary](Documentation~/GLOSSARY.md): the words Tl uses, in plain language
+- [Rewind and speed](Documentation~/REWIND-AND-SPEED.md): what comes back when time runs backward, and what does not
 
 ## Samples
 

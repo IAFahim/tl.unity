@@ -87,6 +87,7 @@ public static class StatsDemoBuilder
         UnityEngine.Object.DestroyImmediate(ground.GetComponent<Collider>());
         ground.transform.localScale = new Vector3(0.6f, 1f, 0.6f);
         new GameObject("Overlay").AddComponent<StatsOverlay>();
+        new GameObject("Tl Panel").AddComponent<Tl.Unity.TlPanel>();
         var host = new GameObject("Stats Demo Objects");
         var subScene = host.AddComponent<SubScene>();
         subScene.SceneAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(folder + "/" + ObjectsName);

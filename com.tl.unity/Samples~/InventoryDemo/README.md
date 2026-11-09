@@ -21,6 +21,13 @@ Needs the Inventory pack next to `com.tl.unity`: Package Manager > **+** > **Add
 5. Read the pack (Packages > **Tl Inventory Pack** > `Inventory.cs`): `GiveClip`, `CraftClip` and `PickupMarker` are plain structs, and three
    pulse methods turn them into `ItemDelta`s for the `InventoryItems` kind. No game code in this demo.
 
+## Pause, speed and rewind
+
+The **Tl Panel** under the readout (Game view) controls the Backpack: **Pause**, **Resume**, **Reverse**, **-1 s / +1 s**, and **Speed** 0.25x to 4x
+(try **4x**: the bag fills four times as fast and ends the same). Click **World: forward**: it turns into **World: rewinding** and the bag
+empties item by item, all the way back to an empty bag; click it again and the bag refills. This is exact because every give, take and craft is
+a pulse that knows which way time runs.
+
 ## What the designer builds
 
 | Asset / object | Content |

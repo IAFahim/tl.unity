@@ -19,6 +19,13 @@ Needs the Motion pack next to `com.tl.unity`: Package Manager > **+** > **Add pa
 5. Select **Capsule**, open **Hop**: the **Pull** track's clip has **Priority 5**, higher than the **Jump** track's 0, so it wins while
    both play.
 
+## Pause, speed and rewind
+
+The **Tl Panel** (Game view) has one button per object (**Target 1, 2, 3**): **Pause**, **Reverse**, **Speed** 0.25x to 4x, **World: rewinding**.
+Motion *sets* a position, scale, yaw or colour from the clip, so rewind plays each animation backward while its clip is active. It cannot
+restore a value from before a clip, because a set value forgets what it replaced. Use pulses and sums (Inventory, Stats) when a value must come
+back exactly.
+
 ## What the designer builds
 
 | Asset / object | Content |

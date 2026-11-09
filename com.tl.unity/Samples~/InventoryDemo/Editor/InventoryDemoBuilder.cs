@@ -79,6 +79,7 @@ public static class InventoryDemoBuilder
         UnityEngine.Object.DestroyImmediate(ground.GetComponent<Collider>());
         ground.transform.localScale = new Vector3(0.6f, 1f, 0.6f);
         new GameObject("Overlay").AddComponent<BagOverlay>();
+        new GameObject("Tl Panel").AddComponent<Tl.Unity.TlPanel>().Origin = new Vector2(16f, 100f);
         var host = new GameObject("Inventory Demo Objects");
         var subScene = host.AddComponent<SubScene>();
         subScene.SceneAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(folder + "/" + ObjectsName);

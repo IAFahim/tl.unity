@@ -162,6 +162,45 @@ namespace ForceDemo.Tests
             Assert.AreEqual(3.05f, end.z, Tolerance, "Dash pushed about 3 m along Z");
         }
 
+        [UnityTest]
+        public IEnumerator TheCubeWalksBackWhenItIsRewoundByReverseOrByTheWorld()
+        {
+            var scene = ScenePath();
+            Assert.IsNotNull(scene, "Build the demo first: Tl > Samples > Build Force Demo.");
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode(scene, new LoadSceneParameters(LoadSceneMode.Single));
+            var entities = World.DefaultGameObjectInjectionWorld.EntityManager;
+            using var query = entities.CreateEntityQuery(ComponentType.ReadOnly(Game("Force")), ComponentType.ReadOnly<LocalTransform>(), ComponentType.ReadOnly<TlTimelineSet>());
+            var deadline = Time.realtimeSinceStartup + 120f;
+            while (query.IsEmpty && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            Assert.IsFalse(query.IsEmpty, "the Cube entity with Force appears after the SubScene loads");
+            var entity = query.GetSingletonEntity();
+            var panel = UnityEngine.Object.FindFirstObjectByType<TlPanel>();
+            Assert.IsNotNull(panel, "the Force demo scene has a Tl Panel");
+            while (entities.GetComponentData<LocalTransform>(entity).Position.x < 1.5f && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            var pushed = entities.GetComponentData<LocalTransform>(entity).Position.x;
+            Assert.GreaterOrEqual(pushed, 1.5f, "the push moves the cube forward first");
+            panel.WorldForward = false;
+            var until = Time.realtimeSinceStartup + 0.6f;
+            while (Time.realtimeSinceStartup < until)
+                yield return null;
+            var rewound = entities.GetComponentData<LocalTransform>(entity).Position.x;
+            Assert.Less(rewound, pushed - 0.2f, "the world rewind walks the cube back: " + pushed + " -> " + rewound);
+            panel.WorldForward = true;
+            Assert.IsTrue(panel.Pause());
+            yield return null;
+            yield return null;
+            Assert.IsTrue(panel.ToggleReverse());
+            Assert.IsTrue(panel.Resume());
+            var before = entities.GetComponentData<LocalTransform>(entity).Position.x;
+            until = Time.realtimeSinceStartup + 0.5f;
+            while (Time.realtimeSinceStartup < until)
+                yield return null;
+            var after = entities.GetComponentData<LocalTransform>(entity).Position.x;
+            Assert.LessOrEqual(after, before, "Reverse on the timeline also walks the cube back: " + before + " -> " + after);
+        }
+
         static Type Game(string name)
         {
             var type = Type.GetType(name + ", Assembly-CSharp");
