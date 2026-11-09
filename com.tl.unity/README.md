@@ -45,6 +45,7 @@ fields the designer fills by drag and drop.
 - [UNITY-TIMELINE.md](https://github.com/IAFahim/tl.unity/blob/main/docs/UNITY-TIMELINE.md)
 - [USING-PLAIN-CSHARP.md](https://github.com/IAFahim/tl.unity/blob/main/docs/USING-PLAIN-CSHARP.md)
 - [KINDS.md](https://github.com/IAFahim/tl.unity/blob/main/docs/KINDS.md)
+- [Glossary](Documentation~/GLOSSARY.md): the words Tl uses, in plain language
 
 ## Samples
 
