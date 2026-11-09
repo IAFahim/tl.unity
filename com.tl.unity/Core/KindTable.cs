@@ -10,6 +10,7 @@ public enum KindEntryFlags : byte
     Synthetic = 4,
     Interrupted = 8,
     Ready = 16,
+    Sample = 32,
 }
 
 [StructLayout(LayoutKind.Sequential, Size = 8)]
@@ -148,6 +149,64 @@ public unsafe struct KindTable
             var entry = (KindEntry*)(data + (nuint)i * (nuint)Stride);
             if (entry->Slot == slot && entry->Timeline == timeline) continue;
             if (kept != i) Buffer.MemoryCopy(entry, data + (nuint)kept * (nuint)Stride, Stride, Stride);
+            kept++;
+        }
+        Length[row] = (ushort)kept;
+        if (kept == 0) Active[row >> 6] &= ~(1ul << (row & 63));
+    }
+
+    public void Sample(int row, byte slot, byte sample)
+    {
+        var length = Length[row];
+        var add = 0;
+        for (var i = 0; i < length; i++)
+        {
+            var e = At(row, i);
+            if ((e->Flags & KindEntryFlags.Sample) == 0 && e->Slot == slot && e->Timeline != 0) add++;
+        }
+        if (add == 0) return;
+        for (var i = 0; i < add; i++) Append(row);
+        var data = Data(row);
+        Buffer.MemoryCopy(data, data + (nuint)add * (nuint)Stride, (long)length * Stride, (long)length * Stride);
+        var w = 0;
+        var pulses = 0;
+        for (var i = 0; i < length; i++)
+        {
+            var e = (KindEntry*)(data + (nuint)(add + i) * (nuint)Stride);
+            if ((e->Flags & KindEntryFlags.Sample) != 0 || e->Slot != slot || e->Timeline == 0) continue;
+            var copy = (KindEntry*)(data + (nuint)w++ * (nuint)Stride);
+            Buffer.MemoryCopy(e, copy, Stride, Stride);
+            copy->Slot = sample;
+            copy->Flags = (copy->Flags | KindEntryFlags.Pulse | KindEntryFlags.Sample) & ~KindEntryFlags.Ready;
+            if ((e->Flags & KindEntryFlags.Pulse) != 0)
+            {
+                e->Flags = (KindEntryFlags)0xff;
+                pulses++;
+            }
+        }
+        if (pulses == 0) return;
+        var total = length + add;
+        var kept = add;
+        for (var i = add; i < total; i++)
+        {
+            var e = (KindEntry*)(data + (nuint)i * (nuint)Stride);
+            if (e->Flags == (KindEntryFlags)0xff) continue;
+            if (kept != i) Buffer.MemoryCopy(e, data + (nuint)kept * (nuint)Stride, Stride, Stride);
+            kept++;
+        }
+        Length[row] = (ushort)kept;
+    }
+
+    public void Unsample(int row)
+    {
+        var length = Length[row];
+        var data = Data(row);
+        var kept = 0;
+        for (var i = 0; i < length; i++)
+        {
+            var e = (KindEntry*)(data + (nuint)i * (nuint)Stride);
+            if ((e->Flags & KindEntryFlags.Sample) != 0) continue;
+            if (kept != i) Buffer.MemoryCopy(e, data + (nuint)kept * (nuint)Stride, Stride, Stride);
             kept++;
         }
         Length[row] = (ushort)kept;

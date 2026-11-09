@@ -39,6 +39,7 @@ public struct Trigger : IComponentData
     public byte Fire;
     public byte Hold;
     public byte Release;
+    public byte Speed;
 }
 
 public struct ThenPlayBaking : ITlBaker<ThenPlayClip>
@@ -81,6 +82,11 @@ public partial struct StartWhenTriggered : IJobEntity
         {
             requests.Resume(then.Timeline);
             trigger.Release = 0;
+        }
+        if (trigger.Speed != 0)
+        {
+            requests.SetSpeed(then.Timeline, trigger.Speed);
+            trigger.Speed = 0;
         }
     }
 }

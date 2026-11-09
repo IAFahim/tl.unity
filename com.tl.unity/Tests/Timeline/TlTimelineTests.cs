@@ -560,6 +560,42 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
+        public void AJobChangesTheSpeedOfATimelineFromItsTlTimelineField()
+        {
+            var push = Timeline("Push");
+            Clip(ForceTrack(push), 0, 2, 4f);
+            var dash = Timeline("Dash");
+            Clip(ForceTrack(dash), 0, 40, 8f);
+            ThenPlayClipOn(push, dash, null);
+            using var baked = new Baked(Director("Cube", push).gameObject);
+            var entities = baked.World.EntityManager;
+            var entity = baked.Single<TlTimelineSet>();
+            var live = new LiveWorld(baked.World, true);
+            ControlProbe.RanManaged = false;
+            live.Step(1);
+            var dashId = Library(baked.World).IdOf(TlTimelinePacker.AssetOf(dash));
+            entities.SetComponentData(entity, new Trigger { Fire = 1 });
+            live.Step(3);
+            Assert.IsTrue(Playing(entities, entity, dashId, out var before), "the job started Dash");
+            entities.SetComponentData(entity, new Trigger { Speed = 48 });
+            live.Step(1);
+            Playing(entities, entity, dashId, out var fast);
+            Assert.AreEqual(48, fast.Rate, "SetSpeed stores sixteenths");
+            Assert.AreEqual(before.Tick + 3, fast.Tick, "3x crosses three ticks per step");
+            if (BurstCompiler.IsEnabled)
+                Assert.IsFalse(ControlProbe.RanManaged, "the job ran as Burst code");
+            entities.SetComponentData(entity, new Trigger { Speed = 8 });
+            live.Step(2);
+            Playing(entities, entity, dashId, out var slow);
+            Assert.AreEqual(fast.Tick + 1, slow.Tick, "half speed crosses one tick in two steps");
+            entities.SetComponentData(entity, new Trigger { Speed = 16 });
+            live.Step(1);
+            Playing(entities, entity, dashId, out var normal);
+            Assert.AreEqual(0, normal.Rate, "1x stores zero");
+            Assert.AreEqual(slow.Tick + 1, normal.Tick);
+        }
+
+        [Test]
         public void StartingATimelineTheObjectCannotPlayWarnsAndStartsNothing()
         {
             var push = Timeline("Push");

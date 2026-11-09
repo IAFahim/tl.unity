@@ -132,10 +132,16 @@ public sealed unsafe class PlaybackTable : IDisposable
         var slots = (Playback*)NativeMemory.AlignedAlloc(bytes, 8u);
         NativeMemory.Clear(slots, bytes);
         for (var e = 0; e < _entities; e++)
-            new ReadOnlySpan<Playback>(_slots + (nuint)e * (nuint)_slotsPerEntity, _counts[e]).CopyTo(new Span<Playback>(slots + (nuint)e * (nuint)stride, stride));
+            new ReadOnlySpan<Playback>(_slots + (nuint)e * (nuint)_slotsPerEntity, _slotsPerEntity).CopyTo(new Span<Playback>(slots + (nuint)e * (nuint)stride, stride));
         NativeMemory.AlignedFree(_slots);
         _slots = slots;
         _slotsPerEntity = stride;
+    }
+
+    internal Playback* Reserve(int entity, int length)
+    {
+        while (_slotsPerEntity < length && _slotsPerEntity < MaxSlots) Grow();
+        return SlotsOf(entity);
     }
 
     internal void CloseSlot(int entity, int slot)

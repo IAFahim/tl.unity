@@ -88,6 +88,16 @@ namespace Tl.Unity
         {
             return new TimelineRequest { Slot = slot, Timeline = channel, At = reverse ? (ushort)1 : (ushort)0, Op = global::Tl.RequestOp.ReverseChannel };
         }
+
+        public static TimelineRequest SetSpeed(int slot, ushort timeline, ushort sixteenths)
+        {
+            return new TimelineRequest { Slot = slot, Timeline = timeline, At = sixteenths, Op = global::Tl.RequestOp.Speed };
+        }
+
+        public static TimelineRequest SetChannelSpeed(int slot, byte channel, ushort sixteenths)
+        {
+            return new TimelineRequest { Slot = slot, Timeline = channel, At = sixteenths, Op = global::Tl.RequestOp.SpeedChannel };
+        }
     }
 
     [InternalBufferCapacity(8)]

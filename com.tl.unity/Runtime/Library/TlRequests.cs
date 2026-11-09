@@ -64,5 +64,15 @@ namespace Tl
         {
             requests.Add(TimelineRequest.ReverseChannel(-1, channel, reverse));
         }
+
+        public static void SetSpeed(this DynamicBuffer<TimelineRequest> requests, in TlTimeline timeline, ushort sixteenths)
+        {
+            requests.Add(new TimelineRequest { Slot = -1, At = sixteenths, Op = RequestOp.Speed, Asset = timeline.Asset.ToHash128() });
+        }
+
+        public static void SetChannelSpeed(this DynamicBuffer<TimelineRequest> requests, byte channel, ushort sixteenths)
+        {
+            requests.Add(TimelineRequest.SetChannelSpeed(-1, channel, sixteenths));
+        }
     }
 }

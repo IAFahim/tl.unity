@@ -350,6 +350,32 @@ public sealed unsafe class KindStore : IDisposable
                 Tables[kind]->Purge(RowOf(entity, kind), slot, timeline);
             }
         }
+
+        public PlaybackTable Players;
+
+        public Playback* Reserve(int entity, int used, int length) => Players.Reserve(entity, length);
+
+        public void Sample(int entity, byte slot, byte sample)
+        {
+            var kinds = Mask[entity];
+            while (kinds != 0)
+            {
+                var kind = Tz(kinds);
+                kinds &= kinds - 1;
+                Tables[kind]->Sample(RowOf(entity, kind), slot, sample);
+            }
+        }
+
+        public void Unsample(int entity)
+        {
+            var kinds = Mask[entity];
+            while (kinds != 0)
+            {
+                var kind = Tz(kinds);
+                kinds &= kinds - 1;
+                Tables[kind]->Unsample(RowOf(entity, kind));
+            }
+        }
     }
 
     internal void Sync()
@@ -558,7 +584,7 @@ public sealed unsafe class KindStore : IDisposable
         _pairs = (uint*)Zeroed((nuint)Math.Max(1, pairs.Count) * 4);
         for (var n = 0; n < pairs.Count; n++) _pairs[n] = pairs[n];
         _t = new KindTables { Timelines = _tls, TimelineCount = _timelineCount, Sec = _sec, KindCount = _kindCount, Closure = _closure, Pairs = _pairs, PairStart = _pairStart };
-        _kindRows = new Rows { Tables = _tables, Mask = _mask, Offset = _offset, Row = _rows };
+        _kindRows = new Rows { Tables = _tables, Mask = _mask, Offset = _offset, Row = _rows, Players = _players };
     }
 
     void BuildSteps()

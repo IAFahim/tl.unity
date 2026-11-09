@@ -39,6 +39,7 @@ namespace Tl.Unity
             var playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
             var buffers = stackalloc UnsafeUntypedBufferAccessor[Index.KindCount];
             var ctx = new KindCursor { Index = Index, Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers, Counters = Counters };
+            ctx.Playbacks = playbacks;
             ctx.Bind(in chunk);
             if (requested)
             {
@@ -141,6 +142,7 @@ namespace Tl.Unity
         public int* Counters;
         public ulong Reach;
         public ulong Taken;
+        public BufferAccessor<Playback> Playbacks;
 
         public void Bind(in ArchetypeChunk chunk)
         {
@@ -202,6 +204,93 @@ namespace Tl.Unity
                 {
                     var e = (global::Tl.KindEntry*)(data + (long)i * stride);
                     if (e->Slot == slot && e->Timeline == timeline) continue;
+                    if (kept != i) UnsafeUtility.MemCpy(data + (long)kept * stride, e, stride);
+                    kept++;
+                }
+                if (kept == length) continue;
+                buffer->ResizeUninitialized(row, kept);
+                if (kept == 0) Chunk.SetComponentEnabled(ref *KindHandleSet.Active(Handles, kind), row, false);
+            }
+        }
+
+        public global::Tl.Playback* Reserve(int row, int used, int length)
+        {
+            var buffer = Playbacks[row];
+            if (buffer.Capacity < length)
+            {
+                var live = buffer.Length;
+                buffer.ResizeUninitialized(used);
+                buffer.EnsureCapacity(length);
+                buffer.ResizeUninitialized(live);
+            }
+            return (global::Tl.Playback*)buffer.GetUnsafePtr();
+        }
+
+        public void Sample(int row, byte slot, byte sample)
+        {
+            for (var kind = 0; kind < Index.KindCount; kind++)
+            {
+                if ((Reach & (1ul << kind)) == 0) continue;
+                var stride = Index.EntryStride[kind];
+                var buffer = Buffer(kind);
+                var length = buffer->GetBufferLength(row);
+                if (length == 0) continue;
+                var data = (byte*)buffer->GetUnsafePtr(row);
+                var add = 0;
+                for (var i = 0; i < length; i++)
+                {
+                    var e = (global::Tl.KindEntry*)(data + (long)i * stride);
+                    if ((e->Flags & global::Tl.KindEntryFlags.Sample) == 0 && e->Slot == slot && e->Timeline != 0) add++;
+                }
+                if (add == 0) continue;
+                buffer->ResizeUninitialized(row, length + add);
+                data = (byte*)buffer->GetUnsafePtr(row);
+                UnsafeUtility.MemMove(data + (long)add * stride, data, (long)length * stride);
+                var w = 0;
+                var pulses = 0;
+                for (var i = 0; i < length; i++)
+                {
+                    var e = (global::Tl.KindEntry*)(data + (long)(add + i) * stride);
+                    if ((e->Flags & global::Tl.KindEntryFlags.Sample) != 0 || e->Slot != slot || e->Timeline == 0) continue;
+                    var copy = (global::Tl.KindEntry*)(data + (long)w++ * stride);
+                    UnsafeUtility.MemCpy(copy, e, stride);
+                    copy->Slot = sample;
+                    copy->Flags = (copy->Flags | global::Tl.KindEntryFlags.Pulse | global::Tl.KindEntryFlags.Sample) & ~global::Tl.KindEntryFlags.Ready;
+                    if ((e->Flags & global::Tl.KindEntryFlags.Pulse) != 0)
+                    {
+                        e->Flags = (global::Tl.KindEntryFlags)0xff;
+                        pulses++;
+                    }
+                }
+                if (pulses == 0) continue;
+                var total = length + add;
+                var kept = add;
+                for (var i = add; i < total; i++)
+                {
+                    var e = (global::Tl.KindEntry*)(data + (long)i * stride);
+                    if (e->Flags == (global::Tl.KindEntryFlags)0xff) continue;
+                    if (kept != i) UnsafeUtility.MemCpy(data + (long)kept * stride, e, stride);
+                    kept++;
+                }
+                buffer->ResizeUninitialized(row, kept);
+            }
+        }
+
+        public void Unsample(int row)
+        {
+            for (var kind = 0; kind < Index.KindCount; kind++)
+            {
+                if ((Reach & (1ul << kind)) == 0) continue;
+                var stride = Index.EntryStride[kind];
+                var buffer = Buffer(kind);
+                var length = buffer->GetBufferLength(row);
+                if (length == 0) continue;
+                var data = (byte*)buffer->GetUnsafePtr(row);
+                var kept = 0;
+                for (var i = 0; i < length; i++)
+                {
+                    var e = (global::Tl.KindEntry*)(data + (long)i * stride);
+                    if ((e->Flags & global::Tl.KindEntryFlags.Sample) != 0) continue;
                     if (kept != i) UnsafeUtility.MemCpy(data + (long)kept * stride, e, stride);
                     kept++;
                 }

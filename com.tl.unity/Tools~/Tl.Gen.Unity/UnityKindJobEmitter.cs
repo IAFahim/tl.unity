@@ -376,97 +376,122 @@ namespace Tl.Gen.Unity
             W(writer, "var __buf = __acc[__row];");
             W(writer, "var __len = __buf.Length;");
             W(writer, "byte* __data = (byte*)__buf.GetUnsafePtr();");
-            if (!kind.Each)
-            {
-                W(writer, value + " __total = default;");
-                W(writer, "var __has = false;");
-            }
             W(writer, "var __pulses = 0;");
-            W(writer, "for (var __j = 0; __j < __len; __j++)");
-            W(writer, "{");
-            W(writer, "var __en = (global::Tl.KindEntry*)(__data + (long)__j * __stride);");
-            W(writer, value + " __v = default;");
-            W(writer, "if (__en->Timeline == 0)");
-            W(writer, "{");
-            W(writer, "__v = *(" + value + "*)((byte*)__en + " + valueAt + ");");
-            W(writer, "__pulses++;");
-            W(writer, "}");
-            W(writer, "else");
-            W(writer, "{");
-            W(writer, "var __isPulse = (__en->Flags & global::Tl.KindEntryFlags.Pulse) != 0;");
-            W(writer, "if (__isPulse) __pulses++;");
-            W(writer, "if (__en->Owner != 0)");
-            W(writer, "{");
-            W(writer, "if ((__en->Flags & global::Tl.KindEntryFlags.Ready) == 0) continue;");
-            W(writer, "__v = *(" + value + "*)((byte*)__en + " + valueAt + ");");
-            W(writer, "__en->Flags &= ~global::Tl.KindEntryFlags.Ready;");
-            W(writer, "}");
-            W(writer, "else");
-            W(writer, "{");
-            W(writer, "var __pb = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr() + __en->Slot;");
-            W(writer, "if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;");
-            W(writer, "var __tl = Index.Timelines + (__en->Timeline - 1);");
-            W(writer, "ushort __tick = __pb->Tick;");
-            W(writer, "var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;");
-            W(writer, "var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)");
-            W(writer, "| ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)");
-            W(writer, "| ((__en->Flags & global::Tl.KindEntryFlags.Interrupted) != 0 ? global::Tl.FrameFlags.Interrupted : global::Tl.FrameFlags.None);");
-            W(writer, "if (__tick == 0) __kflags |= global::Tl.FrameFlags.TimelineStart;");
-            W(writer, "if (__tick == (ushort)(__tl->Duration - 1)) __kflags |= global::Tl.FrameFlags.TimelineEnd;");
-            W(writer, "var __ok = false;");
-            if (feeders.Count > 0)
+            void Body(bool sampled)
             {
-                W(writer, "switch (__en->Feeder)");
-                W(writer, "{");
-            }
-            for (var i = 0; i < feeders.Count; i++)
-            {
-                var (c, feeder) = feeders[i];
-                var consumer = assignment.Consumers[c];
-                W(writer, "case " + i + ":");
-                W(writer, "{");
-                if (feeder.Trigger == FeederTrigger.Marker)
+                if (!kind.Each)
                 {
-                    W(writer, "byte* __mptr" + c + " = Index.MarkerOf(__en->Timeline, __en->Step);");
-                    W(writer, "if (__mptr" + c + " == null) break;");
-                    W(writer, consumer.MarkerTypeName + " __m" + c + " = *(" + consumer.MarkerTypeName + "*)__mptr" + c + ";");
-                    W(writer, "var __mf" + c + " = new global::Tl.MarkerFrame<" + consumer.MarkerTypeName + ">(in __m" + c + ", __tick, 0, __kflags);");
-                    W(writer, "__v = " + consumer.ConsumerTypeName + "." + feeder.MethodName + "(" + CallArgs(shape, feeder.Method.Params, "__mf" + c, "__row", "") + ");");
+                    W(writer, value + " __total = default;");
+                    W(writer, "var __has = false;");
                 }
+                W(writer, "for (var __j = 0; __j < __len; __j++)");
+                W(writer, "{");
+                W(writer, "var __en = (global::Tl.KindEntry*)(__data + (long)__j * __stride);");
+                if (sampled)
+                    W(writer, "if (!global::Tl.KindRules.Due(__en, __sj, __pbase + __en->Slot)) continue;");
+                W(writer, value + " __v = default;");
+                W(writer, "if (__en->Timeline == 0)");
+                W(writer, "{");
+                W(writer, "__v = *(" + value + "*)((byte*)__en + " + valueAt + ");");
+                W(writer, "__pulses++;");
+                W(writer, "}");
+                W(writer, "else");
+                W(writer, "{");
+                W(writer, "var __isPulse = (__en->Flags & global::Tl.KindEntryFlags.Pulse) != 0;");
+                W(writer, "if (__isPulse) __pulses++;");
+                W(writer, "if (__en->Owner != 0)");
+                W(writer, "{");
+                W(writer, "if ((__en->Flags & global::Tl.KindEntryFlags.Ready) == 0) continue;");
+                W(writer, "__v = *(" + value + "*)((byte*)__en + " + valueAt + ");");
+                W(writer, "__en->Flags &= ~global::Tl.KindEntryFlags.Ready;");
+                W(writer, "}");
+                W(writer, "else");
+                W(writer, "{");
+                W(writer, "var __pb = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr() + __en->Slot;");
+                W(writer, "if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;");
+                W(writer, "var __tl = Index.Timelines + (__en->Timeline - 1);");
+                W(writer, "ushort __tick = __pb->Tick;");
+                W(writer, "var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;");
+                W(writer, "var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)");
+                W(writer, "| ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)");
+                W(writer, "| ((__en->Flags & global::Tl.KindEntryFlags.Interrupted) != 0 ? global::Tl.FrameFlags.Interrupted : global::Tl.FrameFlags.None);");
+                W(writer, "if (__tick == 0) __kflags |= global::Tl.FrameFlags.TimelineStart;");
+                W(writer, "if (__tick == (ushort)(__tl->Duration - 1)) __kflags |= global::Tl.FrameFlags.TimelineEnd;");
+                W(writer, "var __ok = false;");
+                if (feeders.Count > 0)
+                {
+                    W(writer, "switch (__en->Feeder)");
+                    W(writer, "{");
+                }
+                for (var i = 0; i < feeders.Count; i++)
+                {
+                    var (c, feeder) = feeders[i];
+                    var consumer = assignment.Consumers[c];
+                    W(writer, "case " + i + ":");
+                    W(writer, "{");
+                    if (feeder.Trigger == FeederTrigger.Marker)
+                    {
+                        W(writer, "byte* __mptr" + c + " = Index.MarkerOf(__en->Timeline, __en->Step);");
+                        W(writer, "if (__mptr" + c + " == null) break;");
+                        W(writer, consumer.MarkerTypeName + " __m" + c + " = *(" + consumer.MarkerTypeName + "*)__mptr" + c + ";");
+                        W(writer, "var __mf" + c + " = new global::Tl.MarkerFrame<" + consumer.MarkerTypeName + ">(in __m" + c + ", __tick, 0, __kflags);");
+                        W(writer, "__v = " + consumer.ConsumerTypeName + "." + feeder.MethodName + "(" + CallArgs(shape, feeder.Method.Params, "__mf" + c, "__row", "") + ");");
+                    }
+                    else
+                    {
+                        W(writer, "var __def = Index.StepOf(__en->Timeline, __en->Step, __tick);");
+                        W(writer, "if (__def == null || __tick < __def->WindowStart || __tick >= __def->WindowEnd) break;");
+                        EmitMaterialize(writer, consumer, assignmentIndex, c);
+                        if (FoldOf(consumer) != null)
+                            EmitFeeds(writer, consumer, c);
+                        var frameVar = "__f" + c;
+                        if (tlFrames.Contains(NewStyle.FeederKey(consumer.ConsumerTypeName, feeder.MethodName)))
+                        {
+                            frameVar = "__tf" + c;
+                            W(writer, "var " + frameVar + " = new global::Tl.TlFrame<" + consumer.ClipTypeName + ">(in __f" + c + ");");
+                        }
+                        W(writer, "__v = " + consumer.ConsumerTypeName + "." + feeder.MethodName + "(" + CallArgs(shape, feeder.Method.Params, frameVar, "__row", "__fd" + c + "_") + ");");
+                    }
+                    W(writer, "__ok = true;");
+                    W(writer, "break;");
+                    W(writer, "}");
+                }
+                if (feeders.Count > 0)
+                    W(writer, "}");
+                W(writer, "if (!__ok) continue;");
+                W(writer, "}");
+                W(writer, "}");
+                if (kind.Each)
+                    W(writer, kind.TypeName + ".Apply(in __v" + tail + ");");
                 else
                 {
-                    W(writer, "var __def = Index.StepOf(__en->Timeline, __en->Step, __tick);");
-                    W(writer, "if (__def == null || __tick < __def->WindowStart || __tick >= __def->WindowEnd) break;");
-                    EmitMaterialize(writer, consumer, assignmentIndex, c);
-                    if (FoldOf(consumer) != null)
-                        EmitFeeds(writer, consumer, c);
-                    var frameVar = "__f" + c;
-                    if (tlFrames.Contains(NewStyle.FeederKey(consumer.ConsumerTypeName, feeder.MethodName)))
-                    {
-                        frameVar = "__tf" + c;
-                        W(writer, "var " + frameVar + " = new global::Tl.TlFrame<" + consumer.ClipTypeName + ">(in __f" + c + ");");
-                    }
-                    W(writer, "__v = " + consumer.ConsumerTypeName + "." + feeder.MethodName + "(" + CallArgs(shape, feeder.Method.Params, frameVar, "__row", "__fd" + c + "_") + ");");
+                    W(writer, "if (__has) " + kind.TypeName + ".Combine(ref __total, in __v);");
+                    W(writer, "else { __total = __v; __has = true; }");
                 }
-                W(writer, "__ok = true;");
-                W(writer, "break;");
                 W(writer, "}");
+                if (!kind.Each)
+                    W(writer, "if (__has) " + kind.TypeName + ".Apply(in __total" + tail + ");");
             }
-            if (feeders.Count > 0)
-                W(writer, "}");
-            W(writer, "if (!__ok) continue;");
+            W(writer, "var __sampled = global::Tl.KindRules.IsSampled(__data, __len);");
+            W(writer, "if (!__sampled)");
+            W(writer, "{");
+            Body(false);
+            W(writer, "}");
+            W(writer, "else");
+            W(writer, "{");
+            W(writer, "var __pbase = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr();");
+            W(writer, "var __sk = global::Tl.KindRules.SampleDepth(__data, __len, __stride, __pbase);");
+            W(writer, "for (var __sj = 0; __sj < __sk; __sj++)");
+            W(writer, "{");
+            Body(true);
             W(writer, "}");
             W(writer, "}");
-            if (kind.Each)
-                W(writer, kind.TypeName + ".Apply(in __v" + tail + ");");
-            else
-            {
-                W(writer, "if (__has) " + kind.TypeName + ".Combine(ref __total, in __v);");
-                W(writer, "else { __total = __v; __has = true; }");
-            }
+            W(writer, "if (__sampled)");
+            W(writer, "{");
+            W(writer, "__pulses = 0;");
+            W(writer, "for (var __j = 0; __j < __len; __j++)");
+            W(writer, "if ((((global::Tl.KindEntry*)(__data + (long)__j * __stride))->Flags & global::Tl.KindEntryFlags.Pulse) != 0) __pulses++;");
             W(writer, "}");
-            if (!kind.Each)
-                W(writer, "if (__has) " + kind.TypeName + ".Apply(in __total" + tail + ");");
             W(writer, "if (__pulses == __len)");
             W(writer, "{");
             W(writer, "__buf.Clear();");
