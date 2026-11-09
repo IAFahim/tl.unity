@@ -45,3 +45,7 @@ curl -sSL https://raw.githubusercontent.com/IAFahim/tl/main/install/unity.sh | b
   their own receipts.
 
 Agents: read [AGENTS.md](AGENTS.md) first.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).

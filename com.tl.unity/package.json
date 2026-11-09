@@ -4,6 +4,7 @@
   "displayName": "Tl Unity Playback",
   "description": "Tl timelines for Unity ECS with Burst. Designers build timelines in Unity's Timeline window with Tl tracks; a Playable Director in a SubScene bakes them, and Burst ISystems play them. Coders write a clip struct, a kind and a track; no extra files, assets or steps.",
   "unity": "7000.0",
+  "license": "MIT",
   "author": {
     "name": "IAFahim",
     "url": "https://github.com/IAFahim"
