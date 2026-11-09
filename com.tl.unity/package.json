@@ -17,6 +17,11 @@
   },
   "samples": [
     {
+      "displayName": "Hello Tl",
+      "description": "The smallest complete program: a clip, a track, a kind and a column that teleport a player along X on a timeline, plus the system that moves it. Menu Tl Hello > Build Scene, then Play. Start here.",
+      "path": "Samples~/HelloTl"
+    },
+    {
       "displayName": "Force demo",
       "description": "The Force track from five small files: a cube on a grid floor is pushed 4.03 m along X, pauses, and a Return timeline (Play next) pushes it back, forever, with a follow camera and a readout. Tl > Samples > Build Control Demo adds a cube whose Burst job starts a Dash timeline from a clip field. Includes the scene builders and Play and Edit mode tests.",
       "path": "Samples~/ForceDemo"
