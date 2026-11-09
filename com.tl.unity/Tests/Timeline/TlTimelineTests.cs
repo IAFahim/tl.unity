@@ -596,6 +596,87 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
+        public void ThePanelButtonsPlayPauseSeekReverseAndChangeSpeed()
+        {
+            var push = Timeline("Push");
+            Clip(ForceTrack(push), 0, 20, 4f);
+            using var baked = new Baked(Director("Cube", push).gameObject);
+            var live = new LiveWorld(baked.World, true);
+            var previous = World.DefaultGameObjectInjectionWorld;
+            World.DefaultGameObjectInjectionWorld = baked.World;
+            var host = new GameObject("Panel");
+            try
+            {
+                var panel = host.AddComponent<TlPanel>();
+                live.Step(2);
+                Assert.AreEqual(1, panel.TargetCount);
+                Assert.AreEqual(1, panel.TimelineCount);
+                Assert.AreEqual("Push", panel.TimelineName(0));
+                Assert.IsTrue(panel.State().Live, "the director starts Push");
+
+                Assert.IsTrue(panel.Pause());
+                live.Step(1);
+                var parked = panel.State();
+                Assert.IsTrue(parked.Paused);
+                live.Step(5);
+                Assert.AreEqual(parked.Tick, panel.State().Tick, "a paused timeline does not move");
+                Assert.IsTrue(panel.Resume());
+                live.Step(3);
+                Assert.AreEqual(parked.Tick + 3, panel.State().Tick);
+
+                Assert.IsTrue(panel.SeekTo(100));
+                live.Step(1);
+                Assert.AreEqual(100, panel.State().Tick, "seek lands on the tick");
+                Assert.IsTrue(panel.SeekBy(1f));
+                live.Step(1);
+                Assert.AreEqual(160, panel.State().Tick, "+1 s is 60 ticks");
+
+                Assert.IsTrue(panel.SetSpeed(2f));
+                live.Step(1);
+                var fast = panel.State();
+                Assert.AreEqual(32, fast.Sixteenths);
+                live.Step(1);
+                Assert.AreEqual(fast.Tick + 2, panel.State().Tick, "2x crosses two ticks per step");
+                Assert.IsTrue(panel.SetSpeed(1f));
+                live.Step(1);
+                Assert.AreEqual(16, panel.State().Sixteenths);
+
+                var before = panel.State().Tick;
+                Assert.IsTrue(panel.ToggleReverse());
+                live.Step(3);
+                var back = panel.State();
+                Assert.IsTrue(back.Reverse);
+                Assert.AreEqual(before - 3, back.Tick, "reverse walks backward");
+                Assert.IsTrue(panel.ToggleReverse());
+                live.Step(2);
+                Assert.IsFalse(panel.State().Reverse);
+
+                Assert.IsTrue(panel.WorldForward);
+                panel.WorldForward = false;
+                Assert.IsFalse(panel.WorldForward);
+                var rewound = panel.State().Tick;
+                live.Step(2);
+                Assert.AreEqual(rewound - 2, panel.State().Tick, "the world rewinds every timeline");
+                panel.WorldForward = true;
+
+                Assert.IsTrue(panel.Stop());
+                live.Step(4);
+                Assert.IsFalse(panel.State().Live, "stopped");
+                Assert.IsTrue(panel.Play());
+                live.Step(2);
+                Assert.IsTrue(panel.State().Live, "play starts it again");
+                Assert.IsTrue(panel.StopAll());
+                live.Step(4);
+                Assert.IsFalse(panel.State().Live, "stop all");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(host);
+                World.DefaultGameObjectInjectionWorld = previous;
+            }
+        }
+
+        [Test]
         public void StartingATimelineTheObjectCannotPlayWarnsAndStartsNothing()
         {
             var push = Timeline("Push");

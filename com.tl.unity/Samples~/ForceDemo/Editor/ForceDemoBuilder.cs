@@ -91,6 +91,7 @@ public static class ForceDemoBuilder
         camera.transform.SetPositionAndRotation(rigPosition, rigRotation);
         camera.gameObject.AddComponent<CameraFromEntity>();
         new GameObject("Overlay").AddComponent<ForceOverlay>();
+        new GameObject("Tl Panel").AddComponent<TlPanel>();
         var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
         ground.name = "Grid Floor";
         UnityEngine.Object.DestroyImmediate(ground.GetComponent<Collider>());

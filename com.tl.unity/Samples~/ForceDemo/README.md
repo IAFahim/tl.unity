@@ -12,7 +12,8 @@ x 4.03 m. After a 1 s pause the Return timeline pushes it back to 0, then Push s
    `Window > Sequencing > Timeline`. You see the **Push** timeline: one **Force** track, one 2 s clip, and a 1 s empty gap.
 3. Press Play. Click the clip and set **Strength** to 10 in the Inspector: the next push goes about 10 m. Set it back to 4.
 4. Stop Play. Drag the Timeline playhead: the cube moves in the Scene view without Play. Click away and it goes back.
-5. Read `Force/ForceKind.cs` (16 lines): the kind adds up every Force clip active on the cube into one value per tick, and the track turns
+5. Press Play and use the **Tl Panel** under the readout (top left, in the Game view): pick **Push** or **Return**, then **Pause**, **Resume**, **Restart**, **-1 s** and **+1 s** (seek), **Reverse**, **Stop**, and the **Speed** buttons (0.25x to 4x). **World: forward** turns into **World: rewinding** and the whole world runs backward exactly. The panel is the `Tl Panel` component (`GameObject > Tl > Panel` adds it to any scene); it sends the same requests your own code sends with `TlRequests`.
+6. Read `Force/ForceKind.cs` (16 lines): the kind adds up every Force clip active on the cube into one value per tick, and the track turns
    a clip into that value.
 
 ## What the designer builds (Timeline window, no code)
