@@ -4,6 +4,8 @@ Timelines that **run your game code**. A designer places clips on a Timeline. Yo
 
 This file is the whole course. Read it top to bottom, type the code, and by the end you will know how Tl works, how to design with it, what it cannot do, and where it will bite you. Every code block here was run unless it says otherwise.
 
+**Watch first:** the [release demo (3 min)](https://github.com/IAFahim/tl/blob/main/demos/film/release.mp4) shows every demo running in Unity, and [Hello Tl in six steps](https://github.com/IAFahim/tl/blob/main/demos/film/tutorial.mp4) follows chapter 1. Both videos are themselves Tl timelines ([how they are made](https://github.com/IAFahim/tl/tree/main/demos/film)).
+
 **Who it is for:** programmers. A designer needs none of this: they use Unity's Timeline window.
 
 ## Contents
