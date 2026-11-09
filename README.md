@@ -645,6 +645,8 @@ Other facts you need:
 
 The first four pieces of `Teleport.cs` use only `using Tl;`, so they are plain C#. The same file runs in a console app, a server, a unit test. Only your Unity system (the one that moves a transform) is Unity-only.
 
+**Runnable version in the tl repository:** [`demos/hello`](https://github.com/IAFahim/tl/tree/main/demos/hello) is Hello Tl as a console program (`dotnet run --project demos/hello -c Release`), with the same `Teleport.cs`.
+
 **The recipe** (this is how the Hello Tl example was run outside Unity):
 
 1. **Export from Unity:** menu **Tl > Export** writes one JSON per timeline plus `tl.project.json`. **Tl > Export Library** writes the baked `game.tlib` directly. **Tl > Export Scene JSON** also writes a scene (entities, starting columns, what plays).

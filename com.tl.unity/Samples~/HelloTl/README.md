@@ -13,3 +13,5 @@ Hello Tl: the player is at x = 5 (timeline tick 119)
 
 Files: `Teleport.cs` (all of Tl's part), `PlayerTeleportSystem.cs` (your game code), `PlayerReadout.cs` (on-screen text), `Editor/HelloTlBuilder.cs` (the menu).
 **Tl Hello > Export Library** writes `HelloTl.tlib` in the project folder, which a plain .NET program can run (main README, chapter 9).
+
+The plain .NET version of the same program (no Unity) is https://github.com/IAFahim/tl/tree/main/demos/hello .
