@@ -2,13 +2,13 @@ using Tl;
 
 namespace AutoKinds
 {
-    [TlColumn]
+    [TlState]
     public partial struct Glow
     {
         public float Value;
     }
 
-    [TlColumn]
+    [TlState]
     public partial struct Chime
     {
         public int Count;

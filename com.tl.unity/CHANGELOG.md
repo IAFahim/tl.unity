@@ -15,7 +15,6 @@ Newest first. Taken from the commit history since the zero-config plan started (
 - Force demo: there and back with Return, follow camera, grid floor, readout (`32d3db4`).
 
 ### Changed
-- `[TlState]` is now `[TlColumn]`.
 - The coder API (`TlClip`, `TlKind`, `ITlTrack`, `TlFrame`, `TlCurve`, `TlAssetId`, `TlTimeline`) comes from Tl.Core (`916a874`).
 - Kinds are identified by full type name (`384949d`); pair keys no longer contain the assembly name (`1a375ff`).
 - One set of rules shared with the .NET host: requests (`a309cfd`), tick advance (`2b430f5`), kind entries (`086d561`), live swap (`33c76a8`), and one library assembler (`ca76974`).

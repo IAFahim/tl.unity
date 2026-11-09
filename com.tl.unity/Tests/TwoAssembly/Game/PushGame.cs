@@ -3,7 +3,7 @@ using Tl;
 
 namespace PushGame
 {
-    [TlColumn]
+    [TlState]
     public partial struct Wind
     {
         public float Scale;
