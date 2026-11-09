@@ -23,7 +23,7 @@ namespace Tl.Unity
                 var removed = false;
                 for (var i = 0; i < length; i++)
                 {
-                    if (cells[i].Timeline == 0 || global::Tl.PlaybackRules.Advance(ref cells[i], View.Timelines, View.TimelineCount, true) != global::Tl.AdvanceResult.Removed)
+                    if (cells[i].Timeline == 0 || global::Tl.PlaybackRules.Step(ref cells[i], View.Timelines, View.TimelineCount, true) != global::Tl.AdvanceResult.Removed)
                         continue;
                     cells[i] = default;
                     removed = true;

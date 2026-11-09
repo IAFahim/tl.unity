@@ -46,7 +46,7 @@ public sealed partial class TimelineWorld
             for (var i = 0; i < slotsCount; i++)
             {
                 if (slots[i].Timeline == 0) continue;
-                var result = PlaybackRules.Advance(ref slots[i], timelines, count, forward);
+                var result = PlaybackRules.Step(ref slots[i], timelines, count, forward);
                 if (result == AdvanceResult.Removed) players.RemoveSlot(entity, i);
                 else if (result == AdvanceResult.Unknown) throw new ArgumentException($"Playback slot {i} of entity {entity} names no timeline in the loaded library.");
             }

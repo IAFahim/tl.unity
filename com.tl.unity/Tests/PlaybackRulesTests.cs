@@ -183,7 +183,8 @@ namespace Tl.Unity.Tests
             var buffer = _entities.GetBuffer<Playback>(_entity);
             var value = buffer[0];
             value.Flags = global::Tl.PlaybackFlags.None;
-            value.Reserved = 0xc37b;
+            value.Rate = 16;
+            value.Phase = 3;
             buffer[0] = value;
             var handle = _world.CreateSystem<TimelineAdvanceSystem>();
             ref var state = ref _world.Unmanaged.ResolveSystemStateRef(handle);
@@ -200,25 +201,55 @@ namespace Tl.Unity.Tests
             advance.Run(query);
             buffer = _entities.GetBuffer<Playback>(_entity);
             Assert.AreEqual(4, buffer[0].Tick);
-            Assert.AreEqual(0xc37b, buffer[0].Reserved);
+            Assert.AreEqual(16, buffer[0].Rate);
+            Assert.AreEqual(3, buffer[0].Phase);
             advance.Run(query);
             Assert.AreEqual(5, _entities.GetBuffer<Playback>(_entity)[0].Tick);
         }
 
+        [Test]
+        public void TheKindFreeAdvanceJobCrossesWholeTicksAtItsRate()
+        {
+            using var closed = Closed();
+            var slots = Slots(closed);
+            Assert.IsTrue(Start(ref slots, RunId, 2));
+            var buffer = _entities.GetBuffer<Playback>(_entity);
+            var value = buffer[0];
+            value.Flags = global::Tl.PlaybackFlags.None;
+            value.Rate = 24;
+            buffer[0] = value;
+            var handle = _world.CreateSystem<TimelineAdvanceSystem>();
+            ref var state = ref _world.Unmanaged.ResolveSystemStateRef(handle);
+            using var query = _entities.CreateEntityQuery(ComponentType.ReadWrite<Playback>());
+            var advance = new TimelineAdvanceJob { View = _view, PlaybackHandle = state.GetBufferTypeHandle<Playback>(false) };
+            var ticks = new int[4];
+            var phases = new int[4];
+            for (var i = 0; i < 4; i++)
+            {
+                advance.Run(query);
+                ticks[i] = _entities.GetBuffer<Playback>(_entity)[0].Tick;
+                phases[i] = _entities.GetBuffer<Playback>(_entity)[0].Phase;
+            }
+            CollectionAssert.AreEqual(new[] { 3, 5, 6, 8 }, ticks);
+            CollectionAssert.AreEqual(new[] { 8, 0, 8, 0 }, phases);
+        }
+
         [TestCase(RunId, 5)]
         [TestCase(SlideId, 7)]
-        public void RebindClampsOrWrapsAShorterTimelineAndKeepsReserved(int timeline, int expected)
+        public void RebindClampsOrWrapsAShorterTimelineAndKeepsRateAndPhase(int timeline, int expected)
         {
             var slot = new global::Tl.Playback
             {
                 Timeline = (ushort)timeline,
                 Tick = 25,
                 Flags = global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Reverse,
-                Reserved = 0xc37b,
+                Rate = 0x7b,
+                Phase = 0xc3,
             };
             Assert.IsTrue(global::Tl.PlaybackRules.Rebind(ref slot, _view.Timelines, _view.TimelineCount));
             Assert.AreEqual(expected, slot.Tick);
-            Assert.AreEqual(0xc37b, slot.Reserved);
+            Assert.AreEqual(0x7b, slot.Rate);
+            Assert.AreEqual(0xc3, slot.Phase);
             Assert.AreNotEqual(0, (int)(slot.Flags & global::Tl.PlaybackFlags.Paused));
             Assert.AreNotEqual(0, (int)(slot.Flags & global::Tl.PlaybackFlags.Reverse));
         }

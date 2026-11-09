@@ -9,7 +9,8 @@ namespace Tl.Unity
         public ushort Tick;
         public byte Channel;
         public global::Tl.PlaybackFlags Flags;
-        public ushort Reserved;
+        public byte Rate;
+        public byte Phase;
     }
 
     [InternalBufferCapacity(4)]

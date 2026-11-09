@@ -24,7 +24,8 @@ public struct Playback
     public ushort Tick;
     public byte Channel;
     public PlaybackFlags Flags;
-    public ushort Reserved;
+    public byte Rate;
+    public byte Phase;
 }
 
 public readonly struct EntityRef
@@ -227,6 +228,8 @@ public sealed unsafe class PlaybackTable : IDisposable
     public void ResumeChannel(int entity, byte channel) => RequestQueue.Add(_pending, entity, -1, channel, 0, RequestOp.ResumeChannel);
     public void SeekChannel(int entity, byte channel, ushort tick) => RequestQueue.Add(_pending, entity, -1, channel, tick, RequestOp.SeekChannel);
     public void ReverseChannel(int entity, byte channel, bool reverse) => RequestQueue.Add(_pending, entity, -1, channel, reverse ? (ushort)1 : (ushort)0, RequestOp.ReverseChannel);
+    public void SetSpeed(int entity, ushort timeline, ushort sixteenths) => RequestQueue.Add(_pending, entity, -1, timeline, sixteenths, RequestOp.Speed);
+    public void SetChannelSpeed(int entity, byte channel, ushort sixteenths) => RequestQueue.Add(_pending, entity, -1, channel, sixteenths, RequestOp.SpeedChannel);
 
     public void Dispose()
     {

@@ -1,5 +1,5 @@
 # Tl.Gen.Tlb (generated)
 
-Copied from [IAFahim/tl@e0f5632bb784](https://github.com/IAFahim/tl/tree/e0f5632bb784bcd93cff6672a5949f26982b2ab5/tools/Tl.Gen.Tlb) `tools/Tl.Gen.Tlb` by `eng/sync-tl-bake.sh`,
+Copied from [IAFahim/tl@99b7facb692a](https://github.com/IAFahim/tl/tree/99b7facb692aac8db2e61032c85696f843e8601f/tools/Tl.Gen.Tlb) `tools/Tl.Gen.Tlb` by `eng/sync-tl-bake.sh`,
 without the CLI-only files BakeCacheKey.cs TlbInspection.cs TlbReport.cs.
 Do not edit here: change tl, move the `external/tl-kinds` submodule, and run the script again.

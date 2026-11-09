@@ -16,6 +16,8 @@ public enum RequestOp : byte
     ResumeChannel = 9,
     SeekChannel = 10,
     ReverseChannel = 11,
+    Speed = 12,
+    SpeedChannel = 13,
 }
 
 public readonly struct RequestRecord
@@ -195,4 +197,6 @@ public readonly unsafe struct Requests
     public void ResumeChannel(byte channel) => RequestQueue.Add(_queue, _entity, _slot, channel, 0, RequestOp.ResumeChannel);
     public void SeekChannel(byte channel, ushort tick) => RequestQueue.Add(_queue, _entity, _slot, channel, tick, RequestOp.SeekChannel);
     public void ReverseChannel(byte channel, bool reverse) => RequestQueue.Add(_queue, _entity, _slot, channel, reverse ? (ushort)1 : (ushort)0, RequestOp.ReverseChannel);
+    public void SetSpeed(ushort timeline, ushort sixteenths) => RequestQueue.Add(_queue, _entity, _slot, timeline, sixteenths, RequestOp.Speed);
+    public void SetChannelSpeed(byte channel, ushort sixteenths) => RequestQueue.Add(_queue, _entity, _slot, channel, sixteenths, RequestOp.SpeedChannel);
 }

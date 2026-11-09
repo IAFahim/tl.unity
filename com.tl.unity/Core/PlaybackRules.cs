@@ -92,6 +92,12 @@ public static unsafe class PlaybackRules
             case RequestOp.ReverseChannel:
                 Reverse(ref slots, timelines, timelineCount, FindChannel(ref slots, (byte)timeline), at != 0);
                 return;
+            case RequestOp.Speed:
+                SetSpeed(ref slots, Find(ref slots, timeline), at);
+                return;
+            case RequestOp.SpeedChannel:
+                SetSpeed(ref slots, FindChannel(ref slots, (byte)timeline), at);
+                return;
             default:
                 StopAll(ref slots);
                 return;
@@ -193,6 +199,7 @@ public static unsafe class PlaybackRules
         }
         slots.Purge(index);
         slot.Tick = tick;
+        slot.Phase = 0;
         slot.Flags = (slot.Flags & (PlaybackFlags.Reverse | PlaybackFlags.Paused)) | PlaybackFlags.ReenterPending;
         return true;
     }
@@ -206,6 +213,43 @@ public static unsafe class PlaybackRules
             flags = (flags & ~PlaybackFlags.Ended) | PlaybackFlags.StartPending;
         slot.Flags = flags;
         return true;
+    }
+
+    public static bool SetSpeed<TSlots>(ref TSlots slots, int index, ushort sixteenths) where TSlots : struct, IPlaybackSlots
+    {
+        if (index < 0) return false;
+        ref var slot = ref slots[index];
+        slot.Rate = sixteenths == 16 ? (byte)0 : sixteenths > 255 ? (byte)255 : (byte)sixteenths;
+        if (slot.Rate == 0) slot.Phase = 0;
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int Crossings(in Playback slot) => slot.Rate == 0 ? 1 : (slot.Phase + slot.Rate) >> 4;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int Cross(ref Playback slot)
+    {
+        if (slot.Rate == 0) return 1;
+        var sum = slot.Phase + slot.Rate;
+        slot.Phase = (byte)(sum & 15);
+        return sum >> 4;
+    }
+
+    public static bool Moves(PlaybackFlags flags, bool forward)
+        => (flags & (PlaybackFlags.Paused | PlaybackFlags.Stopping)) == 0 && ((flags & PlaybackFlags.Ended) == 0 || Resumes(flags, forward));
+
+    public static AdvanceResult Step(ref Playback slot, LibraryTimeline* timelines, int timelineCount, bool forward)
+    {
+        if (slot.Rate == 0) return Advance(ref slot, timelines, timelineCount, forward);
+        var crossings = Moves(slot.Flags, forward) ? Cross(ref slot) : 1;
+        var result = AdvanceResult.Kept;
+        for (var j = 0; j < crossings; j++)
+        {
+            result = Advance(ref slot, timelines, timelineCount, forward);
+            if (result != AdvanceResult.Kept || (slot.Flags & (PlaybackFlags.Ended | PlaybackFlags.Paused)) != 0) break;
+        }
+        return result;
     }
 
     public static bool PauseAt<TSlots>(ref TSlots slots, int index, bool pause) where TSlots : struct, IPlaybackSlots
