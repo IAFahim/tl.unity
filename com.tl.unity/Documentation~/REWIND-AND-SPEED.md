@@ -30,7 +30,7 @@ public static float3 Evaluate(in TlFrame<PushClip> frame)
     => frame.Clip.Direction * frame.Clip.Strength * frame.Clip.Falloff.Evaluate(frame.Progress) * frame.Direction;
 ```
 
-Without `* frame.Direction` the value has the same sign both ways, so a rewind keeps adding. That is why the Force demo cube kept going forward until `Presentation/ForceDirection.cs` turned its force around.
+Without `* frame.Direction` the value has the same sign both ways, so a rewind keeps adding. The Force demo track has that one factor; without it the cube kept walking forward when you pressed Reverse.
 
 Measured (.NET host, a push clip, six steps forward then backward): the running sum walks back step by step, but after a full rewind to tick 0 it is **not zero**. What is left is the contribution of the tick where time turned around (X 0.5714 left of 7.714). So a per-tick sum comes back **one tick short**. Pulses do not have this.
 

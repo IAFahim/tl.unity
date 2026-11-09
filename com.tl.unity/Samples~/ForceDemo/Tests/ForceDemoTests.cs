@@ -188,17 +188,17 @@ namespace ForceDemo.Tests
             var rewound = entities.GetComponentData<LocalTransform>(entity).Position.x;
             Assert.Less(rewound, pushed - 0.2f, "the world rewind walks the cube back: " + pushed + " -> " + rewound);
             panel.WorldForward = true;
-            Assert.IsTrue(panel.Pause());
-            yield return null;
-            yield return null;
+            Assert.IsTrue(panel.Restart());
+            while (entities.GetComponentData<LocalTransform>(entity).Position.x < 1.5f && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            var ahead = entities.GetComponentData<LocalTransform>(entity).Position.x;
+            Assert.GreaterOrEqual(ahead, 1.5f, "the push moves the cube forward again after a restart");
             Assert.IsTrue(panel.ToggleReverse());
-            Assert.IsTrue(panel.Resume());
-            var before = entities.GetComponentData<LocalTransform>(entity).Position.x;
-            until = Time.realtimeSinceStartup + 0.5f;
+            until = Time.realtimeSinceStartup + 0.4f;
             while (Time.realtimeSinceStartup < until)
                 yield return null;
-            var after = entities.GetComponentData<LocalTransform>(entity).Position.x;
-            Assert.LessOrEqual(after, before, "Reverse on the timeline also walks the cube back: " + before + " -> " + after);
+            var back = entities.GetComponentData<LocalTransform>(entity).Position.x;
+            Assert.Less(back, ahead - 0.1f, "Reverse on the timeline also walks the cube back: " + ahead + " -> " + back);
         }
 
         static Type Game(string name)

@@ -12,5 +12,5 @@ public struct ForceTrack : ITlTrack<ForceClip>
 {
     [Feeds(typeof(ForceKind))]
     public static float3 Evaluate(in TlFrame<ForceClip> frame)
-        => frame.Clip.Direction * frame.Clip.Strength * frame.Clip.Falloff.Evaluate(frame.Progress);
+        => frame.Clip.Direction * frame.Clip.Strength * frame.Clip.Falloff.Evaluate(frame.Progress) * frame.Direction;
 }
