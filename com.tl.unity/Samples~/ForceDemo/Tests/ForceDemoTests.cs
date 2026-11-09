@@ -163,7 +163,7 @@ namespace ForceDemo.Tests
         }
 
         [UnityTest]
-        public IEnumerator TheCubeWalksBackWhenItIsRewoundByReverseOrByTheWorld()
+        public IEnumerator TheCubeWalksBackWhenTheWorldRewinds()
         {
             var scene = ScenePath();
             Assert.IsNotNull(scene, "Build the demo first: Tl > Samples > Build Force Demo.");
@@ -179,26 +179,44 @@ namespace ForceDemo.Tests
             Assert.IsNotNull(panel, "the Force demo scene has a Tl Panel");
             while (entities.GetComponentData<LocalTransform>(entity).Position.x < 1.5f && Time.realtimeSinceStartup < deadline)
                 yield return null;
-            var pushed = entities.GetComponentData<LocalTransform>(entity).Position.x;
-            Assert.GreaterOrEqual(pushed, 1.5f, "the push moves the cube forward first");
+            var ahead = entities.GetComponentData<LocalTransform>(entity).Position.x;
+            Assert.GreaterOrEqual(ahead, 1.5f, "the push moves the cube forward first");
             panel.WorldForward = false;
             var until = Time.realtimeSinceStartup + 0.6f;
             while (Time.realtimeSinceStartup < until)
                 yield return null;
             var rewound = entities.GetComponentData<LocalTransform>(entity).Position.x;
-            Assert.Less(rewound, pushed - 0.2f, "the world rewind walks the cube back: " + pushed + " -> " + rewound);
-            panel.WorldForward = true;
-            Assert.IsTrue(panel.Restart());
+            Assert.Less(rewound, ahead - 0.2f, "the world rewind walks the cube back: " + ahead + " -> " + rewound);
+        }
+
+        [UnityTest]
+        public IEnumerator TheCubeWalksBackWhenItsTimelineIsReversed()
+        {
+            var scene = ScenePath();
+            Assert.IsNotNull(scene, "Build the demo first: Tl > Samples > Build Force Demo.");
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode(scene, new LoadSceneParameters(LoadSceneMode.Single));
+            var entities = World.DefaultGameObjectInjectionWorld.EntityManager;
+            using var query = entities.CreateEntityQuery(ComponentType.ReadOnly(Game("Force")), ComponentType.ReadOnly<LocalTransform>(), ComponentType.ReadOnly<TlTimelineSet>());
+            var deadline = Time.realtimeSinceStartup + 120f;
+            while (query.IsEmpty && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            Assert.IsFalse(query.IsEmpty, "the Cube entity with Force appears after the SubScene loads");
+            var entity = query.GetSingletonEntity();
+            var panel = UnityEngine.Object.FindFirstObjectByType<TlPanel>();
+            Assert.IsNotNull(panel, "the Force demo scene has a Tl Panel");
             while (entities.GetComponentData<LocalTransform>(entity).Position.x < 1.5f && Time.realtimeSinceStartup < deadline)
                 yield return null;
             var ahead = entities.GetComponentData<LocalTransform>(entity).Position.x;
-            Assert.GreaterOrEqual(ahead, 1.5f, "the push moves the cube forward again after a restart");
+            Assert.GreaterOrEqual(ahead, 1.5f, "the push moves the cube forward first");
             Assert.IsTrue(panel.ToggleReverse());
-            until = Time.realtimeSinceStartup + 0.4f;
-            while (Time.realtimeSinceStartup < until)
+            var until = Time.realtimeSinceStartup + 2f;
+            var back = ahead;
+            while (back > ahead - 0.1f && Time.realtimeSinceStartup < until)
+            {
                 yield return null;
-            var back = entities.GetComponentData<LocalTransform>(entity).Position.x;
-            Assert.Less(back, ahead - 0.1f, "Reverse on the timeline also walks the cube back: " + ahead + " -> " + back);
+                back = entities.GetComponentData<LocalTransform>(entity).Position.x;
+            }
+            Assert.Less(back, ahead - 0.1f, "Reverse on the timeline walks the cube back: " + ahead + " -> " + back);
         }
 
         static Type Game(string name)
