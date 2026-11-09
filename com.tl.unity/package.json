@@ -51,6 +51,11 @@
       "path": "Samples~/DemoHub"
     },
     {
+      "displayName": "Scene player IL2CPP and CoreCLR",
+      "description": "Runs the Inventory and Stats demo scenes from the portable scene format (no JSON, no Editor code) in an IL2CPP or CoreCLR player and prints whether each state hash equals the tl run hash. Needs the Inventory and Stats packs and the package tests (testables).",
+      "path": "Samples~/ScenePlayer"
+    },
+    {
       "displayName": "Kinds IL2CPP player",
       "description": "Runs the 600-step kind script and the events script in an IL2CPP or CoreCLR player and prints whether both hashes equal the .NET hashes. Needs the package tests (testables).",
       "path": "Samples~/KindsIL2CPP"

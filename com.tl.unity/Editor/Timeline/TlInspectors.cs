@@ -15,19 +15,25 @@ namespace Tl.Unity.Editor
         static readonly GUIContent ChannelLabel = new GUIContent("Channel", "Only one timeline plays per channel: starting another one on the same channel replaces it. None means no channel.");
         static readonly GUIContent EndLabel = new GUIContent("When it ends", "Stop, Loop, hold the last frame, or play the next timeline.");
         static readonly GUIContent NextLabel = new GUIContent("Play next", "The timeline that starts when this one ends.");
-        static readonly string[] Channels = BuildChannels();
 
         static TlTimelineSection()
         {
             UnityEditor.Editor.finishedDefaultHeaderGUI += Draw;
+            AssemblyReloadEvents.beforeAssemblyReload += Release;
+        }
+
+        static void Release()
+        {
+            UnityEditor.Editor.finishedDefaultHeaderGUI -= Draw;
+            AssemblyReloadEvents.beforeAssemblyReload -= Release;
         }
 
         static string[] BuildChannels()
         {
-            var names = new string[16];
+            var names = new string[TlProjectSettings.ChannelCount + 1];
             names[0] = "None";
             for (var i = 1; i < names.Length; i++)
-                names[i] = "Channel " + i;
+                names[i] = TlProjectSettings.instance.HasCustomChannelName(i) ? TlProjectSettings.instance.ChannelName(i) + " (" + i + ")" : "Channel " + i;
             return names;
         }
 
@@ -44,7 +50,7 @@ namespace Tl.Unity.Editor
             using (new EditorGUI.IndentLevelScope())
             {
                 EditorGUI.BeginChangeCheck();
-                channel = EditorGUILayout.Popup(ChannelLabel, Mathf.Clamp(channel, 0, 15), Channels);
+                channel = EditorGUILayout.Popup(ChannelLabel, Mathf.Clamp(channel, 0, TlProjectSettings.ChannelCount), BuildChannels());
                 end = (TlEnd)EditorGUILayout.EnumPopup(EndLabel, end);
                 if (end == TlEnd.Next)
                     next = (TimelineAsset)EditorGUILayout.ObjectField(NextLabel, next, typeof(TimelineAsset), false);

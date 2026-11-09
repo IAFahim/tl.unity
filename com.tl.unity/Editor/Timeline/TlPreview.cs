@@ -58,9 +58,20 @@ namespace Tl.Unity.Editor
             if (AssetDatabase.IsAssetImportWorkerProcess())
                 return;
             TlPreviewHook.Evaluate = OnEvaluate;
-            AssemblyReloadEvents.beforeAssemblyReload += Clear;
-            EditorApplication.playModeStateChanged += _ => Clear();
+            AssemblyReloadEvents.beforeAssemblyReload += Release;
+            EditorApplication.playModeStateChanged += OnPlayMode;
             EditorApplication.update += ForgetStopped;
+        }
+
+        static void OnPlayMode(PlayModeStateChange change) => Clear();
+
+        static void Release()
+        {
+            Clear();
+            TlPreviewHook.Evaluate = null;
+            AssemblyReloadEvents.beforeAssemblyReload -= Release;
+            EditorApplication.playModeStateChanged -= OnPlayMode;
+            EditorApplication.update -= ForgetStopped;
         }
 
         public static int TickOf(PlayableDirector director) => (int)TlTimelinePacker.Ticks(director.time, TlProjectSettings.instance.TicksPerSecond);

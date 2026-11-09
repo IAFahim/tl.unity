@@ -1,0 +1,21 @@
+{
+  "name": "Tl.Unity.ScenePlayer.Sample.Editor",
+  "references": [
+    "Tl.Unity",
+    "Tl.Unity.Bake",
+    "Tl.Unity.Editor",
+    "Tl.Unity.ScenePlayer.Sample",
+    "Tl.Pack.Inventory",
+    "Tl.Pack.Inventory.Tests",
+    "Tl.Pack.Stats",
+    "Tl.Pack.Stats.Tests"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS",
+    "TL_UNITY_TESTS"
+  ]
+}

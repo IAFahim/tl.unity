@@ -44,6 +44,96 @@ public sealed class TlScene
         return current;
     }
 
+    public unsafe string ToJson(LibraryManifest manifest)
+    {
+        string TimelineName(ushort id) => manifest.Timelines.FirstOrDefault(p => p.Value == id).Key ?? throw new BakeDiagnosticException($"scene uses timeline id {id} that the library does not name.");
+        string ChannelName(ushort id) => manifest.Channels.FirstOrDefault(p => p.Value == id).Key ?? throw new BakeDiagnosticException($"scene uses channel {id} that the library does not name.");
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
+        {
+            writer.WriteStartObject();
+            writer.WriteNumber("schema", 1);
+            if (Project != null) writer.WriteString("project", Project);
+            writer.WriteStartArray("entities");
+            foreach (var entity in Entities)
+            {
+                writer.WriteStartObject();
+                if (entity.Name != null) writer.WriteString("name", entity.Name);
+                if (entity.States.Count > 0)
+                {
+                    writer.WriteStartArray("states");
+                    foreach (var (type, bytes) in entity.States)
+                    {
+                        writer.WriteStartObject();
+                        writer.WriteString("namespace", type.Namespace ?? "");
+                        writer.WriteString("type", type.Name);
+                        writer.WritePropertyName("data");
+                        var helper = TimelineBakerFast.HelperFor(type);
+                        fixed (byte* start = bytes) ValueJson.Write(writer, type, helper.Read(start), manifest);
+                        writer.WriteEndObject();
+                    }
+                    writer.WriteEndArray();
+                }
+                if (entity.Play.Count > 0)
+                {
+                    writer.WriteStartArray("play");
+                    foreach (var (timeline, tick) in entity.Play)
+                    {
+                        writer.WriteStartObject();
+                        writer.WriteString("timeline", TimelineName(timeline));
+                        if (tick != 0) writer.WriteNumber("tick", tick);
+                        writer.WriteEndObject();
+                    }
+                    writer.WriteEndArray();
+                }
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+            if (Requests.Count > 0)
+            {
+                writer.WriteStartArray("requests");
+                foreach (var request in Requests)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteNumber("step", request.Step);
+                    writer.WriteNumber("entity", request.Entity);
+                    var op = request.Op;
+                    writer.WriteString("op", op switch
+                    {
+                        RequestOp.Reverse => "SetReverse",
+                        RequestOp.ReverseChannel => "SetReverseChannel",
+                        RequestOp.Speed => "SetSpeed",
+                        RequestOp.SpeedChannel => "SetSpeedChannel",
+                        _ => op.ToString()
+                    });
+                    if (op is RequestOp.StopChannel or RequestOp.PauseChannel or RequestOp.ResumeChannel or RequestOp.SeekChannel or RequestOp.ReverseChannel or RequestOp.SpeedChannel)
+                        writer.WriteString("channel", ChannelName(request.Target));
+                    else if (op != RequestOp.StopAll)
+                        writer.WriteString("timeline", TimelineName(request.Target));
+                    if (op is RequestOp.Seek or RequestOp.SeekChannel || op == RequestOp.Start && request.Value != 0) writer.WriteNumber("tick", request.Value);
+                    if (op is RequestOp.Reverse or RequestOp.ReverseChannel) writer.WriteBoolean("reverse", request.Value != 0);
+                    if (op is RequestOp.Speed or RequestOp.SpeedChannel) writer.WriteNumber("speed", request.Value / 16d);
+                    writer.WriteEndObject();
+                }
+                writer.WriteEndArray();
+            }
+            if (Direction.Count > 0)
+            {
+                writer.WriteStartArray("direction");
+                foreach (var (step, forward) in Direction)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteNumber("step", step);
+                    writer.WriteBoolean("forward", forward);
+                    writer.WriteEndObject();
+                }
+                writer.WriteEndArray();
+            }
+            writer.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
     public static TlScene Read(byte[] json, BakerAssemblyResolver resolver, LibraryManifest manifest)
     {
         using var document = TlJson.ReadScene(json);

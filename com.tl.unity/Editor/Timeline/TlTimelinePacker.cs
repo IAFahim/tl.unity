@@ -70,7 +70,7 @@ namespace Tl.Unity.Editor
                 }
                 if (settings.Channel > 0)
                 {
-                    channels = Enumerable.Range(1, settings.Channel).Select(c => c.ToString()).ToArray();
+                    channels = Enumerable.Range(1, settings.Channel).Select(c => TlProjectSettings.instance.ChannelName(c)).ToArray();
                     typed.Channel = channels[channels.Length - 1];
                 }
             }

@@ -26,6 +26,13 @@ namespace Tl.Unity.Editor
             if (AssetDatabase.IsAssetImportWorkerProcess())
                 return;
             EditorApplication.update += SyncOnce;
+            AssemblyReloadEvents.beforeAssemblyReload += Release;
+        }
+
+        static void Release()
+        {
+            EditorApplication.update -= SyncOnce;
+            AssemblyReloadEvents.beforeAssemblyReload -= Release;
         }
 
         static void SyncOnce()

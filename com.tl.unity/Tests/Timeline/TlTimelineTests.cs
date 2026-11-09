@@ -602,12 +602,11 @@ namespace Tl.Unity.Tracks.Tests
             Clip(ForceTrack(push), 0, 20, 4f);
             using var baked = new Baked(Director("Cube", push).gameObject);
             var live = new LiveWorld(baked.World, true);
-            var previous = World.DefaultGameObjectInjectionWorld;
-            World.DefaultGameObjectInjectionWorld = baked.World;
             var host = new GameObject("Panel");
             try
             {
                 var panel = host.AddComponent<TlPanel>();
+                panel.TargetWorld = baked.World;
                 live.Step(2);
                 Assert.AreEqual(1, panel.TargetCount);
                 Assert.AreEqual(1, panel.TimelineCount);
@@ -672,7 +671,6 @@ namespace Tl.Unity.Tracks.Tests
             finally
             {
                 UnityEngine.Object.DestroyImmediate(host);
-                World.DefaultGameObjectInjectionWorld = previous;
             }
         }
 
@@ -756,6 +754,118 @@ namespace Tl.Unity.Tracks.Tests
             finally
             {
                 System.IO.File.Delete(path);
+            }
+        }
+
+        [Test]
+        public void ARatedPlaybackHandsOverToTheNextTimelineLikeOneXOverTheCrossedTicks()
+        {
+            var push = Timeline("Push");
+            Clip(ForceTrack(push), 0, 0.5, 4f);
+            var dash = Timeline("Dash");
+            Clip(ForceTrack(dash), 0, 3, 8f);
+            TlInspectorModel.SetSettings(push, TlEnd.Next, dash, 0);
+            var cube = Director("Cube", push).gameObject;
+            using var fast = new Baked(cube);
+            using var slow = new Baked(cube);
+            var fastLive = new LiveWorld(fast.World, true);
+            var slowLive = new LiveWorld(slow.World, true);
+            fastLive.Step(1);
+            slowLive.Step(1);
+            var fastEntities = fast.World.EntityManager;
+            var slowEntities = slow.World.EntityManager;
+            var fastEntity = fast.Single<TlTimelineSet>();
+            var slowEntity = slow.Single<TlTimelineSet>();
+            var pushAsset = new TlTimeline { Asset = TlTimelinePacker.AssetOf(push).ToAssetId() };
+            fastEntities.GetBuffer<TimelineRequest>(fastEntity).SetSpeed(pushAsset, 40);
+            var handedOver = false;
+            for (var step = 1; step <= 40; step++)
+            {
+                fastLive.Step(1);
+                var crossed = (step * 40 >> 4) - ((step - 1) * 40 >> 4);
+                slowLive.Step(crossed);
+                var a = fastEntities.GetBuffer<Playback>(fastEntity)[0];
+                var b = slowEntities.GetBuffer<Playback>(slowEntity)[0];
+                Assert.AreEqual(b.Timeline, a.Timeline, "step " + step + " timeline");
+                Assert.AreEqual(b.Tick, a.Tick, "step " + step + " tick");
+                handedOver |= a.Timeline != fastEntities.GetBuffer<TlTimelineSet>(fastEntity)[0].Id;
+            }
+            Assert.IsTrue(handedOver, "the run crossed the handover to Dash");
+        }
+
+        [Test]
+        public void ExportedSceneNamesTheDirectorsTimelineAndRunsInTheSceneRunner()
+        {
+            var push = Timeline("Push");
+            Clip(ForceTrack(push), 0, 2, 4f);
+            var cube = Director("Cube", push).gameObject;
+            var directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tl-export-scene-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                var path = TlSceneExport.Export(new[] { cube }, directory);
+                var text = System.IO.File.ReadAllText(path);
+                StringAssert.Contains("\"project\": \"tl.project.json\"", text);
+                StringAssert.Contains("\"name\": \"Cube\"", text);
+                StringAssert.Contains("\"timeline\": \"Push\"", text);
+                Assert.AreEqual(text, System.IO.File.ReadAllText(TlSceneExport.Export(new[] { cube }, directory)), "exporting twice writes the same scene");
+                var libraryPath = System.IO.Path.Combine(directory, "game.tlib");
+                TlExport.Export(new[] { push }, libraryPath);
+                var library = System.IO.File.ReadAllBytes(libraryPath);
+                var scene = TlSceneRunner.Read(System.IO.File.ReadAllBytes(path), library);
+                Assert.AreEqual(1, scene.Entities.Count);
+                Assert.AreEqual(1, scene.Entities[0].Play.Count, "the director plays Push on awake");
+                var early = TlSceneRunner.Run(scene, library, 10);
+                Assert.AreEqual(early, TlSceneRunner.Run(scene, library, 10), "the same scene gives the same hash");
+                Assert.AreNotEqual(early, TlSceneRunner.Run(scene, library, 20), "the playback moves");
+            }
+            finally
+            {
+                if (System.IO.Directory.Exists(directory))
+                    System.IO.Directory.Delete(directory, true);
+            }
+        }
+
+        [Test]
+        public void NamedChannelsExportAsNamesAndBakeToThePackedBytes()
+        {
+            var settings = TlProjectSettings.instance;
+            var push = Timeline("Push");
+            Clip(ForceTrack(push), 0, 2, 4f);
+            TlInspectorModel.SetSettings(push, TlEnd.Stop, null, 2);
+            var directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tl-export-channels-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Assert.IsTrue(settings.TrySetChannelName(1, "body", out _));
+                Assert.IsTrue(settings.TrySetChannelName(2, "voice", out _));
+                Assert.IsFalse(settings.TrySetChannelName(3, "voice", out var clash));
+                StringAssert.Contains("Channel 2", clash);
+                Assert.AreEqual("3", settings.ChannelName(3), "an unnamed channel is its number");
+                TlExport.ExportJson(new[] { push }, directory);
+                var json = System.IO.File.ReadAllText(System.IO.Path.Combine(directory, "Push.json"));
+                StringAssert.Contains("\"channel\": \"voice\"", json);
+                using (var project = Tl.Gen.Tlb.TlJson.ReadProject(System.IO.File.ReadAllBytes(System.IO.Path.Combine(directory, "tl.project.json"))))
+                    CollectionAssert.AreEqual(new[] { "body", "voice" }, project.RootElement.GetProperty("channels").EnumerateArray().Select(e => e.GetString()).ToArray());
+                var rate = settings.TicksPerSecond;
+                var resolver = Tl.Gen.Tlb.BakerAssemblyResolver.FromAssemblies(new[] { push.GetOutputTracks().OfType<TlTrack>().First().Template.ClipType.Assembly, typeof(TlNoSettings<>).Assembly });
+                var manifest = Tl.Gen.Tlb.LibraryBake.Manifest(new string[0], new[] { "body", "voice" }, rate);
+                var baker = new TlBaker(null, Entity.Null, new HashSet<ComponentType>(), null);
+                var blob = TlTimelinePacker.Pack(push, rate, TlTimelinePacker.Catalog, ref baker, push, out _);
+                try
+                {
+                    var packed = blob.Value.Tlb.ToArray();
+                    CollectionAssert.AreEqual(packed, Tl.Gen.Tlb.TimelineBaker.BakeJson(json, resolver, manifest: manifest), "JSON with named channels bakes to the packed bytes");
+                    Assert.AreEqual(json, Tl.Gen.Tlb.TimelineJson.Decode(packed, resolver, manifest));
+                }
+                finally
+                {
+                    blob.Dispose();
+                }
+            }
+            finally
+            {
+                settings.ResetChannelNames();
+                if (System.IO.Directory.Exists(directory))
+                    System.IO.Directory.Delete(directory, true);
             }
         }
 

@@ -38,6 +38,7 @@ namespace Tl.Unity
         public int TicksPerSecond = 60;
         public Vector2 Origin = new Vector2(16f, 58f);
         public int FontSize = 16;
+        public World TargetWorld { get; set; }
 
         World _world;
         EntityQuery _targets;
@@ -149,7 +150,7 @@ namespace Tl.Unity
 
         bool Bind()
         {
-            var world = World.DefaultGameObjectInjectionWorld;
+            var world = TargetWorld != null ? TargetWorld : World.DefaultGameObjectInjectionWorld;
             if (world == null || !world.IsCreated)
                 return false;
             if (_world != world)

@@ -63,7 +63,7 @@ namespace Tl.Unity.Editor
             if (names.Count == 0)
                 throw new InvalidOperationException("Tl: nothing to export.");
             var files = names.OrderBy(n => n, StringComparer.Ordinal).Select(n => n + ".json").ToList();
-            File.WriteAllText(Path.Combine(directory, "tl.project.json"), Tl.Gen.Tlb.TlJson.ExportProject(files, Enumerable.Range(1, channels).Select(c => c.ToString()).ToList(), rate));
+            File.WriteAllText(Path.Combine(directory, "tl.project.json"), Tl.Gen.Tlb.TlJson.ExportProject(files, Enumerable.Range(1, channels).Select(c => TlProjectSettings.instance.ChannelName(c)).ToList(), rate));
             return names;
         }
 

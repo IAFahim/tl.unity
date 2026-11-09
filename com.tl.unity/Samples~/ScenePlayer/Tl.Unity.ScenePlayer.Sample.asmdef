@@ -1,0 +1,15 @@
+{
+  "name": "Tl.Unity.ScenePlayer.Sample",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Pack.Inventory",
+    "Tl.Pack.Stats",
+    "Unity.Entities"
+  ],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS",
+    "TL_UNITY_TESTS"
+  ]
+}
