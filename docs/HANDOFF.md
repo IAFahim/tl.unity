@@ -53,3 +53,10 @@ Install for users: Package Manager > Install package from git URL `https://githu
 - `git -C external/tl-kinds checkout <sha>` of a just-pushed commit needs a `fetch` first, or it fails quietly.
 - A rename is done only when every place using the word changes together; decide the full list first.
 - Code shown to people reads top to bottom, names carry the story, one complete tested file (owner rule 14 in the skill).
+
+## Videos and the 2026-11-10 follow-ups (added later)
+
+- **Films:** `IAFahim/tl` `demos/film` makes the release demo and the Hello Tl tutorial as Tl timelines. Two renderers: HyperFrames (`release.mp4`, `tutorial.mp4`; narration from HeyGen TTS, key only in the `HEYGEN_API_KEY` environment variable, narration mp3s committed) and Unity itself (`release-unity.mp4`, `tutorial-unity.mp4`: a Unity Timeline of Tl tracks drawn with UI Toolkit; `demos/film/unity/render_film.py`). Rotate the HeyGen key that was pasted in chat.
+- **Fixed in tl main (not yet in tl.unity):** #584 kind `Idle`, #585 `tl run --export`, #586 `tl inspect`, #587 `tl bake --emit-sources`. The Unity generator has its own emitters, so Idle in Unity and the pin move are tracked in IAFahim/tl#590. The pin `external/tl-kinds` is still a69c11f8.
+- **Open:** #588 (text in clips: recommend a `TlText` id plus library string table, about 600-800 lines, not started), #589 (frame recorder as a supported tool; Unity Recorder 5.1.7 compiles on 7000.0.0a16 but stalls the DOTS world in batchmode, so frames are saved directly), #590.
+- **tl source budget:** shipped-tools is 344922 of 345000 bytes. New CLI code needs a deliberate budget decision.
