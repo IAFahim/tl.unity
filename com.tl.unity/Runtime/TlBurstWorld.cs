@@ -47,15 +47,27 @@ namespace Tl.Unity
             public int StepCount;
         }
 
+        // Per-(row, visit) plan cursor: one int, the (run, step) Values
+        // slot = run * MaxSteps + stepLocal, precomputed at plan build
+        // (the Values table is laid out [run][step][frame], so slot
+        // index = ValuesBase * Ticks + frameLocal). Nothing else is
+        // stored: window logic lives in RunValuesJob, which
+        // materializes a -0.0f placeholder out of window (bit-exactly a
+        // skip for the row's accumulation order: frame-major,
+        // plan-minor, identical to the sequential World). The accumulate
+        // job is therefore one sequential 4-byte entry stream plus one
+        // L1-resident value gather per entry.
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
         public struct PlanEntry
         {
-            public int Run;
-            public int StepLocal;
-            public ushort Phase;
-            public int Duration;
-            public int Flat;
+            public int ValuesBase;
         }
+
+        // Two jobs per Tick. (1) RunValuesJob evaluates each run once per
+        // frame; steps whose window excludes the current tick get a -0.0f
+        // placeholder. (2) RowAccumulateJob sums per row in frame-major,
+        // plan-minor order: one sequential 4-byte entry stream plus one
+        // tiny-table gather per (entry, frame), no other dependent loads.
 
         [BurstCompile(FloatMode = FloatMode.Strict)]
         struct RunValuesJob : IJobParallelFor
@@ -86,7 +98,7 @@ namespace Tl.Unity
                     for (var stepLocal = 0; stepLocal < run.StepCount; stepLocal++)
                     {
                         var flat = run.StepFlatBase + stepLocal;
-                        var value = 0f;
+                        var value = -0.0f;
                         if (tick >= WindowStart[flat] && tick < WindowEnd[flat])
                         {
                             if (forward)
@@ -94,7 +106,7 @@ namespace Tl.Unity
                             else
                                 value = LaneValue(BackwardValues, BackwardOffset[flat], BackwardCount[flat], tick, WindowStart[flat]);
                         }
-                        Values[(index * Ticks + frameLocal) * MaxSteps + stepLocal] = value;
+                        Values[(index * MaxSteps + stepLocal) * Ticks + frameLocal] = value;
                     }
                 }
             }
@@ -115,18 +127,18 @@ namespace Tl.Unity
             }
         }
 
+        // Per-row accumulate: one sequential 8-byte entry stream plus one
+        // tiny-table gather per (entry, frame). All tick/window logic lives
+        // in RunValuesJob (the Values table already carries the window
+        // decision as a -0.0f placeholder), so nothing else is required.
         [BurstCompile(FloatMode = FloatMode.Strict)]
         struct RowAccumulateJob : IJobParallelFor
         {
             public NativeArray<float> Accumulator;
             [ReadOnly] public NativeArray<int> PlanStart;
             [ReadOnly] public NativeArray<PlanEntry> PlanEntries;
-            [ReadOnly] public NativeArray<int> WindowStart;
-            [ReadOnly] public NativeArray<int> WindowEnd;
-            [ReadOnly] public NativeArray<float> Values;
+            [ReadOnly, NativeDisableContainerSafetyRestriction] public NativeArray<float> Values;
             public int Ticks;
-            public int FrameBase;
-            public int Direction;
             public int MaxSteps;
 
             public void Execute(int index)
@@ -134,34 +146,29 @@ namespace Tl.Unity
                 var sum = Accumulator[index];
                 var start = PlanStart[index];
                 var end = PlanStart[index + 1];
-                for (var frameLocal = 0; frameLocal < Ticks; frameLocal++)
+                if (Ticks == 1)
                 {
-                    var frame = FrameBase + 1 + frameLocal;
                     for (var plan = start; plan < end; plan++)
-                    {
-                        var entry = PlanEntries[plan];
-                        var tick = PhaseToTick(entry.Phase, frame, entry.Duration, Direction);
-                        if (tick < WindowStart[entry.Flat] || tick >= WindowEnd[entry.Flat]) continue;
-                        sum += Values[(entry.Run * Ticks + frameLocal) * MaxSteps + entry.StepLocal];
-                    }
+                        sum += Values[PlanEntries[plan].ValuesBase];
+                }
+                else
+                {
+                    for (var frameLocal = 0; frameLocal < Ticks; frameLocal++)
+                        for (var plan = start; plan < end; plan++)
+                        {
+                            var entry = PlanEntries[plan];
+                            sum += Values[entry.ValuesBase * Ticks + frameLocal];
+                        }
                 }
                 Accumulator[index] = sum;
             }
-
-            static int PhaseToTick(ushort phase, int frame, int duration, int direction)
-            {
-                var t = (int)phase + direction * frame;
-                t %= duration;
-                if (t < 0) t += duration;
-                return t;
-            }
         }
+
 
         struct Visit
         {
             public int Run;
             public int StepLocal;
-            public int Flat;
             public int Row;
             public int Timeline;
             public int KindId;
@@ -352,15 +359,16 @@ namespace Tl.Unity
                     Accumulator = _accumulator,
                     PlanStart = _planStart,
                     PlanEntries = _planEntries,
-                    WindowStart = _windowStart,
-                    WindowEnd = _windowEnd,
                     Values = values,
                     Ticks = ticks,
-                    FrameBase = _frame,
-                    Direction = dir,
                     MaxSteps = _maxSteps,
                 };
-                rowJob.Schedule(_rowCapacity, ParallelApplyBurst.ChunkSize(_rowCapacity, workers)).Complete();
+                // Finer batching on the row job (4x more work units than
+                // the pinned ChunkSize) improves tail balance at N without
+                // changing results (rows are independent); it is not applied
+                // at workers == 1 so the single-worker lane stays a single
+                // job, matching IJobChunk.Schedule on the ECS side.
+                rowJob.Schedule(_rowCapacity, workers == 1 ? _rowCapacity : System.Math.Max(1, ParallelApplyBurst.ChunkSize(_rowCapacity, workers) / 4)).Complete();
             }
             finally
             {
@@ -446,7 +454,6 @@ namespace Tl.Unity
                         {
                             Run = runIndex,
                             StepLocal = step,
-                            Flat = flat,
                             Row = _pbRow[sorted[member]],
                             Timeline = timeline,
                             KindId = _stepKind[flat],
@@ -492,14 +499,9 @@ namespace Tl.Unity
             _planStart[_rowCapacity] = cursor;
             foreach (var visit in finalOrder)
             {
-                var run = runs[visit.Run];
                 var entry = new PlanEntry
                 {
-                    Run = visit.Run,
-                    StepLocal = visit.StepLocal,
-                    Phase = run.Phase,
-                    Duration = run.Duration,
-                    Flat = visit.Flat,
+                    ValuesBase = visit.Run * _maxSteps + visit.StepLocal,
                 };
                 flatEntries[next[visit.Row]++] = entry;
             }

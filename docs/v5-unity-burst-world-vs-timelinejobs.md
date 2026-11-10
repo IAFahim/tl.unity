@@ -147,3 +147,69 @@ no `-quit` with `-runTests`)
    ECS N = `ScheduleParallel` across `JobWorkerCount` (11). 1 worker =
    single `IJobChunk.Schedule` / `Tick(workers 1)`. No thread knob is
    forced via `JobHandle.SchedulerMode`.
+
+## Follow-up (feat/29 item 2): focused RowTick kernel — 4M×4 parity gap closed
+
+The 4M-4 parity gap (burst/kindtick @N ≈ 1.02x in the receipt above; 1M-1
+was already ~2x) was caused by the per-(entry, frame) structure of the old
+two-job kernel: a 20-byte PlanEntry strided per tick, an integer modulo
+per (entry, frame), two window-array gathers per (entry, frame), and a
+per-Tick TempJob Values allocation + two dispatches.
+
+Changes to `com.tl.unity/Runtime/TlBurstWorld.cs` (bit-exact by
+construction; addition order unchanged — frame-major, plan-minor per row):
+
+1. `PlanEntry` `{Run, StepLocal, Phase, Duration, Flat}` (20 B) → `{ValuesBase}`
+   (4 B), where `ValuesBase = run * MaxSteps + stepLocal` is precomputed at
+   plan build. Per-Tick plan streaming at 4M×4: 320 MB → 64 MB.
+2. Window logic moved into `RunValuesJob`: out-of-window steps now
+   materialize a `-0.0f` placeholder. Since `S + (-0.0f) == S` for every
+   `S` (including `-0.0f`, ±Inf, NaN), always-adding the placeholder is
+   bit-exactly the sequential World's `continue` (verified against
+   `Core/World.cs` accumulation order — tl World skips OOW visits). This
+   removes both window-array gathers and the branch from the accumulate
+   job.
+3. The accumulate job needs no tick math at all (values already encode the
+   window decision): per (entry, frame) it is a sequential 4-byte entry
+   stream + one L1-resident value gather. No modulo, no `Runs` gather, no
+   `RunTicks` table. Intermediate experiments that fused lane evaluation
+   into the accumulate job (row Tick computing its own values) or hoisted
+   modulo via per-row duration caching were measured and discarded — the
+   extra dependent-load chains per entry cost more than they saved
+   (private bench logs, not committed).
+4. Finer row-job batching at N (batch = ChunkSize/4, not at workers == 1,
+   which stays a single job): improves work-stealing tail balance.
+
+Methodology per owner directive: medians of 5 separate Unity batch
+invocations (same A/B test file, `-testFilter` to the 4M×4 case),
+quiet-machine checked (1% load observed), worker counts for both sides
+(BurstWorld Tick workers 1 vs 0=ProcessorCount 12; ECS Schedule vs
+ScheduleParallel across JobWorkerCount 11). Outlier check: runs
+differing >20% were rerun-verified before dismissing as contention
+(baseline burst@1 = 121ms draw and first kindtick@N draws at 23ms did
+not repeat, rerun landed on the median; the final series needed no
+-outlier handling — all five draws within ±2% of the median on both sides).
+
+Median-of-5 at 4M×4 (ms/tick, medians; every run asserted hash-exact
+against the scalar oracle, all runs passed):
+
+| state (median-of-5) | burst @1 | burst @N | kindtick @N | adv @N | burst/kindtick @N |
+|---|---|---|---|---|---|
+| before (commit 2b983bf) | 94.87 | 20.13 | 17.93 | 33.64 | 1.12x |
+| after (this change) | 35.88 | 7.51 | 15.99 | 30.17 | 0.47x |
+
+Headline: burst/kindtick @N went from ~1.12x (parity) to 0.47x — the 4M×4
+BurstWorld is now 2.13x faster than the 4.0 kind-tick fold at N
+(15.99/7.51), goal >= 2x met; @1 alone is 35.88/122.9 = 0.29x (3.4x).
+ns/visit at 4M×4, @N: 1.26 → 0.47. Hashes unchanged and asserted in every
+run (burst `8E5DA0D8E772B725`, kindtick `515069FEDEF6BF25`, advance
+`A63C9BB79DC6D6D4`, per the oracle table above).
+
+Batch runs for this change (reused probe `file:` manifest pointed at the
+worktree, absolute results/logs): EditMode exit 0, `error CS` 0, XML
+`total=69 passed=68 failed=0 skipped=1`; PlayMode exit 0, `error CS` 0,
+total 30 passed 30 failed 0 skipped 0. Logs:
+`C:/Users/Nibir/_work/batch/optfinal-EditMode.xml/.log`,
+`optfinal-PlayMode.xml/.log` (not committed). The full EditMode run also
+contains the A/B timings for the receipt (1M-1 arm measures idle — the
+-0.0f change applies identically; the test hashes assert bit-exactness).
