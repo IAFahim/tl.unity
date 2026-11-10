@@ -217,6 +217,63 @@ In the Hello Tl scene the cube starts at y = 0.5, so there you will see `(5, 0.5
 **If the side stays 0,** one of these is missing: the track still returns the old `float` (step 3), `Apply` does not write `Side` (step 4), your system does not read `Side`, or the clip's `Side` is still 0 in the timeline. The complete console version, with a test that checks the output above, is [`demos/hello-side`](https://github.com/IAFahim/tl/tree/main/demos/hello-side).
 
 
+
+### An ability window: "can double jump now"
+
+A clip can switch a flag on the player for as long as it plays. Tl only keeps the flag; your own system makes the decision (`if (abilities.ValueRO.CanDoubleJump && jumpPressed)`).
+
+```csharp
+using Tl;
+
+namespace HelloAbility
+{
+    [TlClip("Hello/DoubleJumpWindow")]
+    public struct DoubleJumpWindowClip
+    {
+        public bool CanDoubleJump;
+    }
+
+    public struct DoubleJumpWindowTrack : ITlTrack<DoubleJumpWindowClip>
+    {
+        [Feeds(typeof(DoubleJumpKind))]
+        public static bool WhetherDoubleJumpIsAllowed(in TlFrame<DoubleJumpWindowClip> frame)
+            => frame.Clip.CanDoubleJump;
+    }
+
+    [TlKind]
+    public struct DoubleJumpKind
+    {
+        public static void Combine(ref bool total, in bool next) => total |= next;
+
+        public static void Apply(in bool allowed, ref Abilities player)
+            => player.CanDoubleJump = allowed;
+    }
+
+    [TlState]
+    public partial struct Abilities
+    {
+        public bool CanDoubleJump;
+    }
+}
+```
+
+Where each thing lives: the clips (when the window starts and ends, and its value) are in the baked timeline, shared by everyone who plays it. The flag itself is the `CanDoubleJump` field of the player's own `Abilities` column. A `[Feeds]` method runs every tick while its clip plays and its result is combined (`Combine`, here OR) and written once by `Apply`.
+
+The timeline has two clips: ticks 30 to 60 with `CanDoubleJump` ticked, and ticks 60 to 150 with it unticked. Result:
+
+```
+step  can double jump
+   0  False
+  30  True
+  60  False
+a player who never plays the timeline: False
+```
+
+- Before the window the flag is false, because a column starts at its default (zero). Nothing is "baked as false"; it is computed every tick.
+- Keep the unticked clip. A column keeps the last value it was given when no clip covers a tick, so without the "off" clip the flag would stay true after the window. A kind can declare `Idle(ref Abilities player) => player.CanDoubleJump = false` to reset it on the plain .NET host, but Unity currently ignores `Idle` silently (IAFahim/tl#590), so the off clip is the form that works on both.
+- In Unity a player needs the timeline (a Playable Director) to get the `Abilities` column at all; a player without one is never matched by a query for it.
+
+The runnable, tested console version is [`demos/hello-ability`](https://github.com/IAFahim/tl/tree/main/demos/hello-ability). In Unity this was verified in PlayMode: the flag is true from tick 30, false from tick 60 with the off clip, and a kind's `Idle` did nothing.
 ---
 
 ## 2. The model: what runs, in what order, where data lives
