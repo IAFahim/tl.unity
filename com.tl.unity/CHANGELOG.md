@@ -5,6 +5,7 @@ Newest first. Taken from the commit history since the zero-config plan started (
 ## Unreleased
 
 ### Added
+- A kind may declare `public static void Idle(...)`: it runs once per tick for every enabled kind row with no entries, so a column falls back (a "can double jump" flag goes back to false when its clip ends), the same rule as the .NET host (IAFahim/tl#584, #590). The `external/tl-kinds` pin moved to tl `434d729`.
 - Hello Tl sample (the smallest complete program) and a full course in the main README, from the first timeline to baking, rewind, speed, outside Unity and project ideas.
 - Tl Panel: a component with Play, Pause, Resume, Stop, Reverse, Seek, speed 0.25x to 4x, Stop channel, Stop all and a world rewind switch; the Force demo scene has one and `GameObject > Tl > Panel` adds it to any scene (`10902c9`).
 - Channel names: Project Settings > Tl names the 15 channels; the Timeline Channel menu, `Tl > Export` and the packer use them (`3485880`).

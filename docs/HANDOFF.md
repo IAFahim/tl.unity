@@ -19,7 +19,7 @@ Install for users: Package Manager > Install package from git URL `https://githu
 ## How to check that main is healthy
 
 - **tl:** `dotnet build tl.slnx -c Release -m:1 -p:NuGetAudit=false`, `dotnet test tl.slnx -c Release --no-build -p:NuGetAudit=false`, `dotnet test tests/Tl.Systems.Tests -c Release -p:NuGetAudit=false`, `python benchmarks/source_budget.py`, `python -m unittest discover -s tests`. Expected: Bake 861, Core 31, Packs 31, Gen.CSharp 47, Tlb 17, Fuzz 11, Analyzers 11, Systems 103, Python 99 OK (1 skipped), budget exit 0.
-- **tl.unity:** `TL_UNITY_PACKS=1 bash eng/test-com-tl-unity.sh` and `TL_UNITY_PACKS=0 bash eng/test-com-tl-unity.sh`. The first cold run fails three known warmup tests; judge the second run. Expected: packs EditMode 81 / PlayMode 68, default EditMode 65 / PlayMode 68, 0 `error CS`, 0 `warning CS`. Also `eng/sync-tl-core.sh --check`, `eng/sync-tl-bake.sh --check`, `eng/build-generators.sh --check`, `python eng/check-force-demo-sample.py` (six `same`).
+- **tl.unity:** `TL_UNITY_PACKS=1 bash eng/test-com-tl-unity.sh` and `TL_UNITY_PACKS=0 bash eng/test-com-tl-unity.sh`. The first cold run fails three known warmup tests; judge the second run. Expected: packs EditMode 82 / PlayMode 68, default EditMode 66 / PlayMode 68, 0 `error CS`, 0 `warning CS`. Also `eng/sync-tl-core.sh --check`, `eng/sync-tl-bake.sh --check`, `eng/build-generators.sh --check`, `python eng/check-force-demo-sample.py` (six `same`).
 - **Bench:** the `KindGame.KindBench.RunBatch` editor method (`-kindsBench <file>`), two runs, nothing else running. A about 8 (7.5 to 8.6), B 1.8 to 2.4, B0 0.6 to 0.8 ns/entity, 0 B. A reading near 10 means another run overlapped.
 
 ## Pinned numbers (must not move without a decision)
@@ -57,6 +57,6 @@ Install for users: Package Manager > Install package from git URL `https://githu
 ## Videos and the 2026-11-10 follow-ups (added later)
 
 - **Films:** `IAFahim/tl` `demos/film` makes the release demo and the Hello Tl tutorial as Tl timelines. Two renderers: HyperFrames (`release.mp4`, `tutorial.mp4`; narration from HeyGen TTS, key only in the `HEYGEN_API_KEY` environment variable, narration mp3s committed) and Unity itself (`release-unity.mp4`, `tutorial-unity.mp4`: a Unity Timeline of Tl tracks drawn with UI Toolkit; `demos/film/unity/render_film.py`). Rotate the HeyGen key that was pasted in chat.
-- **Fixed in tl main (not yet in tl.unity):** #584 kind `Idle`, #585 `tl run --export`, #586 `tl inspect`, #587 `tl bake --emit-sources`. The Unity generator has its own emitters, so Idle in Unity and the pin move are tracked in IAFahim/tl#590. The pin `external/tl-kinds` is still a69c11f8.
+- **Fixed in tl main:** #584 kind `Idle`, #585 `tl run --export`, #586 `tl inspect`, #587 `tl bake --emit-sources`. tl.unity runs a kind's `Idle` too (IAFahim/tl#590): its own emitters call it for every enabled kind row with no entries, and the pin `external/tl-kinds` is 434d7294.
 - **Open:** #588 (text in clips: recommend a `TlText` id plus library string table, about 600-800 lines, not started), #589 (frame recorder as a supported tool; Unity Recorder 5.1.7 compiles on 7000.0.0a16 but stalls the DOTS world in batchmode, so frames are saved directly), #590.
 - **tl source budget:** shipped-tools is 344922 of 345000 bytes. New CLI code needs a deliberate budget decision.

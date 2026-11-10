@@ -270,10 +270,10 @@ a player who never plays the timeline: False
 ```
 
 - Before the window the flag is false, because a column starts at its default (zero). Nothing is "baked as false"; it is computed every tick.
-- Keep the unticked clip. A column keeps the last value it was given when no clip covers a tick, so without the "off" clip the flag would stay true after the window. A kind can declare `Idle(ref Abilities player) => player.CanDoubleJump = false` to reset it on the plain .NET host, but Unity currently ignores `Idle` silently (IAFahim/tl#590), so the off clip is the form that works on both.
+- Keep the unticked clip, or give the kind an `Idle`. A column keeps the last value it was given when no clip covers a tick, so without one of the two the flag would stay true after the window. The unticked clip is data in the timeline. `Idle` is code on the kind: `public static void Idle(ref Abilities player) => player.CanDoubleJump = false;` runs once per tick for every player that has the column and no clip feeding the kind, so the flag is also false before the first clip and after the timeline ended, and the second clip is no longer needed. `Idle` takes the same columns an `Apply` takes after its first parameter and works on the plain .NET host and in Unity alike.
 - In Unity a player needs the timeline (a Playable Director) to get the `Abilities` column at all; a player without one is never matched by a query for it.
 
-The runnable, tested console version is [`demos/hello-ability`](https://github.com/IAFahim/tl/tree/main/demos/hello-ability). In Unity this was verified in PlayMode: the flag is true from tick 30, false from tick 60 with the off clip, and a kind's `Idle` did nothing.
+The runnable, tested console version is [`demos/hello-ability`](https://github.com/IAFahim/tl/tree/main/demos/hello-ability). In Unity (7000.0.0a16, PlayMode, a SubScene with a Playable Director) both forms were run: the flag is false before tick 30, true from tick 30 to 59 and false from tick 60 with the unticked clip, and also false from tick 60 with `Idle` and no second clip, while a kind without `Idle` and without the unticked clip stays true to the end.
 ---
 
 ## 2. The model: what runs, in what order, where data lives
