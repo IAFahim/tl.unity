@@ -45,11 +45,18 @@ With Tl the programmer writes **one small file once** (chapter 1). After that th
 
 ## 1. Run your first timeline (10 minutes)
 
-**Setup:** newest Unity 7 editor (tested on 7000.0.0a16), project from the **Universal 3D (URP)** template. Package Manager > **+** > **Install package from git URL**:
+**Setup:** Unity **7000.0.0a16**, project from the **Universal 3D (URP)** template. Package Manager > **+** > **Install package from git URL**:
 
 ```
 https://github.com/IAFahim/tl.unity.git?path=/com.tl.unity#main
 ```
+
+> **Use exactly this editor.** 7000.0.0a16 is an alpha, so the Unity Hub does not offer it in its normal list; open
+> `unityhub://7000.0.0a16/0745a91df592` (Hub installs it), then check **Help > About Unity** says `7000.0.0a16 (0745a91df592)`.
+> Entities 7 and Entities Graphics 7 are built into that editor. Unity 6 (6000.x, what the Hub recommends) has no such packages
+> (the registry stops at Entities Graphics 1.x), and installing Tl there fails with
+> `com.unity.entities.graphics: Dependency was not resolved`. If you see that line, you are on the wrong editor.
+> Other 7000.0 alphas are untested.
 
 Then Package Manager > **Tl Unity Playback** > **Samples** > **Hello Tl** > **Import**. Menu **Tl Hello > Build Scene**, then press **Play**.
 
