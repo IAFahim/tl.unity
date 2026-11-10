@@ -193,9 +193,14 @@ Goal: while the player jumps 5 forward, it also moves 2 to the side, so the posi
 
 **Then, in your own system** (the one that moves the player), read it next to `Offset`. Gives you: the player actually moves sideways.
 
+The sample's `foreach` has no braces, so add them or the new line will not compile:
+
 ```diff
- playerTransform.ValueRW.Position.x = teleported.ValueRO.Offset;
-+playerTransform.ValueRW.Position.z = teleported.ValueRO.Side;
+ foreach (var (playerTransform, teleported) in SystemAPI.Query<RefRW<LocalTransform>, RefRO<Teleported>>())
++{
+     playerTransform.ValueRW.Position.x = teleported.ValueRO.Offset;
++    playerTransform.ValueRW.Position.z = teleported.ValueRO.Side;
++}
 ```
 
 Set `Side` on the clips in your timeline: `-2` on the first clip and `3` on the second (in JSON: `"Side": -2`). The result:
@@ -206,6 +211,8 @@ tick  position (x, y, z)
   90  (13, 0, 1)       clip 2 starts: 8 forward and 3 to the other side
  119  (5, 0, -2)       clip 2 ends with Come Back on: its move is undone
 ```
+
+In the Hello Tl scene the cube starts at y = 0.5, so there you will see `(5, 0.5, -2)`. Only x and z are changed.
 
 **If the side stays 0,** one of these is missing: the track still returns the old `float` (step 3), `Apply` does not write `Side` (step 4), your system does not read `Side`, or the clip's `Side` is still 0 in the timeline. The complete console version, with a test that checks the output above, is [`demos/hello-side`](https://github.com/IAFahim/tl/tree/main/demos/hello-side).
 
