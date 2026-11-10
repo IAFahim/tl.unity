@@ -11,7 +11,7 @@ namespace Tl.Unity.Tests
     {
         global::Tl.LibraryView _view;
         IntPtr _memory;
-        World _world;
+        global::Unity.Entities.World _world;
         EntityManager _entities;
         Entity _entity;
 
@@ -32,7 +32,7 @@ namespace Tl.Unity.Tests
             timelines[3] = new global::Tl.LibraryTimeline { Id = HoldId, Channel = 3, Hold = 1, Duration = 4 };
             timelines[4] = new global::Tl.LibraryTimeline { Id = StackId, Duration = 4 };
             _view = new global::Tl.LibraryView { Version = 1, TimelineCount = 5, Timelines = timelines };
-            _world = new World("TlPlaybackRulesTest");
+            _world = new global::Unity.Entities.World("TlPlaybackRulesTest");
             _entities = _world.EntityManager;
             _entity = _entities.CreateEntity(typeof(Playback), typeof(TimelineSlot), typeof(TimelineRequest));
         }

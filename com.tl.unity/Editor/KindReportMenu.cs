@@ -11,7 +11,7 @@ namespace Tl.Unity.Editor
         {
             var registry = TimelineKindSets.Registry;
             var shown = 0;
-            foreach (var world in World.All)
+            foreach (var world in global::Unity.Entities.World.All)
             {
                 if (!world.IsCreated || (world.Flags & (WorldFlags.Conversion | WorldFlags.Shadow | WorldFlags.Staging)) != 0)
                     continue;
