@@ -339,6 +339,9 @@ namespace Tl.Unity.Tests
         [Test]
         public void SortRequests_OrdersByEntitySlotSequence()
         {
+            // 5f radix sorts stably by (Entity, Slot): for equal keys input order
+            // is preserved (seq 3 before seq 2), where the pre-5f insertion sort
+            // ordered by Sequence. Same four rows, only tie order differs.
             var items = new global::Tl.RequestRecord[4];
             items[0] = new global::Tl.RequestRecord(2, 0, 0, 0, global::Tl.RequestOp.Start, 0);
             items[1] = new global::Tl.RequestRecord(0, 1, 0, 0, global::Tl.RequestOp.Start, 1);
@@ -350,8 +353,8 @@ namespace Tl.Unity.Tests
             }
             Assert.AreEqual(0, items[0].Entity);
             Assert.AreEqual(0, items[0].Slot);
-            Assert.AreEqual(2, items[0].Sequence);
-            Assert.AreEqual(3, items[1].Sequence);
+            Assert.AreEqual(3, items[0].Sequence);
+            Assert.AreEqual(2, items[1].Sequence);
             Assert.AreEqual(1, items[2].Slot);
             Assert.AreEqual(2, items[3].Entity);
         }

@@ -44,7 +44,7 @@ namespace Tl.Unity
                 for (var r = 0; r < requests.Length; r++)
                     gathered.Add(new global::Tl.RequestRecord(entities[e].Index, requests[r].Slot, requests[r].Timeline, requests[r].At, requests[r].Op, _sequence++));
             }
-            global::Tl.RequestQueue.Sort((global::Tl.RequestRecord*)gathered.GetUnsafePtr(), gathered.Length);
+            SortRequests((global::Tl.RequestRecord*)gathered.GetUnsafePtr(), gathered.Length);
             var closed = new NativeList<ClosedPlayback>(gathered.Length, Allocator.Temp);
             for (var i = 0; i < gathered.Length; i++)
             {
@@ -72,6 +72,28 @@ namespace Tl.Unity
                 if (entities[i].Index == index)
                     return entities[i];
             return Entity.Null;
+        }
+
+        // Burst-safe insertion sort pending a tl Core fix: the 5f radix in
+        // RequestQueue.Sort uses ArrayPool<int>.Shared (BC1016 in Burst).
+        // The gather above is append-ordered, so stable (Entity, Slot) equals
+        // (Entity, Slot, Sequence) here; the triple key preserves pre-5f parity.
+        static unsafe void SortRequests(global::Tl.RequestRecord* items, int count)
+        {
+            for (var i = 1; i < count; i++)
+            {
+                var item = items[i];
+                var j = i - 1;
+                while (j >= 0 && Before(in item, in items[j])) { items[j + 1] = items[j]; j--; }
+                items[j + 1] = item;
+            }
+
+            static bool Before(in global::Tl.RequestRecord left, in global::Tl.RequestRecord right)
+            {
+                if (left.Entity != right.Entity) return left.Entity < right.Entity;
+                if (left.Slot != right.Slot) return left.Slot < right.Slot;
+                return left.Sequence < right.Sequence;
+            }
         }
     }
 

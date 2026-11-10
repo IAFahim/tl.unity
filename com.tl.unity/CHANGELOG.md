@@ -32,6 +32,7 @@ Newest first. Taken from the commit history since the zero-config plan started (
 - Real `_TlMenu` stub files and no red error for empty tracks (`be6d0b3`).
 - Edit-mode preview keeps the last tick's state when a timeline hands over to the next (`b841389`).
 - A reversed playback parks at its start and plays again when it faces forward (`f9bd9d9`).
+- `TimelineRequestSystem` sorts with a Burst-safe insertion sort: the vendored 5f radix uses `ArrayPool` (Burst BC1016), pending a tl Core fix (tl#600).
 
 ## 0.2.0-preview.1
 
