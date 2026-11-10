@@ -128,6 +128,17 @@ public partial struct PlayerTeleportSystem : ISystem
 
 The scene has two clips on one track: ticks 30 to 60 (Distance 5, stay) and 90 to 120 (Distance 8, come back). Result: x is 0, then 5 at tick 30, then 13 at tick 90, then 5 at tick 119.
 
+**Change the code: add a sideways swing.** A new value must pass through all four parts of `Teleport.cs`. If you add it to only some of them, the build is still clean and the value just stays 0, with no error.
+
+| Part | Add |
+|---|---|
+| Clip | `public float SideSwing;` in `TeleportClip` |
+| Track | `[Pulse(typeof(SideKind), On = ClipEvent.Start)] public static float SwingAtClipStart(in TlFrame<TeleportClip> frame) => frame.Direction * frame.Clip.SideSwing;` in `TeleportTrack` |
+| Kind | a new `SideKind`: `[TlKind(Accepts = KindEntries.Pulses, Mode = KindMode.Each)] public struct SideKind { public static void Apply(in float swing, ref Teleported player) => player.SideSwing += swing; }` |
+| Column | `public float SideSwing;` in `Teleported` |
+
+A kind takes one value, so a second value is a second kind, not a second argument to `TeleportKind`. Your system then reads `teleported.ValueRO.SideSwing` next to `Offset`. The complete, tested version with its output is [`demos/hello-side`](https://github.com/IAFahim/tl/tree/main/demos/hello-side), explained in [`demos/hello`](https://github.com/IAFahim/tl/tree/main/demos/hello#add-a-value-a-sideways-swing).
+
 ---
 
 ## 2. The model: what runs, in what order, where data lives
