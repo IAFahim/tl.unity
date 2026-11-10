@@ -39,19 +39,49 @@ public sealed partial class TimelineWorld
         var timelines = _view.Timelines;
         if (timelines == null) return;
         var count = _view.TimelineCount;
-        for (var entity = 0; entity < players.EntityCapacity; entity++)
+        var playing = players.Playing;
+        for (var w = 0; w < players.PlayingWords; w++)
         {
-            var slots = players.SlotsOf(entity);
-            var slotsCount = players.CountOf(entity);
-            for (var i = 0; i < slotsCount; i++)
+            var bits = playing[w];
+            while (bits != 0)
             {
-                if (slots[i].Timeline == 0) continue;
-                var result = PlaybackRules.Step(ref slots[i], timelines, count, forward);
-                if (result == AdvanceResult.Removed) players.RemoveSlot(entity, i);
-                else if (result == AdvanceResult.Unknown) throw new ArgumentException($"Playback slot {i} of entity {entity} names no timeline in the loaded library.");
+                var entity = (w << 6) + KindStore.Tz(bits);
+                bits &= bits - 1;
+                AdvanceEntity(players, entity, timelines, count, forward);
             }
         }
         ClosingList.Clear(players.Closing);
+    }
+
+    unsafe void AdvanceEntity(PlaybackTable players, int entity, LibraryTimeline* timelines, int count, bool forward)
+    {
+        var slots = players.SlotsOf(entity);
+        var slotsCount = players.CountOf(entity);
+        for (var i = 0; i < slotsCount; i++)
+        {
+            if (slots[i].Timeline == 0) continue;
+            var result = PlaybackRules.Step(ref slots[i], timelines, count, forward);
+            if (result == AdvanceResult.Removed) players.RemoveSlot(entity, i);
+            else if (result == AdvanceResult.Unknown) throw new ArgumentException($"Playback slot {i} of entity {entity} names no timeline in the loaded library.");
+        }
+        var holds = false;
+        slots = players.SlotsOf(entity);
+        var n = players.CountOf(entity);
+        for (var i = 0; i < n; i++)
+        {
+            var slot = slots[i];
+            if (slot.Timeline == 0) continue;
+            var f = slot.Flags;
+            if (PlaybackRules.Moves(f, forward) || PlaybackRules.IsParked(f) || (f & (PlaybackFlags.Stopping | PlaybackFlags.ReenterPending)) != 0 || ((f & (PlaybackFlags.Paused | PlaybackFlags.Ended)) != 0 && (f & PlaybackFlags.StartPending) != 0))
+            {
+                holds = true;
+                break;
+            }
+        }
+        if (!holds) players.SetPlaying(entity, false);
+#if TL_CHECKED
+        Checked.Visited();
+#endif
     }
 
     unsafe void Drain(PlaybackTable players, RequestQueue* queue)

@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using Tl;
 using Unity.Burst;
@@ -15,7 +16,8 @@ namespace KindGame
         public delegate float JumpFn(float scale, float velocity, float power);
         public delegate int HitFn(int amount, bool reverse);
         public delegate int StatPulseFn(int delta, bool reverse);
-        public delegate int MarkerFn(int delta);
+        public delegate float FmaChainFn(float a, float b, float c, float d);
+        public delegate float BlendFn(float tick, float start, float span);
         public delegate void WalkFn(in Frame<WalkTrack, WalkClip> frame, in WalkStat stat, in Target target, in AnchorLookup anchors, out Speed speed);
 
         [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
@@ -98,10 +100,29 @@ namespace KindGame
         }
 
         [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
-        public static void WalkBurst(in Frame<WalkTrack, WalkClip> frame, in WalkStat stat, in Target target, in AnchorLookup anchors, out Speed speed)
+        public static float FmaChainBurst(float a, float b, float c, float d)
         {
-            speed = Walk.Evaluate(in frame, in stat, in target, in anchors);
+            return a * b + c - d / (a + 1f) + (a - b) * (c + d);
         }
+
+        [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
+        public static float BlendBurst(float tick, float start, float span)
+        {
+            return (tick - start) / (span - 1f);
+        }
+
+        static float FmaChainScalar(float a, float b, float c, float d) => a * b + c - d / (a + 1f) + (a - b) * (c + d);
+
+        static float BlendScalar(float tick, float start, float span) => (tick - start) / (span - 1f);
+
+        static uint NextBits(ref uint state)
+        {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            return state;
+        }
+
 
         [Test]
         public void BurstIsEnabledForKindJobs()
@@ -178,6 +199,39 @@ namespace KindGame
         public void WalkFeederWithLookupContextCompilesUnderBurst()
         {
             BurstCompiler.CompileFunctionPointer<WalkFn>(WalkBurst);
+        }
+
+        [Test]
+        public void FmaChainIsBitExactAgainstScalar()
+        {
+            var fn = BurstCompiler.CompileFunctionPointer<FmaChainFn>(FmaChainBurst);
+            var state = 0x9E3779B9u;
+            for (var i = 0; i < 4096; i++)
+            {
+                var a = BitConverter.ToSingle(BitConverter.GetBytes(NextBits(ref state)), 0) * 1e3f;
+                var b = BitConverter.ToSingle(BitConverter.GetBytes(NextBits(ref state)), 0) * 1e3f;
+                var c = BitConverter.ToSingle(BitConverter.GetBytes(NextBits(ref state)), 0) * 1e3f;
+                var d = BitConverter.ToSingle(BitConverter.GetBytes(NextBits(ref state)), 0) * 1e3f;
+                var burst = fn.Invoke(a, b, c, d);
+                var scalar = FmaChainScalar(a, b, c, d);
+                Assert.AreEqual(BitConverter.SingleToInt32Bits(scalar), BitConverter.SingleToInt32Bits(burst), "chain " + i);
+            }
+        }
+
+        [Test]
+        public void BlendDivisionIsBitExactAgainstScalar()
+        {
+            var fn = BurstCompiler.CompileFunctionPointer<BlendFn>(BlendBurst);
+            var state = 0x2545F491u;
+            for (var i = 0; i < 4096; i++)
+            {
+                var tick = (float)(NextBits(ref state) % 10000);
+                var start = (float)(NextBits(ref state) % 10000);
+                var span = (float)(NextBits(ref state) % 1000 + 2);
+                var burst = fn.Invoke(tick, start, span);
+                var scalar = BlendScalar(tick, start, span);
+                Assert.AreEqual(BitConverter.SingleToInt32Bits(scalar), BitConverter.SingleToInt32Bits(burst), "blend " + i);
+            }
         }
     }
 }

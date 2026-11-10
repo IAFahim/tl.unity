@@ -96,15 +96,59 @@ public unsafe struct Events<T> : IDisposable
     {
         var header = _header;
         var span = new Span<EventRecord<T>>(header->Items, header->Count);
-        for (var i = 1; i < span.Length; i++)
+        var n = span.Length;
+        if (n > 1)
         {
-            var item = span[i];
-            var j = i - 1;
-            while (j >= 0 && Before(in item, in span[j])) { span[j + 1] = span[j]; j--; }
-            span[j + 1] = item;
+            var sorted = true;
+            for (var i = 1; i < n; i++)
+            {
+                if (Before(in span[i], in span[i - 1])) { sorted = false; break; }
+            }
+            if (!sorted)
+            {
+                var scratch = (EventRecord<T>*)NativeMemory.AlignedAlloc((nuint)n * (nuint)sizeof(EventRecord<T>), 8u);
+                try
+                {
+                    var source = span;
+                    var destination = new Span<EventRecord<T>>(scratch, n);
+                    var width = 1;
+                    while (width < n)
+                    {
+                        for (var left = 0; left < n; left += width * 2)
+                        {
+                            var mid = Math.Min(left + width, n);
+                            var right = Math.Min(left + width * 2, n);
+                            MergeRun(source.Slice(left, mid - left), source.Slice(mid, right - mid), destination.Slice(left, right - left));
+                        }
+                        var tmp = source;
+                        source = destination;
+                        destination = tmp;
+                        width <<= 1;
+                    }
+                    if (!source.Overlaps(span)) source.CopyTo(span);
+                }
+                finally
+                {
+                    NativeMemory.AlignedFree(scratch);
+                }
+            }
         }
         header->Count = 0;
         return span;
+
+        static void MergeRun(Span<EventRecord<T>> leftRun, Span<EventRecord<T>> rightRun, Span<EventRecord<T>> merged)
+        {
+            var i = 0;
+            var j = 0;
+            var k = 0;
+            while (i < leftRun.Length && j < rightRun.Length)
+            {
+                if (Before(in rightRun[j], in leftRun[i])) merged[k++] = rightRun[j++];
+                else merged[k++] = leftRun[i++];
+            }
+            while (i < leftRun.Length) merged[k++] = leftRun[i++];
+            while (j < rightRun.Length) merged[k++] = rightRun[j++];
+        }
 
         static bool Before(in EventRecord<T> left, in EventRecord<T> right)
         {

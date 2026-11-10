@@ -6,7 +6,7 @@ using Unity.Jobs;
 
 namespace Tl.Unity
 {
-    [BurstCompile]
+    [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
     public unsafe partial struct TimelineAdvanceJob : IJobChunk
     {
         [global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public global::Tl.LibraryView View;

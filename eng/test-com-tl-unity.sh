@@ -9,6 +9,7 @@ version="$(basename "$(dirname "$(dirname "$unity")")")"
 probe="${TL_UNITY_PROBE:-${XDG_CACHE_HOME:-$HOME/.cache}/tl-unity-probe-$version}"
 out="$root/artifacts/com-tl-unity"
 bash "$root/eng/sync-tl-core.sh" --check || exit 1
+bash "$root/eng/check-core-netstandard.sh" || exit 1
 bash "$root/eng/build-generators.sh" --check || exit 1
 bash "$root/eng/sync-tl-bake.sh" --check || exit 1
 bash "$root/eng/check-two-assembly.sh" >/dev/null || exit 1

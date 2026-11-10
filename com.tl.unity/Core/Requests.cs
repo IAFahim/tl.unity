@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.InteropServices;
 
 namespace Tl;
@@ -61,19 +62,64 @@ public unsafe struct RequestQueue
 
     public static void Sort(RequestRecord* items, int count)
     {
+        if (count <= 1) return;
+        var sorted = true;
+        var prevEntity = items[0].Entity;
+        var prevSlot = items[0].Slot;
         for (var i = 1; i < count; i++)
         {
-            var item = items[i];
-            var j = i - 1;
-            while (j >= 0 && Before(in item, in items[j])) { items[j + 1] = items[j]; j--; }
-            items[j + 1] = item;
+            var entity = items[i].Entity;
+            if (entity < prevEntity || (entity == prevEntity && items[i].Slot < prevSlot))
+            {
+                sorted = false;
+                break;
+            }
+            prevEntity = entity;
+            prevSlot = items[i].Slot;
+        }
+        if (sorted) return;
+        var scratch = (RequestRecord*)NativeMemory.AlignedAlloc((nuint)count * (nuint)sizeof(RequestRecord), 8u);
+        var counts = ArrayPool<int>.Shared.Rent(65536);
+        try
+        {
+            var source = new Span<RequestRecord>(items, count);
+            var destination = new Span<RequestRecord>(scratch, count);
+            for (var pass = 0; pass < 4; pass++)
+            {
+                RadixPass(source, destination, counts, pass);
+                var tmp = source;
+                source = destination;
+                destination = tmp;
+            }
+        }
+        finally
+        {
+            NativeMemory.AlignedFree(scratch);
+            ArrayPool<int>.Shared.Return(counts);
         }
 
-        static bool Before(in RequestRecord left, in RequestRecord right)
+        static void RadixPass(Span<RequestRecord> source, Span<RequestRecord> destination, int[] counts, int pass)
         {
-            if (left.Entity != right.Entity) return left.Entity < right.Entity;
-            if (left.Slot != right.Slot) return left.Slot < right.Slot;
-            return left.Sequence < right.Sequence;
+            Array.Clear(counts, 0, counts.Length);
+            for (var i = 0; i < source.Length; i++) counts[Digit(source[i], pass)]++;
+            var offset = 0;
+            for (var bucket = 0; bucket < 65536; bucket++)
+            {
+                var bucketCount = counts[bucket];
+                counts[bucket] = offset;
+                offset += bucketCount;
+            }
+            for (var i = 0; i < source.Length; i++)
+            {
+                var digit = Digit(source[i], pass);
+                destination[counts[digit]++] = source[i];
+            }
+        }
+
+        static int Digit(RequestRecord item, int pass)
+        {
+            var key = pass < 2 ? (uint)item.Slot ^ 0x80000000u : (uint)item.Entity ^ 0x80000000u;
+            return (int)((key >> ((pass % 2) * 16)) & 0xFFFFu);
         }
     }
 

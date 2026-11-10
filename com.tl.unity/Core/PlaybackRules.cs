@@ -19,6 +19,18 @@ public enum AdvanceResult : byte
     Removed,
     Unknown,
 }
+internal enum PlaybackMotion : byte
+{
+    Stayed,
+    Stepped,
+    Wrapped,
+    Handed,
+    Parked,
+    Held,
+    Removed,
+    Unknown,
+}
+
 
 public static unsafe class PlaybackRules
 {
@@ -272,67 +284,98 @@ public static unsafe class PlaybackRules
         return false;
     }
 
-    public static AdvanceResult Advance(ref Playback slot, LibraryTimeline* timelines, int timelineCount, bool forward)
+    internal static PlaybackMotion Move(ref Playback slot, LibraryTimeline* timelines, int timelineCount, bool forward)
     {
         var flags = slot.Flags;
         if ((flags & PlaybackFlags.ReenterPending) != 0)
         {
             slot.Flags = flags & ~(PlaybackFlags.ReenterPending | PlaybackFlags.Began | PlaybackFlags.StartPending);
-            return AdvanceResult.Kept;
+            return PlaybackMotion.Stayed;
         }
         if (IsParked(flags))
         {
-            if (!Unpark(ref slot, forward)) return AdvanceResult.Kept;
+            if (!Unpark(ref slot, forward)) return PlaybackMotion.Stayed;
             flags = slot.Flags;
         }
         if ((flags & (PlaybackFlags.Ended | PlaybackFlags.Paused)) != 0)
         {
             slot.Flags = flags & ~PlaybackFlags.StartPending;
-            return AdvanceResult.Kept;
+            return PlaybackMotion.Stayed;
         }
-        if (slot.Timeline == 0 || (uint)(slot.Timeline - 1) >= (uint)timelineCount) return AdvanceResult.Unknown;
+        if (slot.Timeline == 0 || (uint)(slot.Timeline - 1) >= (uint)timelineCount) return PlaybackMotion.Unknown;
         var tl = timelines + (slot.Timeline - 1);
         var duration = tl->Duration;
         if (duration == 0)
         {
             slot.Flags = (flags | PlaybackFlags.Ended) & ~PlaybackFlags.StartPending;
-            return AdvanceResult.Kept;
+            return PlaybackMotion.Held;
         }
         var handover = false;
+        var motion = PlaybackMotion.Stepped;
         if (((flags & PlaybackFlags.Reverse) != 0) == forward)
         {
             if (slot.Tick == 0)
             {
-                if (tl->Loop != 0) slot.Tick = (ushort)(duration - 1);
+                if (tl->Loop != 0)
+                {
+                    slot.Tick = (ushort)(duration - 1);
+                    motion = PlaybackMotion.Wrapped;
+                }
                 else if (forward)
                 {
                     slot.Flags = flags | Parked;
-                    return AdvanceResult.Kept;
+                    return PlaybackMotion.Parked;
                 }
-                else if (tl->Hold != 0) slot.Flags = flags | PlaybackFlags.Ended;
-                else return AdvanceResult.Removed;
+                else if (tl->Hold != 0)
+                {
+                    slot.Flags = flags | PlaybackFlags.Ended;
+                    motion = PlaybackMotion.Held;
+                }
+                else return PlaybackMotion.Removed;
             }
-            else slot.Tick--;
+            else
+            {
+                slot.Tick--;
+                motion = PlaybackMotion.Stepped;
+            }
         }
         else if ((uint)slot.Tick + 1u >= duration)
         {
-            if (tl->Loop != 0) slot.Tick = 0;
+            if (tl->Loop != 0)
+            {
+                slot.Tick = 0;
+                motion = PlaybackMotion.Wrapped;
+            }
             else if (tl->Next != 0 && (uint)(tl->Next - 1) < (uint)timelineCount)
             {
                 slot.Timeline = tl->Next;
                 slot.Tick = 0;
                 slot.Channel = (byte)timelines[tl->Next - 1].Channel;
                 handover = true;
+                motion = PlaybackMotion.Handed;
             }
             else if (tl->Hold != 0)
             {
                 slot.Tick = (ushort)(duration - 1);
                 slot.Flags = flags | PlaybackFlags.Ended;
+                motion = PlaybackMotion.Held;
             }
-            else return AdvanceResult.Removed;
+            else return PlaybackMotion.Removed;
         }
-        else slot.Tick++;
+        else
+        {
+            slot.Tick++;
+            motion = PlaybackMotion.Stepped;
+        }
         slot.Flags = handover ? slot.Flags | PlaybackFlags.StartPending : slot.Flags & ~PlaybackFlags.StartPending;
+        return motion;
+    }
+
+    public static AdvanceResult Advance(ref Playback slot, LibraryTimeline* timelines, int timelineCount, bool forward)
+    {
+        var motion = Move(ref slot, timelines, timelineCount, forward);
+        if (motion == PlaybackMotion.Removed) return AdvanceResult.Removed;
+        if (motion == PlaybackMotion.Unknown) return AdvanceResult.Unknown;
         return AdvanceResult.Kept;
     }
 

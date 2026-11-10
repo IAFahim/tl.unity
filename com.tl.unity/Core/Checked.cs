@@ -8,6 +8,14 @@ namespace Tl;
 
 internal static class Checked
 {
+#if TL_CHECKED
+    internal static long VisitedEntities;
+
+    internal static void ResetVisited() => VisitedEntities = 0;
+
+    [MethodImpl(AggressiveInlining)]
+    internal static void Visited() => VisitedEntities++;
+#endif
     [Conditional("TL_CHECKED")]
     [MethodImpl(AggressiveInlining)]
     internal static void Live(bool disposed)

@@ -191,51 +191,40 @@ public static unsafe class KindRules
             Reenter(in t, ref rows, row, in *s, i);
             return true;
         }
-        if ((s->Flags & PlaybackFlags.Paused) != 0) return true;
+        if ((s->Flags & PlaybackFlags.Paused) != 0) return false;
         if ((s->Flags & PlaybackFlags.Ended) != 0) return false;
-        var dir = (s->Flags & PlaybackFlags.Reverse) != 0 ? -stepDir : stepDir;
-        var id = s->Timeline;
-        var tl = t.Timelines + (id - 1);
-        var duration = (int)tl->Duration;
-        var tick = s->Tick + dir;
-        if ((uint)tick < (uint)duration)
+        var before = *s;
+        var motion = PlaybackRules.Move(ref *s, t.Timelines, t.TimelineCount, stepDir > 0);
+        var dir = (before.Flags & PlaybackFlags.Reverse) != 0 ? -stepDir : stepDir;
+        switch (motion)
         {
-            s->Tick = (ushort)tick;
-            Events(in t, ref rows, row, i, id, tick, dir);
-            return true;
+            case PlaybackMotion.Stepped:
+                Events(in t, ref rows, row, i, before.Timeline, s->Tick, dir);
+                return true;
+            case PlaybackMotion.Wrapped:
+                WrapRemove(in t, ref rows, row, i, before.Timeline, dir);
+                Events(in t, ref rows, row, i, before.Timeline, s->Tick, dir);
+                return true;
+            case PlaybackMotion.Handed:
+                RemoveActiveSpans(in t, ref rows, row, i, &before);
+                Begin(in t, ref rows, row, i, s, stepDir);
+                return true;
+            case PlaybackMotion.Parked:
+                RemoveActiveSpans(in t, ref rows, row, i, &before);
+                return true;
+            case PlaybackMotion.Held:
+                RemoveActiveSpans(in t, ref rows, row, i, &before);
+                return false;
+            case PlaybackMotion.Removed:
+                RemoveActiveSpans(in t, ref rows, row, i, &before);
+                *s = default;
+                return false;
+            case PlaybackMotion.Unknown:
+                *s = default;
+                return false;
+            default:
+                return false;
         }
-        if (tl->Loop != 0)
-        {
-            WrapRemove(in t, ref rows, row, i, id, dir);
-            tick = dir > 0 ? 0 : duration - 1;
-            s->Tick = (ushort)tick;
-            Events(in t, ref rows, row, i, id, tick, dir);
-            return true;
-        }
-        RemoveActiveSpans(in t, ref rows, row, i, s);
-        if (tick < 0 && stepDir > 0)
-        {
-            s->Tick = 0;
-            s->Flags |= PlaybackRules.Parked;
-            return true;
-        }
-        if (tl->Next != 0)
-        {
-            var next = t.Timelines + (tl->Next - 1);
-            s->Timeline = tl->Next;
-            s->Channel = (byte)next->Channel;
-            s->Tick = (ushort)(dir > 0 ? 0 : next->Duration - 1);
-            Begin(in t, ref rows, row, i, s, stepDir);
-            return true;
-        }
-        if (tl->Hold != 0)
-        {
-            s->Tick = (ushort)(duration - 1);
-            s->Flags |= PlaybackFlags.Ended;
-            return false;
-        }
-        *s = default;
-        return false;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

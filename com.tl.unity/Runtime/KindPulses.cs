@@ -68,7 +68,7 @@ namespace Tl.Unity
         }
     }
 
-    [BurstCompile]
+    [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
     public unsafe struct KindFreeJob : IJob
     {
         [NativeDisableUnsafePtrRestriction] public void* Pointer;

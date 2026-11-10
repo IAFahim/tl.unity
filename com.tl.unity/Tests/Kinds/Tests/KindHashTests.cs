@@ -1,7 +1,13 @@
 using NUnit.Framework;
+using Tl.Unity;
+using Unity.Entities;
 
 namespace KindGame
 {
+    public struct SplitMarker : IComponentData
+    {
+    }
+
     [TestFixture]
     public class KindHashTests
     {
@@ -44,6 +50,20 @@ namespace KindGame
                 Assert.AreEqual(0, game.Cues(0).Length);
                 game.Step();
                 Assert.AreEqual(0, game.Cues(1).Length);
+            }
+        }
+
+        [Test]
+        public void EventsHashIsIndependentOfChunkPartitioning()
+        {
+            using (var game = new KindWorld(KindScript.Rows, true))
+            {
+                game.Entities.AddComponent<SplitMarker>(game.Rows[2]);
+                game.Entities.AddComponent<SplitMarker>(game.Rows[3]);
+                var hash = KindScript.PlayEvents(game, KindScript.Steps);
+                Assert.AreEqual(KindScript.EventsPinned, hash);
+                Assert.AreEqual(0, game.Tick.DroppedPulses);
+                Assert.AreEqual(0, game.Tick.DroppedStarts);
             }
         }
     }
