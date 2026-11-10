@@ -16,6 +16,7 @@ namespace KindGame
         public delegate float JumpFn(float scale, float velocity, float power);
         public delegate int HitFn(int amount, bool reverse);
         public delegate int StatPulseFn(int delta, bool reverse);
+        public delegate int MarkerFn(int delta);
         public delegate float FmaChainFn(float a, float b, float c, float d);
         public delegate float BlendFn(float tick, float start, float span);
         public delegate void WalkFn(in Frame<WalkTrack, WalkClip> frame, in WalkStat stat, in Target target, in AnchorLookup anchors, out Speed speed);
