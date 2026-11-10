@@ -100,6 +100,13 @@ namespace KindGame
         }
 
         [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
+        public static void WalkBurst(in Frame<WalkTrack, WalkClip> frame, in WalkStat stat, in Target target, in AnchorLookup anchors, out Speed speed)
+        {
+            speed = Walk.Evaluate(in frame, in stat, in target, in anchors);
+        }
+
+
+        [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
         public static float FmaChainBurst(float a, float b, float c, float d)
         {
             return a * b + c - d / (a + 1f) + (a - b) * (c + d);
