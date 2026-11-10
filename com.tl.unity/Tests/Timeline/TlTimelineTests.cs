@@ -208,6 +208,47 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
+        public void AKindsIdleRunsOnTicksNoClipFeedsItAndAKindWithoutOneKeepsItsLastValue()
+        {
+            var timeline = Timeline("DoubleJump");
+            var track = timeline.CreateTrack<TlTrack>(null, "DoubleJump");
+            track.Template = new AutoKinds_DoubleJumpClip_TlData();
+            var windowClip = track.CreateClip<TlClip>();
+            windowClip.start = 0.5;
+            windowClip.duration = 0.5;
+            ((AutoKinds_DoubleJumpClip_TlData)((TlClip)windowClip.asset).Data).Allowed = true;
+            using var baked = new Baked(Director("Player", timeline).gameObject);
+            var entities = baked.World.EntityManager;
+            var player = baked.Single<TlTimelineSet>();
+            var live = new LiveWorld(baked.World, false, typeof(TlKindSystem<>).MakeGenericType(Type.GetType("Tl.Generated.TlAuto_Tl_Unity_AutoKinds_Jobs, Tl.Unity.AutoKinds", true)));
+            const int ticks = 120;
+            var canDoubleJumpWithIdle = new bool[ticks];
+            var canDoubleJumpWithoutIdle = new bool[ticks];
+            for (var tick = 0; tick < ticks; tick++)
+            {
+                live.Step(1);
+                var abilities = entities.GetComponentData<AutoKinds.Abilities>(player);
+                canDoubleJumpWithIdle[tick] = abilities.CanDoubleJumpWithIdle;
+                canDoubleJumpWithoutIdle[tick] = abilities.CanDoubleJumpWithoutIdle;
+            }
+            foreach (var tick in new[] { 0, 29 })
+            {
+                Assert.IsFalse(canDoubleJumpWithIdle[tick], "with Idle, tick " + tick + " is before the window");
+                Assert.IsFalse(canDoubleJumpWithoutIdle[tick], "without Idle, tick " + tick + " is before the window");
+            }
+            foreach (var tick in new[] { 30, 45, 59 })
+            {
+                Assert.IsTrue(canDoubleJumpWithIdle[tick], "with Idle, tick " + tick + " is inside the window");
+                Assert.IsTrue(canDoubleJumpWithoutIdle[tick], "without Idle, tick " + tick + " is inside the window");
+            }
+            foreach (var tick in new[] { 60, 61, 90, 119 })
+            {
+                Assert.IsFalse(canDoubleJumpWithIdle[tick], "with Idle, tick " + tick + " is after the window: Idle switched the flag off");
+                Assert.IsTrue(canDoubleJumpWithoutIdle[tick], "without Idle, tick " + tick + " keeps the last clip value");
+            }
+        }
+
+        [Test]
         public void ADirectorWithoutTlTracksBakesNothingOfTl()
         {
             var timeline = Timeline("Plain");

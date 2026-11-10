@@ -68,4 +68,41 @@ namespace AutoKinds
 
         public static void OnClipStart(in TlFrame<ChimeClip> frame, ref Events<Ding> dings) => dings.Raise(new Ding { Rings = frame.Clip.Rings });
     }
+
+    [TlState]
+    public partial struct Abilities
+    {
+        public bool CanDoubleJumpWithIdle;
+        public bool CanDoubleJumpWithoutIdle;
+    }
+
+    [TlClip("AutoKinds/DoubleJumpWindow")]
+    public struct DoubleJumpClip
+    {
+        public bool Allowed;
+    }
+
+    [TlKind]
+    public struct DoubleJumpWithIdleKind
+    {
+        public static void Combine(ref bool total, in bool next) => total |= next;
+        public static void Apply(in bool allowed, ref Abilities player) => player.CanDoubleJumpWithIdle = allowed;
+        public static void Idle(ref Abilities player) => player.CanDoubleJumpWithIdle = false;
+    }
+
+    [TlKind]
+    public struct DoubleJumpWithoutIdleKind
+    {
+        public static void Combine(ref bool total, in bool next) => total |= next;
+        public static void Apply(in bool allowed, ref Abilities player) => player.CanDoubleJumpWithoutIdle = allowed;
+    }
+
+    public struct DoubleJumpTrack : ITlTrack<DoubleJumpClip>
+    {
+        [Feeds(typeof(DoubleJumpWithIdleKind))]
+        public static bool WhetherDoubleJumpIsAllowedWithIdle(in TlFrame<DoubleJumpClip> frame) => frame.Clip.Allowed;
+
+        [Feeds(typeof(DoubleJumpWithoutIdleKind))]
+        public static bool WhetherDoubleJumpIsAllowedWithoutIdle(in TlFrame<DoubleJumpClip> frame) => frame.Clip.Allowed;
+    }
 }

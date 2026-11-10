@@ -54,6 +54,8 @@ namespace Tl.Gen.Unity
         static List<ConsumerParam> KindParams(SystemAssignment assignment, KindDecl kind)
         {
             var parameters = new List<ConsumerParam>(kind.ApplyParams);
+            if (kind.IdleParams is not null)
+                parameters.AddRange(kind.IdleParams);
             foreach (var consumer in assignment.Consumers)
                 foreach (var feeder in consumer.Feeders)
                     if (feeder.KindName == kind.Id)
@@ -105,7 +107,11 @@ namespace Tl.Gen.Unity
                     if (method.Kind == ConsumerMethodKind.Feeder)
                         parameters.AddRange(method.Params);
             foreach (var kind in kinds)
+            {
                 parameters.AddRange(kind.Decl.ApplyParams);
+                if (kind.Decl.IdleParams is not null)
+                    parameters.AddRange(kind.Decl.IdleParams);
+            }
             foreach (var parameter in parameters)
             {
                 if (parameter.Kind != ConsumerParamKind.Column && parameter.Kind != ConsumerParamKind.ColumnReadOnly && parameter.Kind != ConsumerParamKind.Context)
@@ -234,9 +240,14 @@ namespace Tl.Gen.Unity
                 W(writer, "var __l" + k + " = false;");
                 W(writer, "if (chunk.Has(ref " + name + "EntryHandle))");
                 W(writer, "{");
-                W(writer, "var __a" + k + " = chunk.GetEnableableBits(ref " + name + "ActiveHandle);");
-                W(writer, "var __e" + k + " = chunk.GetEnableableBits(ref " + name + "EnabledHandle);");
-                W(writer, "__l" + k + " = ((__a" + k + ".ULong0 & __e" + k + ".ULong0) | (__a" + k + ".ULong1 & __e" + k + ".ULong1)) != 0;");
+                if (kinds[k].Decl.IdleParams is not null)
+                    W(writer, "__l" + k + " = true;");
+                else
+                {
+                    W(writer, "var __a" + k + " = chunk.GetEnableableBits(ref " + name + "ActiveHandle);");
+                    W(writer, "var __e" + k + " = chunk.GetEnableableBits(ref " + name + "EnabledHandle);");
+                    W(writer, "__l" + k + " = ((__a" + k + ".ULong0 & __e" + k + ".ULong0) | (__a" + k + ".ULong1 & __e" + k + ".ULong1)) != 0;");
+                }
                 W(writer, "}");
                 live.Append(k == 0 ? "" : " && ").Append("!__l" + k);
             }
@@ -511,6 +522,27 @@ namespace Tl.Gen.Unity
             W(writer, "}");
             W(writer, "if (__buf.Capacity > " + info.Capacity + " && __buf.Length <= " + info.Capacity + ") __buf.TrimExcess();");
             W(writer, "}");
+            W(writer, "}");
+            if (kind.IdleParams is not null)
+                EmitIdle(writer, shape, kind, info);
+            W(writer, "}");
+        }
+
+        static void EmitIdle(StringBuilder writer, Shape shape, KindDecl kind, UnityKindInfo info)
+        {
+            var idleArgs = CallArgs(shape, kind.IdleParams!, "", "__row", "");
+            W(writer, "var __ia = chunk.GetEnableableBits(ref " + info.Name + "ActiveHandle);");
+            W(writer, "var __ie = chunk.GetEnableableBits(ref " + info.Name + "EnabledHandle);");
+            W(writer, "for (var __iw = 0; __iw < 2; __iw++)");
+            W(writer, "{");
+            W(writer, "if (__iw == 1 && __count <= 64) break;");
+            W(writer, "var __ib = __iw == 0 ? ~__ia.ULong0 & __ie.ULong0 : ~__ia.ULong1 & __ie.ULong1;");
+            W(writer, "while (__ib != 0)");
+            W(writer, "{");
+            W(writer, "var __row = (__iw << 6) + (int)global::Unity.Mathematics.math.tzcnt(__ib);");
+            W(writer, "__ib &= __ib - 1;");
+            W(writer, "if (__row >= __count) break;");
+            W(writer, kind.TypeName + ".Idle(" + idleArgs + ");");
             W(writer, "}");
             W(writer, "}");
         }
