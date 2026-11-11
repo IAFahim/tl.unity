@@ -1,29 +1,14 @@
-using System.Collections.Generic;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 
-[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Tl.Unity.Tests")]
-
 namespace Tl.Unity
 {
     [UpdateInGroup(typeof(TlSimulationGroup))]
     public partial class TimelineSimulationGroup : ComponentSystemGroup
     {
-    }
-
-    struct RequestOrder : IComparer<global::Tl.RequestRecord>
-    {
-        public int Compare(global::Tl.RequestRecord left, global::Tl.RequestRecord right)
-        {
-            if (left.Entity != right.Entity)
-                return left.Entity < right.Entity ? -1 : 1;
-            if (left.Slot != right.Slot)
-                return left.Slot < right.Slot ? -1 : 1;
-            return left.Sequence < right.Sequence ? -1 : left.Sequence > right.Sequence ? 1 : 0;
-        }
     }
 
     [BurstCompile]
@@ -59,7 +44,8 @@ namespace Tl.Unity
                 for (var r = 0; r < requests.Length; r++)
                     gathered.Add(new global::Tl.RequestRecord(entities[e].Index, requests[r].Slot, requests[r].Timeline, requests[r].At, requests[r].Op, _sequence++));
             }
-            NativeSortExtension.Sort((global::Tl.RequestRecord*)gathered.GetUnsafePtr(), gathered.Length, new RequestOrder());
+            var scratch = new NativeArray<global::Tl.RequestRecord>(gathered.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+            global::Tl.RequestQueue.Sort((global::Tl.RequestRecord*)gathered.GetUnsafePtr(), gathered.Length, (global::Tl.RequestRecord*)scratch.GetUnsafePtr());
             var closed = new NativeList<ClosedPlayback>(gathered.Length, Allocator.Temp);
             for (var i = 0; i < gathered.Length; i++)
             {

@@ -698,23 +698,7 @@ if (__tick == __def->WindowStart && (__pb->Flags & global::Tl.PlaybackFlags.Reen
 }
 if (__has0 && __eb0.Dropped != 0) __cap0 = __o0.Capacity * 2;
 if ((__has0 && __eb0.Dropped != 0)) continue;
-if (__has0)
-{
-var __count0 = __eb0.Count;
-var __sp0 = (global::Tl.EventRecord<global::KindGame.Cue>*)__o0.GetUnsafePtr();
-for (var __sa0 = 1; __sa0 < __count0; __sa0++)
-{
-var __it0 = __sp0[__sa0];
-var __sb0 = __sa0 - 1;
-while (__sb0 >= 0 && (__sp0[__sb0].Entity.Index > __it0.Entity.Index || __sp0[__sb0].Entity.Index == __it0.Entity.Index && (__sp0[__sb0].Slot > __it0.Slot || __sp0[__sb0].Slot == __it0.Slot && __sp0[__sb0].Sequence > __it0.Sequence)))
-{
-__sp0[__sb0 + 1] = __sp0[__sb0];
-__sb0--;
-}
-__sp0[__sb0 + 1] = __it0;
-}
-__o0.ResizeUninitialized(__count0);
-}
+if (__has0) { var __count0 = __eb0.Count; __eb0.Drain(); __o0.ResizeUninitialized(__count0); }
 break;
 }
 }

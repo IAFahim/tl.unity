@@ -709,29 +709,7 @@ namespace Tl.Gen.Unity
             }
             W(writer, "if (" + retry + ") continue;");
             for (var e = 0; e < events.Count; e++)
-            {
-                var type = events[e].TypeName;
-                var p = "__sp" + e;
-                var item = "__it" + e;
-                var prev = "__sb" + e;
-                W(writer, "if (__has" + e + ")");
-                W(writer, "{");
-                W(writer, "var __count" + e + " = __eb" + e + ".Count;");
-                W(writer, "var " + p + " = (global::Tl.EventRecord<" + type + ">*)__o" + e + ".GetUnsafePtr();");
-                W(writer, "for (var __sa" + e + " = 1; __sa" + e + " < __count" + e + "; __sa" + e + "++)");
-                W(writer, "{");
-                W(writer, "var " + item + " = " + p + "[__sa" + e + "];");
-                W(writer, "var " + prev + " = __sa" + e + " - 1;");
-                W(writer, "while (" + prev + " >= 0 && (" + p + "[" + prev + "].Entity.Index > " + item + ".Entity.Index || " + p + "[" + prev + "].Entity.Index == " + item + ".Entity.Index && (" + p + "[" + prev + "].Slot > " + item + ".Slot || " + p + "[" + prev + "].Slot == " + item + ".Slot && " + p + "[" + prev + "].Sequence > " + item + ".Sequence)))");
-                W(writer, "{");
-                W(writer, p + "[" + prev + " + 1] = " + p + "[" + prev + "];");
-                W(writer, prev + "--;");
-                W(writer, "}");
-                W(writer, p + "[" + prev + " + 1] = " + item + ";");
-                W(writer, "}");
-                W(writer, "__o" + e + ".ResizeUninitialized(__count" + e + ");");
-                W(writer, "}");
-            }
+                W(writer, "if (__has" + e + ") { var __count" + e + " = __eb" + e + ".Count; __eb" + e + ".Drain(); __o" + e + ".ResizeUninitialized(__count" + e + "); }");
             W(writer, "break;");
             W(writer, "}");
             W(writer, "}");
