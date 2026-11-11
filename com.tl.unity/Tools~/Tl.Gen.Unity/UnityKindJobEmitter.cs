@@ -423,7 +423,7 @@ namespace Tl.Gen.Unity
                 W(writer, "}");
                 W(writer, "else");
                 W(writer, "{");
-                W(writer, "var __pb = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr() + __en->Slot;");
+                W(writer, "var __pb = __pbase + __en->Slot;");
                 W(writer, "if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;");
                 W(writer, "var __tl = Index.Timelines + (__en->Timeline - 1);");
                 W(writer, "ushort __tick = __pb->Tick;");
@@ -488,6 +488,7 @@ namespace Tl.Gen.Unity
                 if (!kind.Each)
                     W(writer, "if (__has) " + kind.TypeName + ".Apply(in __total" + tail + ");");
             }
+            W(writer, "var __pbase = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr();");
             W(writer, "var __sampled = global::Tl.KindRules.IsSampled(__data, __len);");
             W(writer, "if (!__sampled)");
             W(writer, "{");
@@ -495,7 +496,6 @@ namespace Tl.Gen.Unity
             W(writer, "}");
             W(writer, "else");
             W(writer, "{");
-            W(writer, "var __pbase = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr();");
             W(writer, "var __sk = global::Tl.KindRules.SampleDepth(__data, __len, __stride, __pbase);");
             W(writer, "for (var __sj = 0; __sj < __sk; __sj++)");
             W(writer, "{");
