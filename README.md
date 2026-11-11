@@ -870,7 +870,7 @@ Honest list. Some of these are design decisions still to be made.
 - **Per-tick sums come back one tick short** on rewind (chapter 10). Pulses are exact.
 - **Unity event methods above 1x** (chapter 10).
 - **Kind `Order` across different groups or assemblies, and `Order` in Unity,** are not covered by tests here.
-- **Version:** preview. Tested on Unity 7000.0.0a16, Entities 7.0.0, URP, Windows. The Linux/macOS installer has not been run. IL2CPP and CoreCLR Windows players were run for the scenes and sample listed in chapter 11.
+- **Version:** preview. Tested on Unity 7000.0.0a16, Entities 7.0.0, URP, Windows. The EditMode and PlayMode suites also run on Linux in CI (the runner is described in `docs/CI-RUNNER.md`: who hosts it and how to restart it). The Linux and macOS players and the macOS editor have not been run. IL2CPP and CoreCLR Windows players were run for the scenes and sample listed in chapter 11.
 - **Install** is by git URL (`#main` moves). No tagged release exists yet.
 - **Floats:** the Motion pack's float results matched bit for bit between .NET and Burst in tests. Other CPUs and compilers are untested.
 
