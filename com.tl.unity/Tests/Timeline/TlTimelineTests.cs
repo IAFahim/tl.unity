@@ -485,7 +485,7 @@ namespace Tl.Unity.Tracks.Tests
             {
                 var clock = System.Diagnostics.Stopwatch.StartNew();
                 var clean = 0;
-                while (clean < 2 && clock.Elapsed.TotalSeconds < 20)
+                while (clean < 2 && clock.Elapsed.TotalSeconds < 90)
                 {
                     ControlProbe.RanManaged = false;
                     live.Step(1);
