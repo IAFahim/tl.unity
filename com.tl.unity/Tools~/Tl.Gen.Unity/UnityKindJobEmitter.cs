@@ -455,8 +455,8 @@ namespace Tl.Gen.Unity
                     }
                     else
                     {
-                        W(writer, "var __def = Index.StepOf(__en->Timeline, __en->Step, __tick);");
-                        W(writer, "if (__def == null || __tick < __def->WindowStart || __tick >= __def->WindowEnd) break;");
+                        W(writer, "var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);");
+                        W(writer, "if (__def == null) break;");
                         EmitMaterialize(writer, consumer, assignmentIndex, c);
                         if (FoldOf(consumer) != null)
                             EmitFeeds(writer, consumer, c);
