@@ -91,14 +91,14 @@ namespace Tl
             _markersCapacity = 0;
         }
 
-        static void* TrackAlloc(nuint size)
+        internal static void* TrackAlloc(nuint size)
         {
             var p = NativeMemory.AlignedAlloc(size, 64);
             Interlocked.Increment(ref NativeBlockCount);
             return p;
         }
 
-        static void TrackFree(void* p)
+        internal static void TrackFree(void* p)
         {
             if (p == null) return;
             NativeMemory.AlignedFree(p);
@@ -135,6 +135,7 @@ namespace Tl
         unsafe void Free()
         {
             ClearMarkers();
+            if (_systems != null) _systems.FreeSteps();
             if (_ownsView)
             {
                 if (_view.Timelines != null)
