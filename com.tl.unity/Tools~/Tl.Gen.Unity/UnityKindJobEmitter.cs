@@ -195,7 +195,12 @@ namespace Tl.Gen.Unity
             return args.ToString();
         }
 
-        internal static string Emit(UnitySystemModel model, SystemAssignment assignment, int assignmentIndex, IReadOnlyList<UnityKindInfo> kinds, ISet<string> tlFrames)
+        internal static bool IsTlFrame(ConsumerMethod method)
+            => method.Params.Count > 0
+                && method.Params[0].Kind == ConsumerParamKind.Frame
+                && method.Params[0].TypeName.StartsWith("global::Tl.TlFrame<", StringComparison.Ordinal);
+
+        internal static string Emit(UnitySystemModel model, SystemAssignment assignment, int assignmentIndex, IReadOnlyList<UnityKindInfo> kinds)
         {
             var ns = model.Namespace.StartsWith("global::") ? model.Namespace.Substring(8) : model.Namespace;
             var shape = ShapeOf(model, assignment, kinds);
@@ -281,9 +286,9 @@ namespace Tl.Gen.Unity
             }
             W(writer, "}");
             for (var k = 0; k < kinds.Count; k++)
-                EmitKind(writer, shape, assignment, assignmentIndex, kinds[k], k, tlFrames);
+                EmitKind(writer, shape, assignment, assignmentIndex, kinds[k], k);
             if (events.Count != 0)
-                EmitEvents(writer, events, eventConsumers, assignmentIndex, tlFrames);
+                EmitEvents(writer, events, eventConsumers, assignmentIndex);
             W(writer, "}");
             EmitEntry(writer, model, events, kinds);
             W(writer, "}");
@@ -305,7 +310,7 @@ namespace Tl.Gen.Unity
                 handles.Add((kind.Name + "EnabledHandle", "ComponentTypeHandle<" + kind.Enabled + ">", "GetComponentTypeHandle<" + kind.Enabled + ">", true));
             }
             var name = model.SystemTypeName;
-            W(writer, (model.Namespace == NewStyle.AutoNamespace ? "internal" : "public") + " static partial class TimelineJobs");
+            W(writer, (model.Namespace == TlGenUnityGenerator.AutoNamespace ? "internal" : "public") + " static partial class TimelineJobs");
             W(writer, "{");
             W(writer, "public struct " + name);
             W(writer, "{");
@@ -350,7 +355,7 @@ namespace Tl.Gen.Unity
             W(writer, "}");
         }
 
-        static void EmitKind(StringBuilder writer, Shape shape, SystemAssignment assignment, int assignmentIndex, UnityKindInfo info, int ordinal, ISet<string> tlFrames)
+        static void EmitKind(StringBuilder writer, Shape shape, SystemAssignment assignment, int assignmentIndex, UnityKindInfo info, int ordinal)
         {
             var kind = info.Decl;
             var feeders = new List<(int consumer, FeederDecl feeder)>();
@@ -456,7 +461,7 @@ namespace Tl.Gen.Unity
                         if (FoldOf(consumer) != null)
                             EmitFeeds(writer, consumer, c);
                         var frameVar = "__f" + c;
-                        if (tlFrames.Contains(NewStyle.FeederKey(consumer.ConsumerTypeName, feeder.MethodName)))
+                        if (IsTlFrame(feeder.Method))
                         {
                             frameVar = "__tf" + c;
                             W(writer, "var " + frameVar + " = new global::Tl.TlFrame<" + consumer.ClipTypeName + ">(in __f" + c + ");");
@@ -573,9 +578,9 @@ namespace Tl.Gen.Unity
             return null;
         }
 
-        static string EventArgs(IReadOnlyList<UnityContext> events, ConsumerMethod method, int index, SystemConsumer consumer, ISet<string> tlFrames)
+        static string EventArgs(IReadOnlyList<UnityContext> events, ConsumerMethod method, int index, SystemConsumer consumer)
         {
-            var args = new StringBuilder(tlFrames.Contains(NewStyle.FeederKey(consumer.ConsumerTypeName, method.Kind.ToString())) ? "new global::Tl.TlFrame<" + consumer.ClipTypeName + ">(in __f" + index + ")" : "in __f" + index);
+            var args = new StringBuilder(IsTlFrame(method) ? "new global::Tl.TlFrame<" + consumer.ClipTypeName + ">(in __f" + index + ")" : "in __f" + index);
             for (var p = 1; p < method.Params.Count; p++)
             {
                 var element = UnityKindPlan.EventElement(method.Params[p].TypeName);
@@ -588,7 +593,7 @@ namespace Tl.Gen.Unity
             return args.ToString();
         }
 
-        static void EmitEventSteps(StringBuilder writer, IReadOnlyList<UnityContext> events, List<(int index, SystemConsumer consumer)> consumers, int assignment, bool closing, ISet<string> tlFrames)
+        static void EmitEventSteps(StringBuilder writer, IReadOnlyList<UnityContext> events, List<(int index, SystemConsumer consumer)> consumers, int assignment, bool closing)
         {
             W(writer, "for (var __i = 0; __i < __stage->StepCount; __i++)");
             W(writer, "{");
@@ -605,15 +610,15 @@ namespace Tl.Gen.Unity
                 W(writer, "{");
                 EmitMaterialize(writer, consumer, assignment, index);
                 if (closing)
-                    W(writer, consumer.ConsumerTypeName + ".OnClipEnd(" + EventArgs(events, end!, index, consumer, tlFrames) + ");");
+                    W(writer, consumer.ConsumerTypeName + ".OnClipEnd(" + EventArgs(events, end!, index, consumer) + ");");
                 else
                 {
                     if (active != null)
-                        W(writer, consumer.ConsumerTypeName + ".ExecuteActive(" + EventArgs(events, active, index, consumer, tlFrames) + ");");
+                        W(writer, consumer.ConsumerTypeName + ".ExecuteActive(" + EventArgs(events, active, index, consumer) + ");");
                     if (start != null)
-                        W(writer, "if (__tick == __def->WindowStart && (__pb->Flags & global::Tl.PlaybackFlags.ReenterPending) == 0) " + consumer.ConsumerTypeName + ".OnClipStart(" + EventArgs(events, start, index, consumer, tlFrames) + ");");
+                        W(writer, "if (__tick == __def->WindowStart && (__pb->Flags & global::Tl.PlaybackFlags.ReenterPending) == 0) " + consumer.ConsumerTypeName + ".OnClipStart(" + EventArgs(events, start, index, consumer) + ");");
                     if (end != null)
-                        W(writer, "if (__tick == __def->WindowEnd - 1 && (__pb->Flags & global::Tl.PlaybackFlags.ReenterPending) == 0) " + consumer.ConsumerTypeName + ".OnClipEnd(" + EventArgs(events, end, index, consumer, tlFrames) + ");");
+                        W(writer, "if (__tick == __def->WindowEnd - 1 && (__pb->Flags & global::Tl.PlaybackFlags.ReenterPending) == 0) " + consumer.ConsumerTypeName + ".OnClipEnd(" + EventArgs(events, end, index, consumer) + ");");
                 }
                 W(writer, "}");
             }
@@ -651,7 +656,7 @@ namespace Tl.Gen.Unity
                 W(writer, "__eb" + e + ".Bind(0, __s);");
         }
 
-        static void EmitEvents(StringBuilder writer, IReadOnlyList<UnityContext> events, List<(int index, SystemConsumer consumer)> consumers, int assignment, ISet<string> tlFrames)
+        static void EmitEvents(StringBuilder writer, IReadOnlyList<UnityContext> events, List<(int index, SystemConsumer consumer)> consumers, int assignment)
         {
             var closes = false;
             foreach (var (_, consumer) in consumers)
@@ -690,11 +695,11 @@ namespace Tl.Gen.Unity
             if (closes)
             {
                 EmitSlotHeader(writer, events, true);
-                EmitEventSteps(writer, events, consumers, assignment, true, tlFrames);
+                EmitEventSteps(writer, events, consumers, assignment, true);
                 W(writer, "}");
             }
             EmitSlotHeader(writer, events, false);
-            EmitEventSteps(writer, events, consumers, assignment, false, tlFrames);
+            EmitEventSteps(writer, events, consumers, assignment, false);
             W(writer, "}");
             var retry = new StringBuilder();
             for (var e = 0; e < events.Count; e++)
@@ -704,7 +709,29 @@ namespace Tl.Gen.Unity
             }
             W(writer, "if (" + retry + ") continue;");
             for (var e = 0; e < events.Count; e++)
-                W(writer, "if (__has" + e + ") { var __count" + e + " = __eb" + e + ".Count; __eb" + e + ".Drain(); __o" + e + ".ResizeUninitialized(__count" + e + "); }");
+            {
+                var type = events[e].TypeName;
+                var p = "__sp" + e;
+                var item = "__it" + e;
+                var prev = "__sb" + e;
+                W(writer, "if (__has" + e + ")");
+                W(writer, "{");
+                W(writer, "var __count" + e + " = __eb" + e + ".Count;");
+                W(writer, "var " + p + " = (global::Tl.EventRecord<" + type + ">*)__o" + e + ".GetUnsafePtr();");
+                W(writer, "for (var __sa" + e + " = 1; __sa" + e + " < __count" + e + "; __sa" + e + "++)");
+                W(writer, "{");
+                W(writer, "var " + item + " = " + p + "[__sa" + e + "];");
+                W(writer, "var " + prev + " = __sa" + e + " - 1;");
+                W(writer, "while (" + prev + " >= 0 && (" + p + "[" + prev + "].Entity.Index > " + item + ".Entity.Index || " + p + "[" + prev + "].Entity.Index == " + item + ".Entity.Index && (" + p + "[" + prev + "].Slot > " + item + ".Slot || " + p + "[" + prev + "].Slot == " + item + ".Slot && " + p + "[" + prev + "].Sequence > " + item + ".Sequence)))");
+                W(writer, "{");
+                W(writer, p + "[" + prev + " + 1] = " + p + "[" + prev + "];");
+                W(writer, prev + "--;");
+                W(writer, "}");
+                W(writer, p + "[" + prev + " + 1] = " + item + ";");
+                W(writer, "}");
+                W(writer, "__o" + e + ".ResizeUninitialized(__count" + e + ");");
+                W(writer, "}");
+            }
             W(writer, "break;");
             W(writer, "}");
             W(writer, "}");

@@ -49,8 +49,7 @@ public static unsafe class SystemDispatch
         var key = new FilterKey(system, timeline, stage);
         if (registry.Filters.TryGetValue(key, out var cached)) return cached;
         var built = Build(world._view, timeline, stage, pairKeys);
-        registry.Filters.Add(key, built);
-        return built;
+        return registry.Filters.GetOrAdd(key, built);
     }
 
     static SystemStep[] Build(LibraryView view, ushort timeline, int stage, ReadOnlySpan<ulong> pairKeys)

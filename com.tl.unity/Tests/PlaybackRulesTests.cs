@@ -346,7 +346,7 @@ namespace Tl.Unity.Tests
             items[3] = new global::Tl.RequestRecord(0, 0, 0, 0, global::Tl.RequestOp.Start, 2);
             fixed (global::Tl.RequestRecord* ptr = items)
             {
-                global::Tl.RequestQueue.Sort(ptr, items.Length);
+                NativeSortExtension.Sort(ptr, items.Length, new RequestOrder());
             }
             Assert.AreEqual(0, items[0].Entity);
             Assert.AreEqual(0, items[0].Slot);

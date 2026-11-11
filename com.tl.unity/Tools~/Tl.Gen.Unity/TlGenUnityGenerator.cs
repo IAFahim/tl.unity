@@ -21,6 +21,8 @@ namespace Tl.Gen.Unity
             context.RegisterSourceOutput(combined, static (production, pair) => Generate(production, pair.Left, pair.Right));
         }
 
+        internal const string AutoNamespace = "global::Tl.Generated";
+
         static readonly string[] Markers = { "TimelineSystem", "TimelineKind", "TlKind", "TlClip", "TlState", "Feeds", "Pulse", "ITrack", "ITlTrack", "IMarker" };
 
         static bool Relevant(CSharpCompilation compilation)
@@ -79,14 +81,16 @@ namespace Tl.Gen.Unity
                 var autoEvents = new List<UnityContext>();
                 foreach (var evented in analysis.AutoEvents)
                     autoEvents.Add(new UnityContext(evented.Name, evented.TypeName));
-                auto = new UnitySystemModel(NewStyle.AutoNamespace, analysis.AutoName, columns, new List<UnityContext>(), autoEvents, new List<UnityDiagnostic>(), false);
+                auto = new UnitySystemModel(AutoNamespace, analysis.AutoName, columns, new List<UnityContext>(), autoEvents, new List<UnityDiagnostic>(), false);
                 models.Add(auto);
             }
-            var read = SystemReader.Read(analysis.Compilation);
+            var read = SystemReader.Read(analysis.Compilation, analysis.HasAuto ? AutoSystem(analysis) : null, analysis.Members);
             var assignments = read.Item2;
             var failed = false;
             foreach (var diagnostic in read.Item3)
             {
+                if (diagnostic.Code == "TLGEN107")
+                    continue;
                 if (diagnostic.Code != "TLGEN98")
                     failed = true;
                 context.ReportDiagnostic(Diagnostic.Create(
@@ -155,7 +159,7 @@ namespace Tl.Gen.Unity
                 {
                     var text = own.Count == 0 && !autoEvents
                         ? UnitySystemEmitter.Emit(model)
-                        : UnityKindJobEmitter.Emit(model, assignments[index], index, own, analysis.TlFrameFeeders);
+                        : UnityKindJobEmitter.Emit(model, assignments[index], index, own);
                     context.AddSource(UnitySystemEmitter.FileName(model), SourceText.From(text, System.Text.Encoding.UTF8));
                     if (isAuto)
                         context.AddSource(UnityAutoSystemEmitter.FileName, SourceText.From(UnityAutoSystemEmitter.Emit(model), System.Text.Encoding.UTF8));
@@ -169,9 +173,20 @@ namespace Tl.Gen.Unity
                             Microsoft.CodeAnalysis.Location.None, model.SystemTypeName));
                         continue;
                     }
-                    context.AddSource(UnityFeedJobEmitter.FileName, SourceText.From(UnityFeedJobEmitter.Emit(model, assignments[index], index, fed, analysis.TlFrameFeeders, key), System.Text.Encoding.UTF8));
+                    context.AddSource(UnityFeedJobEmitter.FileName, SourceText.From(UnityFeedJobEmitter.Emit(model, assignments[index], index, fed, key), System.Text.Encoding.UTF8));
                 }
             }
+        }
+
+        static SystemDecl AutoSystem(NewStyleAnalysis analysis)
+        {
+            var fields = new List<SystemField>();
+            foreach (var column in analysis.AutoColumns)
+                fields.Add(new SystemField(column.Name, column.Writable ? "global::System.Span<" + column.TypeName + ">" : "global::System.ReadOnlySpan<" + column.TypeName + ">",
+                    column.Writable ? SystemFieldKind.Column : SystemFieldKind.ColumnReadOnly, column.TypeName));
+            foreach (var property in analysis.AutoEvents)
+                fields.Add(new SystemField(property.Name, "global::Tl.Events<" + property.TypeName + ">", SystemFieldKind.Events, property.TypeName));
+            return new SystemDecl(AutoNamespace + "." + analysis.AutoName, true, SystemReader.StableKey("Tl.Generated." + analysis.AutoName), fields);
         }
 
         static string Sanitize(string name)

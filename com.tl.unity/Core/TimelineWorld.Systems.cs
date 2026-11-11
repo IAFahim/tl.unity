@@ -31,6 +31,8 @@ public sealed partial class TimelineWorld
         kinds.TickPass(forward);
     }
 
+
+
     public unsafe void Advance(PlaybackTable players, bool forward = true)
     {
         if (players is null) throw new ArgumentNullException(nameof(players));
@@ -39,19 +41,56 @@ public sealed partial class TimelineWorld
         var timelines = _view.Timelines;
         if (timelines == null) return;
         var count = _view.TimelineCount;
-        for (var entity = 0; entity < players.EntityCapacity; entity++)
+        AdvanceRange(players, timelines, count, forward, 0, players.PlayingWords);
+        ClosingList.Clear(players.Closing);
+    }
+
+
+    unsafe void AdvanceRange(PlaybackTable players, LibraryTimeline* timelines, int count, bool forward, int firstWord, int endWord)
+    {
+        var playing = players.Playing;
+        if (firstWord < 0) firstWord = 0; if (endWord > players.PlayingWords) endWord = players.PlayingWords;
+        for (var w = firstWord; w < endWord; w++)
         {
-            var slots = players.SlotsOf(entity);
-            var slotsCount = players.CountOf(entity);
-            for (var i = 0; i < slotsCount; i++)
+            var bits = playing[w];
+            while (bits != 0)
             {
-                if (slots[i].Timeline == 0) continue;
-                var result = PlaybackRules.Step(ref slots[i], timelines, count, forward);
-                if (result == AdvanceResult.Removed) players.RemoveSlot(entity, i);
-                else if (result == AdvanceResult.Unknown) throw new ArgumentException($"Playback slot {i} of entity {entity} names no timeline in the loaded library.");
+                var entity = (w << 6) + KindStore.Tz(bits);
+                bits &= bits - 1;
+                AdvanceEntity(players, entity, timelines, count, forward);
             }
         }
-        ClosingList.Clear(players.Closing);
+    }
+
+    unsafe void AdvanceEntity(PlaybackTable players, int entity, LibraryTimeline* timelines, int count, bool forward)
+    {
+        var slots = players.SlotsOf(entity);
+        var slotsCount = players.CountOf(entity);
+        for (var i = 0; i < slotsCount; i++)
+        {
+            if (slots[i].Timeline == 0) continue;
+            var result = PlaybackRules.Step(ref slots[i], timelines, count, forward);
+            if (result == AdvanceResult.Removed) { players.RemoveSlot(entity, i); slots = players.SlotsOf(entity); }
+            else if (result == AdvanceResult.Unknown) throw new ArgumentException($"Playback slot {i} of entity {entity} names no timeline in the loaded library.");
+        }
+        var holds = false;
+        slots = players.SlotsOf(entity);
+        var n = players.CountOf(entity);
+        for (var i = 0; i < n; i++)
+        {
+            var slot = slots[i];
+            if (slot.Timeline == 0) continue;
+            var f = slot.Flags;
+            if (PlaybackRules.Moves(f, forward) || PlaybackRules.IsParked(f) || (f & (PlaybackFlags.Stopping | PlaybackFlags.ReenterPending)) != 0 || ((f & (PlaybackFlags.Paused | PlaybackFlags.Ended)) != 0 && (f & PlaybackFlags.StartPending) != 0))
+            {
+                holds = true;
+                break;
+            }
+        }
+        if (!holds) players.SetPlaying(entity, false);
+#if TL_CHECKED
+        Checked.Visited();
+#endif
     }
 
     unsafe void Drain(PlaybackTable players, RequestQueue* queue)
@@ -77,7 +116,7 @@ public sealed partial class TimelineWorld
             {
                 if (slots[slot].Timeline > _view.TimelineCount && (slots[slot].Flags & PlaybackFlags.Stopping) == 0)
                     throw new ArgumentException($"Playback slot {slot} of entity {entity} names no timeline in the reloaded library.");
-                if (!PlaybackRules.Rebind(ref slots[slot], _view.Timelines, _view.TimelineCount)) players.RemoveSlot(entity, slot);
+                if (!PlaybackRules.Rebind(ref slots[slot], _view.Timelines, _view.TimelineCount)) { players.RemoveSlot(entity, slot); slots = players.SlotsOf(entity); }
             }
         }
         players.LibraryGeneration = _generation;

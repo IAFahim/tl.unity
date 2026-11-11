@@ -162,6 +162,27 @@ internal static unsafe class KindSectionReader
         for (var i = 0; i < timelineCount; i++) CheckTimeline(view, view.Timelines + i, timelines[i].Duration, i);
         return view;
     }
+    internal static KindSectionView CreateView(byte* section, uint length, int timelineCount, LibraryTimeline* timelines)
+    {
+        var u = (uint*)section;
+        var kinds = u[2];
+        var feeders = u[3];
+        var feederAt = 64u + 40u * kinds;
+        var timelineAt = feederAt + 32u * feeders;
+        return new KindSectionView
+        {
+            Base = section,
+            Bytes = length,
+            KindCount = (int)kinds,
+            FeederCount = (int)feeders,
+            TimelineCount = timelineCount,
+            Kinds = (LibraryKind*)(section + 64),
+            Feeders = (LibraryFeeder*)(section + feederAt),
+            Timelines = (LibraryKindTimeline*)(section + timelineAt),
+            Strings = section + u[8],
+            StringsLength = u[9],
+        };
+    }
 
     static void CheckTimeline(in KindSectionView view, LibraryKindTimeline* t, uint duration, int index)
     {

@@ -23,7 +23,6 @@
     <Compile Include="$(TlGenSource)/Analysis/PairLayout.cs" LinkBase="Linked" />
     <Compile Include="$(TlGenSource)/Analysis/DeclarationDiagnostic.cs" LinkBase="Linked" />
     <Compile Include="$(TlGenSource)/Model/*.cs" LinkBase="Linked" />
-    <Compile Include="$(TlGenSource)/Analysis/BakeReader.cs" LinkBase="Linked" />
     <Compile Include="$(TlGenSource)/Analysis/JobReader.cs" LinkBase="Linked" />
     <Compile Include="$(TlGenSource)/CompileArtifact.cs" LinkBase="Linked" />
     <Compile Include="$(TlGenSource)/Polyfills.cs" LinkBase="Linked" />
