@@ -79,10 +79,7 @@ public sealed unsafe class TlWorkers : IDisposable
     {
         while (true)
         {
-            var got = false;
-            var spin = new SpinWait();
-            for (var i = 0; i < 200 && !got; i++) { if (_disposed) return; if (_gate.Wait(0)) got = true; else spin.SpinOnce(); }
-            if (!got) { try { _gate.Wait(); } catch (ObjectDisposedException) { return; } }
+            try { _gate.Wait(); } catch (ObjectDisposedException) { return; }
             if (_disposed) return;
             var body = _body;
             var state = _state;
