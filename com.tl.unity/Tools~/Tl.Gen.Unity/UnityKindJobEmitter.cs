@@ -380,6 +380,8 @@ namespace Tl.Gen.Unity
             W(writer, "var __eme = chunk.GetEnableableBits(ref " + info.Name + "EnabledHandle);");
             W(writer, "var __stride = sizeof(" + info.Entry + ");");
             W(writer, "var __count = chunk.Count;");
+            W(writer, "var __index = Index;");
+            W(writer, "var __forward = Forward;");
             W(writer, "for (var __kw = 0; __kw < 2; __kw++)");
             W(writer, "{");
             W(writer, "if (__kw == 1 && __count <= 64) break;");
@@ -425,9 +427,9 @@ namespace Tl.Gen.Unity
                 W(writer, "{");
                 W(writer, "var __pb = __pbase + __en->Slot;");
                 W(writer, "if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;");
-                W(writer, "var __tl = Index.Timelines + (__en->Timeline - 1);");
+                W(writer, "var __tl = __index.Timelines + (__en->Timeline - 1);");
                 W(writer, "ushort __tick = __pb->Tick;");
-                W(writer, "var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;");
+                W(writer, "var __backward = __forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;");
                 W(writer, "var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)");
                 W(writer, "| ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)");
                 W(writer, "| ((__en->Flags & global::Tl.KindEntryFlags.Interrupted) != 0 ? global::Tl.FrameFlags.Interrupted : global::Tl.FrameFlags.None);");
@@ -447,7 +449,7 @@ namespace Tl.Gen.Unity
                     W(writer, "{");
                     if (feeder.Trigger == FeederTrigger.Marker)
                     {
-                        W(writer, "byte* __mptr" + c + " = Index.MarkerOf(__en->Timeline, __en->Step);");
+                        W(writer, "byte* __mptr" + c + " = __index.MarkerOf(__en->Timeline, __en->Step);");
                         W(writer, "if (__mptr" + c + " == null) break;");
                         W(writer, consumer.MarkerTypeName + " __m" + c + " = *(" + consumer.MarkerTypeName + "*)__mptr" + c + ";");
                         W(writer, "var __mf" + c + " = new global::Tl.MarkerFrame<" + consumer.MarkerTypeName + ">(in __m" + c + ", __tick, 0, __kflags);");
@@ -455,7 +457,7 @@ namespace Tl.Gen.Unity
                     }
                     else
                     {
-                        W(writer, "var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);");
+                        W(writer, "var __def = __index.StepInWindow(__en->Timeline, __en->Step, __tick);");
                         W(writer, "if (__def == null) break;");
                         EmitMaterialize(writer, consumer, assignmentIndex, c);
                         if (FoldOf(consumer) != null)

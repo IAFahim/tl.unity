@@ -77,6 +77,8 @@ var __ema = chunk.GetEnableableBits(ref LiftActiveHandle);
 var __eme = chunk.GetEnableableBits(ref LiftEnabledHandle);
 var __stride = sizeof(global::KindGame.LiftEntry);
 var __count = chunk.Count;
+var __index = Index;
+var __forward = Forward;
 for (var __kw = 0; __kw < 2; __kw++)
 {
 if (__kw == 1 && __count <= 64) break;
@@ -119,9 +121,9 @@ else
 {
 var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
-var __tl = Index.Timelines + (__en->Timeline - 1);
+var __tl = __index.Timelines + (__en->Timeline - 1);
 ushort __tick = __pb->Tick;
-var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
+var __backward = __forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
 var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Interrupted) != 0 ? global::Tl.FrameFlags.Interrupted : global::Tl.FrameFlags.None);
@@ -132,7 +134,7 @@ switch (__en->Feeder)
 {
 case 0:
 {
-var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);
+var __def = __index.StepInWindow(__en->Timeline, __en->Step, __tick);
 if (__def == null) break;
 byte* __row1 = (byte*)__def->FrameRow;
 byte* __first1 = __row1 + sizeof(global::KindGame.ArcTrack);
@@ -196,9 +198,9 @@ else
 {
 var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
-var __tl = Index.Timelines + (__en->Timeline - 1);
+var __tl = __index.Timelines + (__en->Timeline - 1);
 ushort __tick = __pb->Tick;
-var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
+var __backward = __forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
 var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Interrupted) != 0 ? global::Tl.FrameFlags.Interrupted : global::Tl.FrameFlags.None);
@@ -209,7 +211,7 @@ switch (__en->Feeder)
 {
 case 0:
 {
-var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);
+var __def = __index.StepInWindow(__en->Timeline, __en->Step, __tick);
 if (__def == null) break;
 byte* __row1 = (byte*)__def->FrameRow;
 byte* __first1 = __row1 + sizeof(global::KindGame.ArcTrack);
@@ -278,6 +280,8 @@ var __ema = chunk.GetEnableableBits(ref LocomotionActiveHandle);
 var __eme = chunk.GetEnableableBits(ref LocomotionEnabledHandle);
 var __stride = sizeof(global::KindGame.LocomotionEntry);
 var __count = chunk.Count;
+var __index = Index;
+var __forward = Forward;
 for (var __kw = 0; __kw < 2; __kw++)
 {
 if (__kw == 1 && __count <= 64) break;
@@ -320,9 +324,9 @@ else
 {
 var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
-var __tl = Index.Timelines + (__en->Timeline - 1);
+var __tl = __index.Timelines + (__en->Timeline - 1);
 ushort __tick = __pb->Tick;
-var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
+var __backward = __forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
 var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Interrupted) != 0 ? global::Tl.FrameFlags.Interrupted : global::Tl.FrameFlags.None);
@@ -333,7 +337,7 @@ switch (__en->Feeder)
 {
 case 0:
 {
-var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);
+var __def = __index.StepInWindow(__en->Timeline, __en->Step, __tick);
 if (__def == null) break;
 byte* __row3 = (byte*)__def->FrameRow;
 byte* __first3 = __row3 + sizeof(global::KindGame.WalkTrack);
@@ -387,9 +391,9 @@ else
 {
 var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
-var __tl = Index.Timelines + (__en->Timeline - 1);
+var __tl = __index.Timelines + (__en->Timeline - 1);
 ushort __tick = __pb->Tick;
-var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
+var __backward = __forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
 var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Interrupted) != 0 ? global::Tl.FrameFlags.Interrupted : global::Tl.FrameFlags.None);
@@ -400,7 +404,7 @@ switch (__en->Feeder)
 {
 case 0:
 {
-var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);
+var __def = __index.StepInWindow(__en->Timeline, __en->Step, __tick);
 if (__def == null) break;
 byte* __row3 = (byte*)__def->FrameRow;
 byte* __first3 = __row3 + sizeof(global::KindGame.WalkTrack);
@@ -459,6 +463,8 @@ var __ema = chunk.GetEnableableBits(ref StatChangeActiveHandle);
 var __eme = chunk.GetEnableableBits(ref StatChangeEnabledHandle);
 var __stride = sizeof(global::KindGame.StatChangeEntry);
 var __count = chunk.Count;
+var __index = Index;
+var __forward = Forward;
 for (var __kw = 0; __kw < 2; __kw++)
 {
 if (__kw == 1 && __count <= 64) break;
@@ -499,9 +505,9 @@ else
 {
 var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
-var __tl = Index.Timelines + (__en->Timeline - 1);
+var __tl = __index.Timelines + (__en->Timeline - 1);
 ushort __tick = __pb->Tick;
-var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
+var __backward = __forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
 var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Interrupted) != 0 ? global::Tl.FrameFlags.Interrupted : global::Tl.FrameFlags.None);
@@ -512,7 +518,7 @@ switch (__en->Feeder)
 {
 case 0:
 {
-var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);
+var __def = __index.StepInWindow(__en->Timeline, __en->Step, __tick);
 if (__def == null) break;
 byte* __row0 = (byte*)__def->FrameRow;
 byte* __first0 = __row0 + sizeof(global::KindGame.StatTrack);
@@ -528,7 +534,7 @@ break;
 }
 case 1:
 {
-byte* __mptr2 = Index.MarkerOf(__en->Timeline, __en->Step);
+byte* __mptr2 = __index.MarkerOf(__en->Timeline, __en->Step);
 if (__mptr2 == null) break;
 global::KindGame.StepMarker __m2 = *(global::KindGame.StepMarker*)__mptr2;
 var __mf2 = new global::Tl.MarkerFrame<global::KindGame.StepMarker>(in __m2, __tick, 0, __kflags);
@@ -572,9 +578,9 @@ else
 {
 var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
-var __tl = Index.Timelines + (__en->Timeline - 1);
+var __tl = __index.Timelines + (__en->Timeline - 1);
 ushort __tick = __pb->Tick;
-var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
+var __backward = __forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
 var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Interrupted) != 0 ? global::Tl.FrameFlags.Interrupted : global::Tl.FrameFlags.None);
@@ -585,7 +591,7 @@ switch (__en->Feeder)
 {
 case 0:
 {
-var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);
+var __def = __index.StepInWindow(__en->Timeline, __en->Step, __tick);
 if (__def == null) break;
 byte* __row0 = (byte*)__def->FrameRow;
 byte* __first0 = __row0 + sizeof(global::KindGame.StatTrack);
@@ -601,7 +607,7 @@ break;
 }
 case 1:
 {
-byte* __mptr2 = Index.MarkerOf(__en->Timeline, __en->Step);
+byte* __mptr2 = __index.MarkerOf(__en->Timeline, __en->Step);
 if (__mptr2 == null) break;
 global::KindGame.StepMarker __m2 = *(global::KindGame.StepMarker*)__mptr2;
 var __mf2 = new global::Tl.MarkerFrame<global::KindGame.StepMarker>(in __m2, __tick, 0, __kflags);
