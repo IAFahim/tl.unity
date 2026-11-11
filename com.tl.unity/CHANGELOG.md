@@ -17,6 +17,7 @@ Newest first. Taken from the commit history since the zero-config plan started (
 - Force demo: there and back with Return, follow camera, grid floor, readout (`32d3db4`).
 
 ### Changed
+- The `external/tl-kinds` pin moved to tl `50786273` (tl main plus the per-entity spill run and the bit-scan): Core and the bake tools resynced, the Unity generators read the system declaration the way tl now does (no rewritten compilation, `TlFrame` read from the parameter type). The request sort in `TimelineRequestSystem` and the event sort in generated jobs are now Burst-safe code in tl.unity, because tl's new sorts call `NativeMemory.AlignedAlloc`, which Burst cannot compile (it disabled Burst for every job in the assembly).
 - The coder API (`TlClip`, `TlKind`, `ITlTrack`, `TlFrame`, `TlCurve`, `TlAssetId`, `TlTimeline`) comes from Tl.Core (`916a874`).
 - Kinds are identified by full type name (`384949d`); pair keys no longer contain the assembly name (`1a375ff`).
 - One set of rules shared with the .NET host: requests (`a309cfd`), tick advance (`2b430f5`), kind entries (`086d561`), live swap (`33c76a8`), and one library assembler (`ca76974`).

@@ -61,19 +61,64 @@ public unsafe struct RequestQueue
 
     public static void Sort(RequestRecord* items, int count)
     {
+        if (count <= 1) return;
+        var sorted = true;
+        var prevEntity = items[0].Entity;
+        var prevSlot = items[0].Slot;
         for (var i = 1; i < count; i++)
         {
-            var item = items[i];
-            var j = i - 1;
-            while (j >= 0 && Before(in item, in items[j])) { items[j + 1] = items[j]; j--; }
-            items[j + 1] = item;
+            var entity = items[i].Entity;
+            if (entity < prevEntity || (entity == prevEntity && items[i].Slot < prevSlot))
+            {
+                sorted = false;
+                break;
+            }
+            prevEntity = entity;
+            prevSlot = items[i].Slot;
+        }
+        if (sorted) return;
+        var scratch = (RequestRecord*)NativeMemory.AlignedAlloc((nuint)count * (nuint)sizeof(RequestRecord), 8u);
+        var counts = (int*)NativeMemory.AlignedAlloc(65536u * (uint)sizeof(int), 8u);
+        try
+        {
+            var source = new Span<RequestRecord>(items, count);
+            var destination = new Span<RequestRecord>(scratch, count);
+            for (var pass = 0; pass < 4; pass++)
+            {
+                RadixPass(source, destination, counts, pass);
+                var tmp = source;
+                source = destination;
+                destination = tmp;
+            }
+        }
+        finally
+        {
+            NativeMemory.AlignedFree(scratch);
+            NativeMemory.AlignedFree(counts);
         }
 
-        static bool Before(in RequestRecord left, in RequestRecord right)
+        static void RadixPass(Span<RequestRecord> source, Span<RequestRecord> destination, int* counts, int pass)
         {
-            if (left.Entity != right.Entity) return left.Entity < right.Entity;
-            if (left.Slot != right.Slot) return left.Slot < right.Slot;
-            return left.Sequence < right.Sequence;
+            new Span<int>(counts, 65536).Clear();
+            for (var i = 0; i < source.Length; i++) counts[Digit(source[i], pass)]++;
+            var offset = 0;
+            for (var bucket = 0; bucket < 65536; bucket++)
+            {
+                var bucketCount = counts[bucket];
+                counts[bucket] = offset;
+                offset += bucketCount;
+            }
+            for (var i = 0; i < source.Length; i++)
+            {
+                var digit = Digit(source[i], pass);
+                destination[counts[digit]++] = source[i];
+            }
+        }
+
+        static int Digit(RequestRecord item, int pass)
+        {
+            var key = pass < 2 ? (uint)item.Slot ^ 0x80000000u : (uint)item.Entity ^ 0x80000000u;
+            return (int)((key >> ((pass % 2) * 16)) & 0xFFFFu);
         }
     }
 
@@ -178,7 +223,7 @@ public readonly unsafe struct Requests
     readonly int _entity;
     readonly int _slot;
 
-    internal Requests(RequestQueue* queue, int entity, int slot)
+    public Requests(RequestQueue* queue, int entity, int slot)
     {
         _queue = queue;
         _entity = entity;
@@ -199,4 +244,14 @@ public readonly unsafe struct Requests
     public void ReverseChannel(byte channel, bool reverse) => RequestQueue.Add(_queue, _entity, _slot, channel, reverse ? (ushort)1 : (ushort)0, RequestOp.ReverseChannel);
     public void SetSpeed(ushort timeline, ushort sixteenths) => RequestQueue.Add(_queue, _entity, _slot, timeline, sixteenths, RequestOp.Speed);
     public void SetChannelSpeed(byte channel, ushort sixteenths) => RequestQueue.Add(_queue, _entity, _slot, channel, sixteenths, RequestOp.SpeedChannel);
+    public void ConcatSegments(RequestQueue** segs, int chunks)
+    {
+        if (segs == null || chunks <= 0) return;
+        for (var c = 0; c < chunks; c++)
+        {
+            var seg = segs[c];
+            if (seg == null) continue;
+            for (var i = 0; i < seg->Count; i++) { ref readonly var r = ref seg->Item(i); RequestQueue.Add(_queue, r.Entity, r.Slot, r.Timeline, r.At, r.Op); }
+        }
+    }
 }

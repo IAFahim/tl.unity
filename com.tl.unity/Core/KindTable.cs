@@ -36,7 +36,7 @@ public unsafe struct KindTable
     public int* Entity;
     byte* _inline;
     public ushort* Length;
-    ushort* _capacity;
+    public ulong* Spilled;
     byte** _heap;
     public ulong* Active;
     public ulong* Enabled;
@@ -57,9 +57,8 @@ public unsafe struct KindTable
         for (var r = 0; r < t->Rows; r++) t->Entity[r] = entities[r];
         t->_inline = (byte*)Zeroed((nuint)t->Rows * (nuint)inlineCapacity * (nuint)entryBytes);
         t->Length = (ushort*)Zeroed((nuint)t->Rows * 2);
-        t->_capacity = (ushort*)Zeroed((nuint)t->Rows * 2);
-        for (var r = 0; r < t->Rows; r++) t->_capacity[r] = (ushort)inlineCapacity;
-        t->_heap = (byte**)Zeroed((nuint)t->Rows * (nuint)sizeof(nint));
+        t->Spilled = (ulong*)Zeroed((nuint)t->Words * 8);
+        if (inlineCapacity == 0) t->_heap = (byte**)Zeroed((nuint)t->Rows * (nuint)sizeof(nint));
         t->Active = (ulong*)Zeroed((nuint)t->Words * 8);
         t->Enabled = (ulong*)Zeroed((nuint)t->Words * 8);
         for (var w = 0; w < t->Words; w++) t->Enabled[w] = ~0ul;
@@ -70,13 +69,19 @@ public unsafe struct KindTable
     internal static void Free(KindTable* t)
     {
         if (t == null) return;
-        for (var r = 0; r < t->Rows; r++)
-            if (t->_heap[r] != null) NativeMemory.AlignedFree(t->_heap[r]);
+        if (t->_heap != null)
+        {
+            for (var r = 0; r < t->Rows; r++)
+                if (t->_heap[r] != null) NativeMemory.AlignedFree(t->_heap[r]);
+            NativeMemory.AlignedFree(t->_heap);
+        }
+        if (t->Inline != 0)
+            for (var r = 0; r < t->Rows; r++)
+                if (t->IsSpilled(r)) NativeMemory.AlignedFree(*(byte**)(t->_inline + (nuint)r * (nuint)t->Inline * (nuint)t->Stride));
         NativeMemory.AlignedFree(t->Entity);
         NativeMemory.AlignedFree(t->_inline);
         NativeMemory.AlignedFree(t->Length);
-        NativeMemory.AlignedFree(t->_capacity);
-        NativeMemory.AlignedFree(t->_heap);
+        NativeMemory.AlignedFree(t->Spilled);
         NativeMemory.AlignedFree(t->Active);
         NativeMemory.AlignedFree(t->Enabled);
         NativeMemory.AlignedFree(t);
@@ -89,36 +94,62 @@ public unsafe struct KindTable
         return p;
     }
 
-    public long StorageBytesPerRow => 16 + (long)Inline * Stride;
+    // Marginal bytes per row: the Entity slot (4 B), the Length (2 B) and
+    // the inline run. The Spilled bit (1 bit per row) is bitset overhead.
+    public long StorageBytesPerRow => 6 + (long)Inline * Stride;
 
     public bool IsActive(int row) => (Active[row >> 6] & (1ul << (row & 63))) != 0;
 
-    public byte* Data(int row) => _heap[row] != null ? _heap[row] : _inline + (nuint)row * (nuint)Inline * (nuint)Stride;
+    bool IsSpilled(int row) => (Spilled[row >> 6] & (1ul << (row & 63))) != 0;
+
+    void SetSpilled(int row, bool value)
+    {
+        if (value) Spilled[row >> 6] |= 1ul << (row & 63);
+        else Spilled[row >> 6] &= ~(1ul << (row & 63));
+    }
+
+    // Heap blocks carry an 8 B header holding the capacity; the pointer
+    // stored for a spilled row names the header.
+    byte* HeapOf(int row) => Inline == 0 ? _heap[row] : *(byte**)(_inline + (nuint)row * (nuint)Inline * (nuint)Stride);
+
+    int Capacity(int row) => IsSpilled(row) ? *(int*)HeapOf(row) : Inline;
+
+    public byte* Data(int row)
+    {
+        if (IsSpilled(row)) return HeapOf(row) + 8;
+        if (Inline == 0) return (byte*)0;
+        return _inline + (nuint)row * (nuint)Inline * (nuint)Stride;
+    }
 
     public KindEntry* At(int row, int index) => (KindEntry*)(Data(row) + (nuint)index * (nuint)Stride);
 
     public KindEntry* Append(int row)
     {
         var length = Length[row];
-        if (length == _capacity[row]) Grow(row);
+        if (length == Capacity(row)) Grow(row);
         Length[row] = (ushort)(length + 1);
-        if (length + 1 > MaxLength) MaxLength = length + 1;
         Active[row >> 6] |= 1ul << (row & 63);
         return At(row, length);
     }
 
     void Grow(int row)
     {
-        var capacity = Math.Max(4, _capacity[row] * 2);
+        var capacity = Math.Max(4, Capacity(row) * 2);
         if (capacity > ushort.MaxValue) throw new InvalidOperationException($"kind {Kind} row {row} holds more than 65,535 entries.");
-        var heap = (byte*)NativeMemory.AlignedAlloc((nuint)capacity * (nuint)Stride, 8);
-        NativeMemory.Clear(heap, (nuint)capacity * (nuint)Stride);
-        new ReadOnlySpan<byte>(Data(row), Length[row] * Stride).CopyTo(new Span<byte>(heap, capacity * Stride));
-        if (_heap[row] != null) NativeMemory.AlignedFree(_heap[row]);
-        _heap[row] = heap;
-        _capacity[row] = (ushort)capacity;
-        Overflows++;
+        var raw = (byte*)NativeMemory.AlignedAlloc(8u + (nuint)capacity * (nuint)Stride, 64);
+        NativeMemory.Clear(raw, 8u + (nuint)capacity * (nuint)Stride);
+        *(int*)raw = capacity;
+        var length = Length[row];
+        if (length > 0)
+            new ReadOnlySpan<byte>(Data(row), length * Stride).CopyTo(new Span<byte>(raw + 8, length * Stride));
+        if (IsSpilled(row)) NativeMemory.AlignedFree(HeapOf(row));
+        if (Inline == 0) _heap[row] = raw;
+        else *(byte**)(_inline + (nuint)row * (nuint)Inline * (nuint)Stride) = raw;
+        SetSpilled(row, true);
     }
+
+    internal int ColdMaxLength() { var m = 0; for (var r = 0; r < Rows; r++) if (Length[r] > m) m = Length[r]; return m; }
+    internal int ColdOverflows() { var s = 0; for (var r = 0; r < Rows; r++) if (IsSpilled(r)) s++; return s; }
 
     public ushort KindOf(KindEntry* entry) => Grouped ? *(ushort*)((byte*)entry + 8) : (ushort)Kind;
 

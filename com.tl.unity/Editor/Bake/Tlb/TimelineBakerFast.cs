@@ -2241,8 +2241,7 @@ internal static class TimelineBakerFastCore
             }
             catch (ArgumentException ex)
             {
-                var intern = Tl.Inspection.Tables().Intern;
-                throw new BakeDiagnosticException($"TLB validation failed: {ex.Message}; content {NetCompat.Sha256Hex(bytes)[..16]}/{bytes.Length}B, intern live {intern.Live}/{intern.Distinct}, graveyard {intern.GraveyardBlocks}");
+                throw new BakeDiagnosticException($"TLB validation failed: {ex.Message}; content {NetCompat.Sha256Hex(bytes)[..16]}/{bytes.Length}B");
             }
 
             return bytes;

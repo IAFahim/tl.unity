@@ -1,5 +1,5 @@
+using System.Collections.Concurrent;
 using System.Collections.Generic;
-
 namespace Tl;
 
 public interface ITlModule
@@ -50,7 +50,7 @@ sealed class SystemRegistry
     internal int ViewCount;
     internal ulong ViewGeneration;
     internal int ModuleVersion;
-    internal readonly Dictionary<FilterKey, SystemStep[]> Filters = new();
+    internal readonly ConcurrentDictionary<FilterKey, SystemStep[]> Filters = new();
 
     internal void Reset(nint stamp, uint bytes, int count, ulong generation)
     {
@@ -71,7 +71,7 @@ sealed class SystemRegistry
                 _entries.TryAdd(module.PairKey(i), new Entry(module, i));
     }
 
-    readonly Dictionary<ulong, Entry> _entries = new();
+    readonly ConcurrentDictionary<ulong, Entry> _entries = new();
 
     internal SystemRegistry()
     {

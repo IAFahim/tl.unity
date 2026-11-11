@@ -8,8 +8,8 @@ namespace Tl.Gen.Unity
     {
         internal const string FileName = "TlUnity.FeedSystem.g.cs";
 
-        internal static string Emit(UnitySystemModel model, SystemAssignment assignment, int assignmentIndex, IReadOnlyList<UnityKindInfo> kinds, ISet<string> tlFrames, int key)
-            => UnityKindJobEmitter.EmitFeed(model, assignment, assignmentIndex, kinds, tlFrames, key);
+        internal static string Emit(UnitySystemModel model, SystemAssignment assignment, int assignmentIndex, IReadOnlyList<UnityKindInfo> kinds, int key)
+            => UnityKindJobEmitter.EmitFeed(model, assignment, assignmentIndex, kinds, key);
     }
 
     internal static partial class UnityKindJobEmitter
@@ -55,7 +55,7 @@ namespace Tl.Gen.Unity
             return shape;
         }
 
-        internal static string EmitFeed(UnitySystemModel model, SystemAssignment assignment, int assignmentIndex, IReadOnlyList<UnityKindInfo> kinds, ISet<string> tlFrames, int key)
+        internal static string EmitFeed(UnitySystemModel model, SystemAssignment assignment, int assignmentIndex, IReadOnlyList<UnityKindInfo> kinds, int key)
         {
             var ns = model.Namespace.StartsWith("global::") ? model.Namespace.Substring(8) : model.Namespace;
             var shape = FeedShapeOf(model, assignment, kinds);
@@ -98,7 +98,7 @@ namespace Tl.Gen.Unity
                 W(writer, "Feed_" + k + "(chunk, __playbacks" + ColumnArgs(shape, false) + ");");
             W(writer, "}");
             for (var k = 0; k < kinds.Count; k++)
-                EmitFeedKind(writer, shape, assignment, assignmentIndex, kinds[k], k, tlFrames);
+                EmitFeedKind(writer, shape, assignment, assignmentIndex, kinds[k], k);
             W(writer, "}");
             EmitFeedEntry(writer, model, shape, kinds, name, key);
             W(writer, "public struct " + model.SystemTypeName + "_Feeds : global::Tl.Unity.ITlKindJobs");
@@ -160,7 +160,7 @@ namespace Tl.Gen.Unity
             W(writer, "}");
         }
 
-        static void EmitFeedKind(StringBuilder writer, Shape shape, SystemAssignment assignment, int assignmentIndex, UnityKindInfo info, int ordinal, ISet<string> tlFrames)
+        static void EmitFeedKind(StringBuilder writer, Shape shape, SystemAssignment assignment, int assignmentIndex, UnityKindInfo info, int ordinal)
         {
             var feeders = FeedersOf(assignment, info.Key);
             var value = info.Decl.ValueTypeName;
@@ -229,7 +229,7 @@ namespace Tl.Gen.Unity
                     if (FoldOf(consumer) != null)
                         EmitFeeds(writer, consumer, c);
                     var frameVar = "__f" + c;
-                    if (tlFrames.Contains(NewStyle.FeederKey(consumer.ConsumerTypeName, feeder.MethodName)))
+                    if (UnityKindJobEmitter.IsTlFrame(feeder.Method))
                     {
                         frameVar = "__tf" + c;
                         W(writer, "var " + frameVar + " = new global::Tl.TlFrame<" + consumer.ClipTypeName + ">(in __f" + c + ");");
