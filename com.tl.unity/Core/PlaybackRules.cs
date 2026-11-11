@@ -380,6 +380,19 @@ public static unsafe class PlaybackRules
 
     public static AdvanceResult Advance(ref Playback slot, LibraryTimeline* timelines, int timelineCount, bool forward)
     {
+        // The common step (an active, forward, mid-timeline playback) does exactly what Move does for it: tick up, clear StartPending.
+        // Parked, Ended, Paused, ReenterPending, Reverse, an unknown timeline and the last tick all fall through to Move.
+        var flags = slot.Flags;
+        if (forward && (flags & (PlaybackFlags.Reverse | PlaybackFlags.ReenterPending | PlaybackFlags.Paused | PlaybackFlags.Ended)) == 0)
+        {
+            var index = (uint)(slot.Timeline - 1);
+            if (index < (uint)timelineCount && (uint)slot.Tick + 1u < (uint)timelines[index].Duration)
+            {
+                slot.Tick++;
+                slot.Flags = flags & ~PlaybackFlags.StartPending;
+                return AdvanceResult.Kept;
+            }
+        }
         var motion = Move(ref slot, timelines, timelineCount, forward);
         if (motion == PlaybackMotion.Removed) return AdvanceResult.Removed;
         if (motion == PlaybackMotion.Unknown) return AdvanceResult.Unknown;

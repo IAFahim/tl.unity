@@ -39,3 +39,7 @@ sudo ./svc.sh install "$USER" && sudo ./svc.sh start
 Add `$HOME/.dotnet` to the front of the line in `.path` before starting the service.
 
 Fork pull requests do not run here: the workflows guard the Unity jobs by repository, and the repo setting `fork-pr-contributor-approval` is `all_external_contributors`.
+
+## Cold-start behaviour of the Burst-dependent tests (measured 2026-11-11)
+
+After an assembly change (a generator rebuild, a re-pin) or a switch between `TL_UNITY_PACKS=1` and `0`, the FIRST Unity editor session cannot run Burst-compiled jobs for the changed assemblies: the log shows "Synchronous compilation was requested" but the job runs the managed copy, and it stays that way for at least 120 s of editor frames (a coroutine version of the tests that yielded a frame per attempt did not help). The tests that assert "ran as Burst" then fail once: `AJobChangesTheSpeedOfATimelineFromItsTlTimelineField`, `AJobStartsPausesAndResumesATimelineFromItsTlTimelineField`, the three `BurstSortTests`, and in packs mode `StatsPackTests.TheDuelGivesTheDemoCheckpointsAndTheDotNetHash` (a warm-allocation check). The rerun passes. `p6s-gate.sh` reruns on failure for this reason. The Linux runner keeps its `Library`, so its runs are warm and pass first time; a fresh runner would hit the same one-time failure on its first run. The tests therefore wait at most 10 s.
