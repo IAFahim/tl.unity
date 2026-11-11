@@ -342,11 +342,13 @@ namespace Tl.Unity.Tests
             var items = new global::Tl.RequestRecord[4];
             items[0] = new global::Tl.RequestRecord(2, 0, 0, 0, global::Tl.RequestOp.Start, 0);
             items[1] = new global::Tl.RequestRecord(0, 1, 0, 0, global::Tl.RequestOp.Start, 1);
-            items[2] = new global::Tl.RequestRecord(0, 0, 0, 0, global::Tl.RequestOp.Start, 3);
-            items[3] = new global::Tl.RequestRecord(0, 0, 0, 0, global::Tl.RequestOp.Start, 2);
+            items[2] = new global::Tl.RequestRecord(0, 0, 0, 0, global::Tl.RequestOp.Start, 2);
+            items[3] = new global::Tl.RequestRecord(0, 0, 0, 0, global::Tl.RequestOp.Start, 3);
+            var scratch = new global::Tl.RequestRecord[items.Length];
             fixed (global::Tl.RequestRecord* ptr = items)
+            fixed (global::Tl.RequestRecord* spare = scratch)
             {
-                NativeSortExtension.Sort(ptr, items.Length, new RequestOrder());
+                global::Tl.RequestQueue.Sort(ptr, items.Length, spare);
             }
             Assert.AreEqual(0, items[0].Entity);
             Assert.AreEqual(0, items[0].Slot);

@@ -48,6 +48,7 @@ public unsafe struct RequestQueue
     int _count;
     int _capacity;
     int _sequence;
+    RequestRecord* _scratch;
 
     public int Count => _count;
     public ref readonly RequestRecord Item(int index) => ref _items[index];
@@ -58,9 +59,19 @@ public unsafe struct RequestQueue
         queue->_items[queue->_count++] = new RequestRecord(entity, slot, timeline, at, op, queue->_sequence++);
     }
 
-    public static void SortStable(RequestQueue* queue) => Sort(queue->_items, queue->_count);
+    public static void SortStable(RequestQueue* queue) => SortWith(queue->_items, queue->_count, queue->_scratch);
 
     public static void Sort(RequestRecord* items, int count)
+    {
+        if (count <= 1) return;
+        var scratch = (RequestRecord*)NativeMemory.AlignedAlloc((nuint)count * (nuint)sizeof(RequestRecord), 8u);
+        try { SortWith(items, count, scratch); }
+        finally { NativeMemory.AlignedFree(scratch); }
+    }
+
+    public static void Sort(RequestRecord* items, int count, RequestRecord* scratch) => SortWith(items, count, scratch);
+
+    static void SortWith(RequestRecord* items, int count, RequestRecord* scratch)
     {
         if (count <= 1) return;
         var sorted = true;
@@ -78,49 +89,38 @@ public unsafe struct RequestQueue
             prevSlot = items[i].Slot;
         }
         if (sorted) return;
-        var scratch = (RequestRecord*)NativeMemory.AlignedAlloc((nuint)count * (nuint)sizeof(RequestRecord), 8u);
-        var counts = (int*)NativeMemory.AlignedAlloc(65536u * (uint)sizeof(int), 8u);
-        try
+        var counts = stackalloc int[256];
+        var source = items;
+        var destination = scratch;
+        for (var pass = 0; pass < 8; pass++)
         {
-            var source = new Span<RequestRecord>(items, count);
-            var destination = new Span<RequestRecord>(scratch, count);
-            for (var pass = 0; pass < 4; pass++)
-            {
-                RadixPass(source, destination, counts, pass);
-                var tmp = source;
-                source = destination;
-                destination = tmp;
-            }
-        }
-        finally
-        {
-            NativeMemory.AlignedFree(scratch);
-            NativeMemory.AlignedFree(counts);
-        }
-
-        static void RadixPass(Span<RequestRecord> source, Span<RequestRecord> destination, int* counts, int pass)
-        {
-            new Span<int>(counts, 65536).Clear();
-            for (var i = 0; i < source.Length; i++) counts[Digit(source[i], pass)]++;
+            for (var d = 0; d < 256; d++) counts[d] = 0;
+            for (var i = 0; i < count; i++) counts[Digit(source[i], pass)]++;
+            if (counts[Digit(source[0], pass)] == count) continue;
             var offset = 0;
-            for (var bucket = 0; bucket < 65536; bucket++)
+            for (var bucket = 0; bucket < 256; bucket++)
             {
                 var bucketCount = counts[bucket];
                 counts[bucket] = offset;
                 offset += bucketCount;
             }
-            for (var i = 0; i < source.Length; i++)
+            for (var i = 0; i < count; i++)
             {
                 var digit = Digit(source[i], pass);
                 destination[counts[digit]++] = source[i];
             }
+            var tmp = source;
+            source = destination;
+            destination = tmp;
         }
+        if (source != items)
+            for (var i = 0; i < count; i++) items[i] = source[i];
+    }
 
-        static int Digit(RequestRecord item, int pass)
-        {
-            var key = pass < 2 ? (uint)item.Slot ^ 0x80000000u : (uint)item.Entity ^ 0x80000000u;
-            return (int)((key >> ((pass % 2) * 16)) & 0xFFFFu);
-        }
+    static int Digit(RequestRecord item, int pass)
+    {
+        var key = pass < 4 ? (uint)item.Slot ^ 0x80000000u : (uint)item.Entity ^ 0x80000000u;
+        return (int)((key >> ((pass & 3) * 8)) & 0xFFu);
     }
 
     public static void Clear(RequestQueue* queue) => queue->_count = 0;
@@ -135,6 +135,7 @@ public unsafe struct RequestQueue
     public static void Free(RequestQueue* queue)
     {
         if (queue->_items != null) NativeMemory.AlignedFree(queue->_items);
+        if (queue->_scratch != null) NativeMemory.AlignedFree(queue->_scratch);
         NativeMemory.AlignedFree(queue);
     }
 
@@ -147,6 +148,8 @@ public unsafe struct RequestQueue
             new ReadOnlySpan<RequestRecord>(queue->_items, queue->_count).CopyTo(new Span<RequestRecord>(block, next));
             NativeMemory.AlignedFree(queue->_items);
         }
+        if (queue->_scratch != null) NativeMemory.AlignedFree(queue->_scratch);
+        queue->_scratch = (RequestRecord*)NativeMemory.AlignedAlloc((nuint)next * (nuint)sizeof(RequestRecord), 8u);
         queue->_items = block;
         queue->_capacity = next;
     }
