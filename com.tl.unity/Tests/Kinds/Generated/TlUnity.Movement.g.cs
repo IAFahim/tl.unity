@@ -90,6 +90,7 @@ var __buf = __acc[__row];
 var __len = __buf.Length;
 byte* __data = (byte*)__buf.GetUnsafePtr();
 var __pulses = 0;
+var __pbase = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr();
 var __sampled = global::Tl.KindRules.IsSampled(__data, __len);
 if (!__sampled)
 {
@@ -116,7 +117,7 @@ __en->Flags &= ~global::Tl.KindEntryFlags.Ready;
 }
 else
 {
-var __pb = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr() + __en->Slot;
+var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
 ushort __tick = __pb->Tick;
@@ -166,7 +167,6 @@ if (__has) global::KindGame.Lift.Apply(in __total, ref __c0[__row]);
 }
 else
 {
-var __pbase = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr();
 var __sk = global::Tl.KindRules.SampleDepth(__data, __len, __stride, __pbase);
 for (var __sj = 0; __sj < __sk; __sj++)
 {
@@ -194,7 +194,7 @@ __en->Flags &= ~global::Tl.KindEntryFlags.Ready;
 }
 else
 {
-var __pb = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr() + __en->Slot;
+var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
 ushort __tick = __pb->Tick;
@@ -291,6 +291,7 @@ var __buf = __acc[__row];
 var __len = __buf.Length;
 byte* __data = (byte*)__buf.GetUnsafePtr();
 var __pulses = 0;
+var __pbase = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr();
 var __sampled = global::Tl.KindRules.IsSampled(__data, __len);
 if (!__sampled)
 {
@@ -317,7 +318,7 @@ __en->Flags &= ~global::Tl.KindEntryFlags.Ready;
 }
 else
 {
-var __pb = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr() + __en->Slot;
+var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
 ushort __tick = __pb->Tick;
@@ -357,7 +358,6 @@ if (__has) global::KindGame.Locomotion.Apply(in __total, ref __c0[__row]);
 }
 else
 {
-var __pbase = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr();
 var __sk = global::Tl.KindRules.SampleDepth(__data, __len, __stride, __pbase);
 for (var __sj = 0; __sj < __sk; __sj++)
 {
@@ -385,7 +385,7 @@ __en->Flags &= ~global::Tl.KindEntryFlags.Ready;
 }
 else
 {
-var __pb = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr() + __en->Slot;
+var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
 ushort __tick = __pb->Tick;
@@ -472,6 +472,7 @@ var __buf = __acc[__row];
 var __len = __buf.Length;
 byte* __data = (byte*)__buf.GetUnsafePtr();
 var __pulses = 0;
+var __pbase = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr();
 var __sampled = global::Tl.KindRules.IsSampled(__data, __len);
 if (!__sampled)
 {
@@ -496,7 +497,7 @@ __en->Flags &= ~global::Tl.KindEntryFlags.Ready;
 }
 else
 {
-var __pb = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr() + __en->Slot;
+var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
 ushort __tick = __pb->Tick;
@@ -544,7 +545,6 @@ global::KindGame.StatChange.Apply(in __v, ref __c4[__row]);
 }
 else
 {
-var __pbase = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr();
 var __sk = global::Tl.KindRules.SampleDepth(__data, __len, __stride, __pbase);
 for (var __sj = 0; __sj < __sk; __sj++)
 {
@@ -570,7 +570,7 @@ __en->Flags &= ~global::Tl.KindEntryFlags.Ready;
 }
 else
 {
-var __pb = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr() + __en->Slot;
+var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
 ushort __tick = __pb->Tick;
