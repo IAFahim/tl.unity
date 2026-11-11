@@ -10,6 +10,8 @@ Build `scale.tlib` using the companion `tl/benchmarks/BurstScale` project. The `
 
 `-scaleMatrix 1` runs the nine requested shapes using the requested worker count. Repeat in five fresh editor processes for headline results. Unity's worker count is the number of background job workers; the main thread can also participate during completion. This differs from `TlWorkers.WorkerCount`, which includes the .NET caller.
 
+`-scaleHeadline 1` runs the 4M entities with four active timelines and the 10,000 players with 150 active timelines in one editor process. Use an identical harness on both arms and alternate their order across fresh processes.
+
 The fixture uses 1,000 available definitions, one sum kind, staggered phases and fixed membership. It does not model 1,000 retained playback slots or arbitrary gameplay. Warmup, rounds and the independent state/output oracle match the .NET harness. Discard the first of the six raw rounds when aggregating.
 
 `readySetupMs` includes the first tick and buffer growth. Memory is captured before verification. Live Unity memory and process private-memory deltas are separate measurements, neither an allocation-traffic counter.

@@ -118,6 +118,11 @@ namespace ScaleGame.Benchmark
                             GC.WaitForPendingFinalizers();
                         }
                 }
+                else if (Arg("-scaleHeadline", "0") == "1")
+                {
+                    Run(log, library, 4000000, 4, workers);
+                    Run(log, library, 10000, 150, workers);
+                }
                 else Run(log, library, n, active, workers);
             }
         }
