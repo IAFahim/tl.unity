@@ -39,6 +39,11 @@ namespace ScaleGame
         }
     }
 
+    public static class KindCapacity
+    {
+        public const int Energy = 4;
+    }
+
     public static class ScaleProbe
     {
         public static int ManagedEvaluations;
