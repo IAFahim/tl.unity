@@ -97,10 +97,13 @@ namespace ScaleGame.Benchmark
         {
             CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
             JobsUtility.JobWorkerCount = workers;
-            JobsUtility.JobDebuggerEnabled = false;
-            NativeLeakDetection.Mode = NativeLeakDetectionMode.Disabled;
-            BurstCompiler.Options.EnableBurstSafetyChecks = false;
-            BurstCompiler.Options.ForceEnableBurstSafetyChecks = false;
+            if (Arg("-scaleEditorDefaults", "0") != "1")
+            {
+                JobsUtility.JobDebuggerEnabled = false;
+                NativeLeakDetection.Mode = NativeLeakDetectionMode.Disabled;
+                BurstCompiler.Options.EnableBurstSafetyChecks = false;
+                BurstCompiler.Options.ForceEnableBurstSafetyChecks = false;
+            }
             BurstCompiler.Options.EnableBurstCompileSynchronously = true;
             int proof = 0;
             new BurstProof { Result = &proof }.Schedule().Complete();
