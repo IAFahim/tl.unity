@@ -102,9 +102,37 @@ the kind's entry buffer in an `ITlBaker`.
 - Kind sets: the director baker adds a kind's entry buffer (and the components its `Apply` writes) only when a timeline of the object
   reaches it, so objects that play different timelines land in different archetypes with nothing unused.
 - Inline capacity: each kind's entry buffer keeps `128 / entry bytes` entries inside the chunk; `[TlKind(Inline = n)]` sets it. More
-  entries than that move to the heap: still correct, only slower. The Kind Report shows where that happens.
+  entries than that move to the heap: still correct, only slower. The Kind Report shows where that happens. A smaller inline capacity
+  that still holds the usual entry count makes rows smaller and chunks fuller: 4 instead of 10 for a kind with at most 4 entries cut a
+  4M-row tick by 14 % and 370 MB.
 - Game pulses: `[TlKind(GamePulses = n)]` reserves room for n pulses from game code per step.
 - None of this is generated into a file and editing a timeline never recompiles.
+
+## Horizon glide
+
+The kind tick skips per-row rule work between kind edges. Each row keeps one byte, `TimelineHorizon.Steps`: how many coming ticks
+are proven ordinary (the tick moves by one, no kind event bit fires, no request is pending). While it is above zero the tick job only
+moves the tick; at zero it runs the full rules and computes the next horizon from the library's kind calm tables (`KindIndex.Calm`,
+built once per library bind). Results are byte-identical to the full rules on every tick.
+
+- On by default: baked directors (`TlDirectorBaker`) and rows spawned by `TlSceneRun` get `TimelineHorizon` in the same archetype.
+- Entities you create in code glide only when `TimelineHorizon` is in the same type set as `Playback`, `TimelineRequest` and
+  `TimelinePlaying`; without it the row takes the full rules every tick (still correct).
+- Limit: `TimelineGlide { Limit }` sits on the `TimelineKindTickSystem` system entity, default 255. `Limit = 0` turns glide off for the
+  world: `EntityManager.SetComponentData(world.GetExistingSystem<TimelineKindTickSystem>(), new TimelineGlide { Limit = 0 })`.
+- Invalidation: a chunk's horizons are cleared when its `Playback` buffer changed since the system's last update
+  (`ArchetypeChunk.DidChange`), and for the whole world on a library rebind, a step-direction change or a limit change. Requests
+  through `TimelineRequest`/`TlRequests` and any RW access to `Playback` (`GetBuffer<Playback>`, an RW `BufferTypeHandle`, `RefRW`)
+  bump the change version, so they are safe.
+- Caveat: writing `Playback` bytes through a raw pointer kept from an earlier frame does not bump the change version; such a writer
+  must take RW access in the frame it writes, or set the row's `TimelineHorizon.Steps` to 0.
+- Memory: +1 B per row in the chunk, plus the calm tables: one forward and one backward byte per library timeline tick (6 MB for
+  1000 timelines x 3000 ticks) and one start index per timeline, built at bind and freed with the library.
+- `TimelineKindTick.ManagedRuns` and `KindCounter.ManagedRuns` count managed (non-Burst) executions of the tick job; 0 in a warm
+  Burst world.
+- Measured (Unity 7000.0.0a16, Burst, 11 workers, safety checks off, median of 5 processes, 1000 timelines with one kind each):
+  4M rows x 4 timelines 38.2 -> 31.4 ms per tick (tick job 14.0 -> 9.9 ms, kind jobs 24.9 -> 22.0 ms with `StepInWindow`), 10k rows x
+  150 timelines 2.87 -> 1.94 ms. The tick job stays near 10 ms at 4M because it still reads and writes every row's `Playback`.
 
 ## Kind Report
 
