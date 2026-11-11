@@ -91,10 +91,11 @@ namespace Tl.Gen.Unity
             {
                 if (diagnostic.Code == "TLGEN107")
                     continue;
-                if (diagnostic.Code != "TLGEN98")
+                var warning = diagnostic.Code is "TLGEN98" or "TLGEN113" or "TLGEN114";
+                if (!warning)
                     failed = true;
                 context.ReportDiagnostic(Diagnostic.Create(
-                    new DiagnosticDescriptor(diagnostic.Code, "Invalid timeline declaration", "{0}", "Tl.Generation", diagnostic.Code == "TLGEN98" ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error, true),
+                    new DiagnosticDescriptor(diagnostic.Code, "Invalid timeline declaration", "{0}", "Tl.Generation", warning ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error, true),
                     Location(diagnostic), diagnostic.Message));
             }
             foreach (var model in models)
@@ -108,6 +109,13 @@ namespace Tl.Gen.Unity
             }
             if (failed)
                 return;
+            var derived = new List<Tl.Gen.CSharp.Model.KindDecl>();
+            foreach (var assignment in assignments)
+                foreach (var kind in assignment.Kinds)
+                    if (kind.Derived != Tl.Gen.CSharp.Model.DerivedKind.None && !derived.Exists(d => d.Id == kind.Id))
+                        derived.Add(kind);
+            if (derived.Count != 0)
+                context.AddSource("TlDerivedKinds.g.cs", SourceText.From(Tl.Gen.CSharp.DerivedKindsEmitter.Emit(derived), System.Text.Encoding.UTF8));
             var kinds = UnityKindPlan.Plan(compilation, assignments, models, analysis.Inline, context);
             var events = new SortedSet<string>(StringComparer.Ordinal);
             foreach (var model in models)

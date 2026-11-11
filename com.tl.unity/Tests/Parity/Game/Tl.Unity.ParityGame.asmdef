@@ -1,0 +1,19 @@
+{
+  "name": "Tl.Unity.ParityGame",
+  "rootNamespace": "ParityGame",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Unity.ParityPack",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Mathematics"
+  ],
+  "allowUnsafeCode": true,
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "noEngineReferences": false
+}

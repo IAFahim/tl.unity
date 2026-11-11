@@ -1,0 +1,28 @@
+{
+  "name": "Tl.Unity.ParityTests",
+  "rootNamespace": "ParityTests",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Unity.ParityPack",
+    "Tl.Unity.ParityGame",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Mathematics",
+    "UnityEngine.TestRunner"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": true,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

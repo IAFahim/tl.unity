@@ -110,6 +110,13 @@ public static unsafe class PlaybackRules
             case RequestOp.SpeedChannel:
                 SetSpeed(ref slots, FindChannel(ref slots, (byte)timeline), at);
                 return;
+            case RequestOp.Reset:
+                for (var i = 0; i < slots.Length; i++)
+                {
+                    slots.Purge(i);
+                    slots[i] = default;
+                }
+                return;
             default:
                 StopAll(ref slots);
                 return;

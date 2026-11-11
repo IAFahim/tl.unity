@@ -335,6 +335,25 @@ public sealed unsafe class KindStore : IDisposable
         if (playback.Timeline != 0) _kindRows.Purge(entity, (byte)slot, playback.Timeline);
     }
 
+    internal void ResetEntity(int entity)
+    {
+        for (var k = 0; k < _kindCount; k++)
+        {
+            var row = RowOf(entity, k);
+            if (row >= 0 && _tables[k] != null) _tables[k]->Clear(row);
+            var q = _queues + k;
+            var kept = 0;
+            for (var n = 0; n < q->Count; n++)
+            {
+                var at = q->Items + (nuint)n * (nuint)q->Stride;
+                if (*(int*)at == entity) continue;
+                if (kept != n) Buffer.MemoryCopy(at, q->Items + (nuint)kept * (nuint)q->Stride, q->Stride, q->Stride);
+                kept++;
+            }
+            q->Count = kept;
+        }
+    }
+
     internal void Close(int entity, int slot, ref Playback playback)
     {
         _players.SetPlaying(entity, true);

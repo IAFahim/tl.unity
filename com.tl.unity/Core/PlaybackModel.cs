@@ -288,6 +288,17 @@ public sealed unsafe class PlaybackTable : IDisposable
         else _kinds.Close(entity, slot, ref slots[slot]);
     }
 
+    internal void ResetEntity(int entity)
+    {
+        _kinds?.ResetEntity(entity);
+        var slots = SlotsOf(entity);
+        new Span<Playback>(slots, _counts[entity]).Clear();
+        _counts[entity] = 0;
+        if (IsSpilled(entity)) Unspill(entity, InlineRun(entity));
+        new Span<Playback>(InlineRun(entity), _slotsPerEntity).Clear();
+        SetPlaying(entity, false);
+    }
+
     internal void RemoveSlot(int entity, int slot)
     {
         var slots = SlotsOf(entity);
@@ -379,6 +390,7 @@ public sealed unsafe class PlaybackTable : IDisposable
     public void ReverseChannel(int entity, byte channel, bool reverse) => RequestQueue.Add(_pending, entity, -1, channel, reverse ? (ushort)1 : (ushort)0, RequestOp.ReverseChannel);
     public void SetSpeed(int entity, ushort timeline, ushort sixteenths) => RequestQueue.Add(_pending, entity, -1, timeline, sixteenths, RequestOp.Speed);
     public void SetChannelSpeed(int entity, byte channel, ushort sixteenths) => RequestQueue.Add(_pending, entity, -1, channel, sixteenths, RequestOp.SpeedChannel);
+    public void Reset(int entity) => RequestQueue.Add(_pending, entity, -1, 0, 0, RequestOp.Reset);
 
     public void Dispose()
     {

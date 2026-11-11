@@ -49,6 +49,11 @@ namespace Tl.Unity
             return new TimelineRequest { Slot = slot, Op = global::Tl.RequestOp.StopAll };
         }
 
+        public static TimelineRequest Reset(int slot)
+        {
+            return new TimelineRequest { Slot = slot, Op = global::Tl.RequestOp.Reset };
+        }
+
         public static TimelineRequest Pause(int slot, ushort timeline)
         {
             return new TimelineRequest { Slot = slot, Timeline = timeline, Op = global::Tl.RequestOp.Pause };
