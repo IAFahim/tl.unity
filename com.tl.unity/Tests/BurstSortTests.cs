@@ -113,7 +113,7 @@ namespace Tl.Unity.Tests
                     new SortQueueJob { Queue = queue, Managed = managed }.Run();
                     if (managed[0] != 0) System.Threading.Thread.Sleep(20);
                 }
-                while (managed[0] != 0 && clock.Elapsed.TotalSeconds < 90);
+                while (managed[0] != 0 && clock.Elapsed.TotalSeconds < 10);
                 Assert.AreEqual(0, managed[0], "SortStable ran as managed code, Burst did not compile the job");
                 Assert.AreEqual(500, queue->Count);
                 var copy = new global::Tl.RequestRecord[500];
@@ -155,7 +155,7 @@ namespace Tl.Unity.Tests
                     }.Run();
                     if (managed[0] != 0) System.Threading.Thread.Sleep(20);
                 }
-                while (managed[0] != 0 && clock.Elapsed.TotalSeconds < 90);
+                while (managed[0] != 0 && clock.Elapsed.TotalSeconds < 10);
                 Assert.AreEqual(0, managed[0], "Sort ran as managed code, Burst did not compile the job");
                 AssertOrdered((global::Tl.RequestRecord*)items.GetUnsafePtr(), 500);
             }
@@ -186,7 +186,7 @@ namespace Tl.Unity.Tests
                     new DrainJob { Events = events, Count = count, Managed = managed, Entities = entities, Slots = slots, Values = values }.Run();
                     if (managed[0] != 0) System.Threading.Thread.Sleep(20);
                 }
-                while (managed[0] != 0 && clock.Elapsed.TotalSeconds < 90);
+                while (managed[0] != 0 && clock.Elapsed.TotalSeconds < 10);
                 Assert.AreEqual(0, managed[0], "Drain ran as managed code, Burst did not compile the job");
                 Assert.AreEqual(count, managed[1]);
                 for (var i = 1; i < count; i++)

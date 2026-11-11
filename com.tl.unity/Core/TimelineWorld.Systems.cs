@@ -66,26 +66,19 @@ public sealed partial class TimelineWorld
     {
         var slots = players.SlotsOf(entity);
         var slotsCount = players.CountOf(entity);
+        // One pass: step every slot and decide in the same visit whether the entity keeps playing. A removal zeroes its slot and keeps
+        // the other indices stable, and a later slot never changes an earlier slot's flags, so this equals stepping all slots first and scanning them after.
+        var holds = false;
         for (var i = 0; i < slotsCount; i++)
         {
             if (slots[i].Timeline == 0) continue;
             var result = PlaybackRules.Step(ref slots[i], timelines, count, forward);
-            if (result == AdvanceResult.Removed) { players.RemoveSlot(entity, i); slots = players.SlotsOf(entity); }
-            else if (result == AdvanceResult.Unknown) throw new ArgumentException($"Playback slot {i} of entity {entity} names no timeline in the loaded library.");
-        }
-        var holds = false;
-        slots = players.SlotsOf(entity);
-        var n = players.CountOf(entity);
-        for (var i = 0; i < n; i++)
-        {
-            var slot = slots[i];
-            if (slot.Timeline == 0) continue;
-            var f = slot.Flags;
+            if (result == AdvanceResult.Removed) { players.RemoveSlot(entity, i); slots = players.SlotsOf(entity); continue; }
+            if (result == AdvanceResult.Unknown) throw new ArgumentException($"Playback slot {i} of entity {entity} names no timeline in the loaded library.");
+            if (holds) continue;
+            var f = slots[i].Flags;
             if (PlaybackRules.Moves(f, forward) || PlaybackRules.IsParked(f) || (f & (PlaybackFlags.Stopping | PlaybackFlags.ReenterPending)) != 0 || ((f & (PlaybackFlags.Paused | PlaybackFlags.Ended)) != 0 && (f & PlaybackFlags.StartPending) != 0))
-            {
                 holds = true;
-                break;
-            }
         }
         if (!holds) players.SetPlaying(entity, false);
 #if TL_CHECKED
