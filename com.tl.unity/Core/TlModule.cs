@@ -50,7 +50,7 @@ sealed class SystemRegistry
     internal int ViewCount;
     internal ulong ViewGeneration;
     internal int ModuleVersion;
-    internal readonly Dictionary<ulong, SystemSteps> Steps = new();
+    internal readonly ConcurrentDictionary<FilterKey, SystemStep[]> Filters = new();
 
     internal void Reset(nint stamp, uint bytes, int count, ulong generation)
     {
@@ -58,13 +58,7 @@ sealed class SystemRegistry
         ViewBytes = bytes;
         ViewCount = count;
         ViewGeneration = generation;
-        FreeSteps();
-    }
-
-    internal void FreeSteps()
-    {
-        foreach (var built in Steps.Values) SystemDispatch.Free(built);
-        Steps.Clear();
+        Filters.Clear();
     }
 
     internal void RefreshModules()
