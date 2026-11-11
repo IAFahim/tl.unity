@@ -18,6 +18,7 @@ public enum RequestOp : byte
     ReverseChannel = 11,
     Speed = 12,
     SpeedChannel = 13,
+    Reset = 14,
 }
 
 public readonly struct RequestRecord
@@ -244,6 +245,7 @@ public readonly unsafe struct Requests
     public void ReverseChannel(byte channel, bool reverse) => RequestQueue.Add(_queue, _entity, _slot, channel, reverse ? (ushort)1 : (ushort)0, RequestOp.ReverseChannel);
     public void SetSpeed(ushort timeline, ushort sixteenths) => RequestQueue.Add(_queue, _entity, _slot, timeline, sixteenths, RequestOp.Speed);
     public void SetChannelSpeed(byte channel, ushort sixteenths) => RequestQueue.Add(_queue, _entity, _slot, channel, sixteenths, RequestOp.SpeedChannel);
+    public void Reset() => RequestQueue.Add(_queue, _entity, _slot, 0, 0, RequestOp.Reset);
     public void ConcatSegments(RequestQueue** segs, int chunks)
     {
         if (segs == null || chunks <= 0) return;

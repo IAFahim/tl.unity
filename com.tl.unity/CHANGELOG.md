@@ -5,6 +5,8 @@ Newest first. Taken from the commit history since the zero-config plan started (
 ## Unreleased
 
 ### Added
+- Host-parity fixture (IAFahim/tl#603, #604 U10): `Tests/Parity` carries tl's two-assembly domain (an `Idle` kind fed from the other assembly, an `Idle` kind fed in its own assembly, a kind without `Idle`), library, request script and expected column bytes per tick, copied by `eng/sync-parity.sh` (checked by the gate script); the PlayMode test replays it, 600 ticks with two world rewinds, and compares the column bytes every tick with the .NET host's.
+- `TimelineRequest.Reset(slot)` for `RequestOp.Reset` (tl Phase 8b); the Unity generators carry tl's derived kinds (`Sum<T>`, `Set<T>`, `While<T>`) and the TLGEN113 and TLGEN114 warnings. The `external/tl-kinds` pin moved to the tl Phase 8 branch.
 - A kind may declare `public static void Idle(...)`: it runs once per tick for every enabled kind row with no entries, so a column falls back (a "can double jump" flag goes back to false when its clip ends), the same rule as the .NET host (IAFahim/tl#584, #590). The `external/tl-kinds` pin moved to tl `434d729`.
 - Hello Tl sample (the smallest complete program) and a full course in the main README, from the first timeline to baking, rewind, speed, outside Unity and project ideas.
 - Tl Panel: a component with Play, Pause, Resume, Stop, Reverse, Seek, speed 0.25x to 4x, Stop channel, Stop all and a world rewind switch; the Force demo scene has one and `GameObject > Tl > Panel` adds it to any scene (`10902c9`).

@@ -18,17 +18,12 @@ internal sealed record FeederInfo(int Kind, FeederTrigger Trigger, string Consum
 
 internal sealed class KindCatalog
 {
-    internal const string KindAttribute = "Tl.TimelineKindAttribute";
-    internal const string TlKindAttribute = "Tl.TlKindAttribute";
-    internal const string FeedsAttribute = "Tl.FeedsAttribute";
-    internal const string PulseAttribute = "Tl.PulseAttribute";
+    internal const string KindAttribute = "Tl.TimelineKindAttribute", TlKindAttribute = "Tl.TlKindAttribute", FeedsAttribute = "Tl.FeedsAttribute", PulseAttribute = "Tl.PulseAttribute";
 
     public readonly List<KindInfo> Kinds = new();
     public readonly List<FeederInfo> Feeders = new();
 
     internal static int EntryBytes(KindAccepts accepts, int valueBytes) => accepts == KindAccepts.Spans ? 8 : 8 + ((valueBytes + 3) & ~3);
-
-    internal static int GroupEntryBytes(int largestValueBytes) => 12 + ((largestValueBytes + 3) & ~3);
 
     public int IndexOf(string name) => Kinds.FindIndex(k => k.FullName == name);
 
@@ -45,6 +40,8 @@ internal sealed class KindCatalog
         }
         TypeNames.Unique(keyed);
         var kindTypes = new Dictionary<Type, int>();
+        Type? Twin(Type t) => t.Namespace == "Tl" && t.IsConstructedGenericType && t.Name is "Sum`1" or "Set`1" or "While`1"
+            ? types.FirstOrDefault(x => x.FullName == "Tl.Derived." + t.Name[..^2] + "_" + Keying.StableName(t.GetGenericArguments()[0]).Replace('.', '_').Replace('+', '_')) : null;
         foreach (var type in types)
         {
             var attribute = type.CustomAttributes.FirstOrDefault(a => a.AttributeType.FullName is KindAttribute or TlKindAttribute);
@@ -89,7 +86,7 @@ internal sealed class KindCatalog
                     var where = $"'{type.FullName}.{method.Name}'";
                     if (attribute.ConstructorArguments.Count != 1 || attribute.ConstructorArguments[0].Value is not Type kindType)
                         throw Bad($"{where}: [{Short(name)}] needs typeof(<kind>).");
-                    if (!kindTypes.TryGetValue(kindType, out var kind))
+                    if (!kindTypes.TryGetValue(Twin(kindType) ?? kindType, out var kind))
                         throw Bad($"{where}: '{kindType.FullName}' is not a [TimelineKind].");
                     var info = catalog.Kinds[kind];
                     var trigger = name == FeedsAttribute ? FeederTrigger.Span : (FeederTrigger)(1 + Named(attribute, "On", 0));
@@ -152,11 +149,7 @@ internal sealed class KindCatalog
 
     static Type Strip(Type type) => type.IsByRef ? type.GetElementType()! : type;
 
-    static int? Inline(CustomAttributeData attribute)
-    {
-        var inline = Named(attribute, "Inline", -1);
-        return inline >= 0 ? inline : null;
-    }
+    static int? Inline(CustomAttributeData attribute) => Named(attribute, "Inline", -1) is var inline and >= 0 ? inline : null;
 
     static int Named(CustomAttributeData attribute, string name, int fallback)
     {
@@ -171,13 +164,9 @@ internal sealed class KindCatalog
         try
         {
             var flag = (bool)typeof(RuntimeHelpers).GetMethod(nameof(RuntimeHelpers.IsReferenceOrContainsReferences))!.MakeGenericMethod(type).Invoke(null, null)!;
-            if (flag) return null;
-            return (int)typeof(SizeCell<>).MakeGenericType(type).GetField("Value")!.GetValue(null)!;
+            return flag ? null : (int)typeof(SizeCell<>).MakeGenericType(type).GetField("Value")!.GetValue(null)!;
         }
-        catch (ArgumentException)
-        {
-            return null;
-        }
+        catch (ArgumentException) { return null; }
     }
 
     static IEnumerable<Type> GetTypesSafe(Assembly assembly)

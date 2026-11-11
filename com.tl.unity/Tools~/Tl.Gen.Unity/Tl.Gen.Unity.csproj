@@ -18,6 +18,9 @@
   <ItemGroup>
     <Compile Include="$(TlGenSource)/Analysis/SystemReader.cs" LinkBase="Linked" />
     <Compile Include="$(TlGenSource)/Analysis/NewStyle.cs" LinkBase="Linked" />
+    <Compile Include="$(TlGenSource)/Analysis/DerivedKinds.cs" LinkBase="Linked" />
+    <Compile Include="$(TlGenSource)/Analysis/Connections.cs" LinkBase="Linked" />
+    <Compile Include="$(TlGenSource)/DerivedKindsEmitter.cs" LinkBase="Linked" />
     <Compile Include="$(TlGenSource)/Analysis/Symbols.cs" LinkBase="Linked" />
     <Compile Include="$(TlGenSource)/Analysis/TypeAnalyzer.cs" LinkBase="Linked" />
     <Compile Include="$(TlGenSource)/Analysis/PairLayout.cs" LinkBase="Linked" />

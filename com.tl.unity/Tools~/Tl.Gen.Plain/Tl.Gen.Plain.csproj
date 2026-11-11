@@ -21,6 +21,7 @@
     <Compile Include="$(TlGenSource)/Model/*.cs" LinkBase="Linked/Model" />
     <Compile Include="$(TlGenSource)/SystemEmitter.cs" LinkBase="Linked" />
     <Compile Include="$(TlGenSource)/SystemGeneration.cs" LinkBase="Linked" />
+    <Compile Include="$(TlGenSource)/DerivedKindsEmitter.cs" LinkBase="Linked" />
     <Compile Include="$(TlGenSource)/CompileArtifact.cs" LinkBase="Linked" />
     <Compile Include="$(TlGenSource)/Polyfills.cs" LinkBase="Linked" />
   </ItemGroup>

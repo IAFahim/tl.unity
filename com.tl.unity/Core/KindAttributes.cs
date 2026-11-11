@@ -35,3 +35,15 @@ public sealed class PulseAttribute : Attribute
     public Type Kind { get; }
     public ClipEvent On { get; set; }
 }
+
+public struct Sum<T> where T : unmanaged
+{
+}
+
+public struct Set<T> where T : unmanaged
+{
+}
+
+public struct While<T> where T : unmanaged
+{
+}

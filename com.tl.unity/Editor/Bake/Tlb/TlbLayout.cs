@@ -12,7 +12,6 @@ internal static class TlbLayout
     internal const uint StepBytes = 8u;
     internal const uint SlotRowBytes = 24u;
     internal const ushort NoClipIndex = 0xFFFF;
-    internal const uint MarkerAlign = 8u;
     internal static uint Align16(uint value) => (value + 15u) & ~15u;
 
     internal static void WriteRow(byte[] bytes, int offset, ushort trackValueIndex, ushort firstIndex, ushort secondIndex, uint windowStart, uint windowEnd, uint factorStart, uint factorSpan, byte trackIndex)

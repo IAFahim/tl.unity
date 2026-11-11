@@ -41,6 +41,25 @@ namespace Tl
         int _byteCount;
         readonly List<nint> _arenas = new();
         internal static long NativeBlockCount;
+        uint _manifestOff;
+        int _manifestCount;
+
+        public ushort Find(string name)
+        {
+            var lo = 0;
+            var hi = _manifestCount - 1;
+            while (name != null && lo <= hi)
+            {
+                var mid = (lo + hi) >> 1;
+                var at = _base + _manifestOff + mid * 32;
+                var found = Encoding.UTF8.GetString(_base + BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(at + 8, 4)), (int)BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(at + 12, 4)));
+                var order = string.CompareOrdinal(found, name);
+                if (order == 0) return (ushort)(mid + 1);
+                if (order < 0) lo = mid + 1;
+                else hi = mid - 1;
+            }
+            return 0;
+        }
 
         struct MarkerTable
         {
@@ -165,6 +184,7 @@ namespace Tl
             _view.ByteCount = 0;
             _view.Kinds = default;
             _byteCount = 0;
+            _manifestCount = 0;
             _generation++;
         }
 
@@ -393,6 +413,8 @@ namespace Tl
             _view.TimelineCount = (int)count;
             _view.ByteCount = total;
             _view.Kinds = default;
+            _manifestOff = manifestOff;
+            _manifestCount = (int)count;
             if (count == 0) { _view.Timelines = null; return; }
             var timelines = (LibraryTimeline*)TrackAlloc((nuint)(count * (uint)sizeof(LibraryTimeline)));
             NativeMemory.Clear(timelines, (nuint)(count * (uint)sizeof(LibraryTimeline)));

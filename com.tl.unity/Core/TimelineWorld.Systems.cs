@@ -128,6 +128,11 @@ public sealed partial class TimelineWorld
             throw new ArgumentOutOfRangeException(nameof(record), $"Request names entity {record.Entity} outside the table capacity.");
         if (record.Op == RequestOp.Start && (record.Timeline == 0 || (uint)(record.Timeline - 1) >= (uint)_view.TimelineCount))
             throw new ArgumentException($"Request starts timeline {record.Timeline}; the loaded library holds {_view.TimelineCount}.");
+        if (record.Op == RequestOp.Reset)
+        {
+            players.ResetEntity(record.Entity);
+            return;
+        }
         var slots = new PlaybackTable.Slots(players, record.Entity);
         PlaybackRules.Apply(ref slots, _view.Timelines, _view.TimelineCount, record.Op, record.Timeline, record.At);
         players.SetPlaying(record.Entity, true);
