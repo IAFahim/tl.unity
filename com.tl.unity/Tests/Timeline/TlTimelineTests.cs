@@ -477,6 +477,24 @@ namespace Tl.Unity.Tracks.Tests
             set[0] = new TlTimelineSet { Blob = blob };
         }
 
+        // A cold editor compiles jobs on a background thread, so the first steps run the managed copy and set the probe.
+        // Step until the Burst copy has compiled (bounded), then clear the probe; a job that never compiles still fails the assert.
+        static void WarmBurst(LiveWorld live)
+        {
+            if (BurstCompiler.IsEnabled)
+            {
+                var clock = System.Diagnostics.Stopwatch.StartNew();
+                var clean = 0;
+                while (clean < 2 && clock.Elapsed.TotalSeconds < 20)
+                {
+                    ControlProbe.RanManaged = false;
+                    live.Step(1);
+                    if (ControlProbe.RanManaged) { clean = 0; System.Threading.Thread.Sleep(20); }
+                    else clean++;
+                }
+            }
+        }
+
         sealed class LiveWorld
         {
             readonly World _world;
@@ -573,6 +591,7 @@ namespace Tl.Unity.Tracks.Tests
             var entities = baked.World.EntityManager;
             var entity = baked.Single<TlTimelineSet>();
             var live = new LiveWorld(baked.World, true);
+            WarmBurst(live);
             ControlProbe.RanManaged = false;
             live.Step(3);
             var dashId = Library(baked.World).IdOf(TlTimelinePacker.AssetOf(dash));
@@ -612,6 +631,7 @@ namespace Tl.Unity.Tracks.Tests
             var entities = baked.World.EntityManager;
             var entity = baked.Single<TlTimelineSet>();
             var live = new LiveWorld(baked.World, true);
+            WarmBurst(live);
             ControlProbe.RanManaged = false;
             live.Step(1);
             var dashId = Library(baked.World).IdOf(TlTimelinePacker.AssetOf(dash));
