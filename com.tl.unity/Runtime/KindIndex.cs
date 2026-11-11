@@ -20,6 +20,7 @@ namespace Tl.Unity
         public int* StageCount;
         public int* StepStart;
         public global::Tl.LibraryStep** StepTable;
+        public global::Tl.LibraryStep** WindowStep;
         public byte** MarkerValues;
         public int WindowTotal;
         public int StepTableLength;
@@ -56,6 +57,15 @@ namespace Tl.Unity
             if (stage == null) return null;
             var s = (int)(stage - tl->Stages) - FirstStage[g];
             return (uint)s < (uint)StageCount[g] ? StepTable[start + s] : null;
+        }
+
+        public global::Tl.LibraryStep* StepInWindow(ushort timeline, int window, ushort tick)
+        {
+            var t = timeline - 1;
+            if ((uint)t >= (uint)TimelineCount) return null;
+            var step = WindowStep[WindowBase[t] + window];
+            if (step == null) step = StepOf(timeline, window, tick);
+            return step == null || tick < step->WindowStart || tick >= step->WindowEnd ? null : step;
         }
 
         public byte* MarkerOf(ushort timeline, int window)
@@ -258,6 +268,7 @@ namespace Tl.Unity
             index.StageCount = Zeroed<int>(Math.Max(1, total));
             index.StepStart = Zeroed<int>(Math.Max(1, total));
             index.MarkerValues = (byte**)Zeroed<IntPtr>(Math.Max(1, total));
+            var single = new List<(int window, int start)>();
             for (var g = 0; g < total; g++) index.StepStart[g] = -1;
             var table = new List<IntPtr>();
             for (var t = 0; t < count; t++)
@@ -285,6 +296,7 @@ namespace Tl.Unity
                     index.StepStart[g] = table.Count;
                     index.FirstStage[g] = first;
                     index.StageCount[g] = last - first + 1;
+                    if (first == last && EndsAscending(tl) && (first == 0 || tl->Stages[first - 1].End <= win.Start)) single.Add((g, table.Count));
                     for (var s = first; s <= last; s++)
                     {
                         var found = IntPtr.Zero;
@@ -300,6 +312,15 @@ namespace Tl.Unity
             index.StepTableLength = table.Count;
             index.StepTable = (global::Tl.LibraryStep**)Zeroed<IntPtr>(Math.Max(1, table.Count));
             for (var i = 0; i < table.Count; i++) index.StepTable[i] = (global::Tl.LibraryStep*)table[i];
+            index.WindowStep = (global::Tl.LibraryStep**)Zeroed<IntPtr>(Math.Max(1, total));
+            foreach (var (window, start) in single) index.WindowStep[window] = index.StepTable[start];
+        }
+
+        static bool EndsAscending(global::Tl.LibraryTimeline* tl)
+        {
+            for (var s = 1; s < tl->StageCount; s++)
+                if (tl->Stages[s].End < tl->Stages[s - 1].End) return false;
+            return true;
         }
 
         public void Dispose()
@@ -312,6 +333,7 @@ namespace Tl.Unity
             Free(StageCount);
             Free(StepStart);
             Free(StepTable);
+            Free(WindowStep);
             Free(MarkerValues);
             Free(EntryTypes);
             Free(ActiveTypes);

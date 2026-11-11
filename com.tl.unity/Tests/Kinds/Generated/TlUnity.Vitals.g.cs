@@ -94,8 +94,8 @@ switch (__en->Feeder)
 {
 case 0:
 {
-var __def = Index.StepOf(__en->Timeline, __en->Step, __tick);
-if (__def == null || __tick < __def->WindowStart || __tick >= __def->WindowEnd) break;
+var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);
+if (__def == null) break;
 byte* __row0 = (byte*)__def->FrameRow;
 byte* __first0 = __row0 + sizeof(global::KindGame.HitTrack);
 byte* __second0 = __def->FactorSpan == 0 ? null : __first0 + sizeof(global::KindGame.HitClip);
@@ -161,8 +161,8 @@ switch (__en->Feeder)
 {
 case 0:
 {
-var __def = Index.StepOf(__en->Timeline, __en->Step, __tick);
-if (__def == null || __tick < __def->WindowStart || __tick >= __def->WindowEnd) break;
+var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);
+if (__def == null) break;
 byte* __row0 = (byte*)__def->FrameRow;
 byte* __first0 = __row0 + sizeof(global::KindGame.HitTrack);
 byte* __second0 = __def->FactorSpan == 0 ? null : __first0 + sizeof(global::KindGame.HitClip);
