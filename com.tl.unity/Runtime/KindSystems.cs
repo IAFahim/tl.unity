@@ -19,6 +19,8 @@ namespace Tl.Unity
 
         public int DroppedStarts => Counter(KindCounter.DroppedStarts);
 
+        public int ManagedRuns => Counter(KindCounter.ManagedRuns);
+
         int Counter(int index)
         {
             Last->Complete();
@@ -74,17 +76,22 @@ namespace Tl.Unity
         BufferTypeHandle<Playback> _playbackHandle;
         BufferTypeHandle<TimelineRequest> _requestHandle;
         ComponentTypeHandle<TimelinePlaying> _playingHandle;
+        ComponentTypeHandle<TimelineHorizon> _horizonHandle;
         EntityStorageInfoLookup _storage;
         KindHandleSet _handles;
         TimelineKindTick _tick;
         uint _bound;
         bool _isBound;
+        uint _glideGeneration;
+        int _glideStepDir;
+        int _glideLimit;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             _tick = TimelineKindTick.Create();
             state.EntityManager.AddComponentData(state.SystemHandle, _tick);
+            state.EntityManager.AddComponentData(state.SystemHandle, TimelineGlide.Default);
             _query = new EntityQueryBuilder(Allocator.Temp)
                 .WithAllRW<Playback>()
                 .WithAllRW<TimelineRequest>()
@@ -94,6 +101,7 @@ namespace Tl.Unity
             _playbackHandle = state.GetBufferTypeHandle<Playback>(false);
             _requestHandle = state.GetBufferTypeHandle<TimelineRequest>(false);
             _playingHandle = state.GetComponentTypeHandle<TimelinePlaying>(false);
+            _horizonHandle = state.GetComponentTypeHandle<TimelineHorizon>(false);
             _storage = state.GetEntityStorageInfoLookup();
             state.RequireForUpdate<TimelineLibrary>();
             state.RequireForUpdate<TimelineStep>();
@@ -134,6 +142,13 @@ namespace Tl.Unity
             _playbackHandle.Update(ref state);
             _requestHandle.Update(ref state);
             _playingHandle.Update(ref state);
+            _horizonHandle.Update(ref state);
+            var stepDir = SystemAPI.GetSingleton<TimelineStep>().Forward ? 1 : -1;
+            var limit = (int)state.EntityManager.GetComponentData<TimelineGlide>(state.SystemHandle).Limit;
+            var forget = _glideGeneration != library.Generation || _glideStepDir != stepDir || _glideLimit != limit;
+            _glideGeneration = library.Generation;
+            _glideStepDir = stepDir;
+            _glideLimit = limit;
             var handles = _handles;
             var counters = _tick.Counters;
             var dependency = state.Dependency;
@@ -147,10 +162,13 @@ namespace Tl.Unity
                 PlaybackHandle = _playbackHandle,
                 RequestHandle = _requestHandle,
                 PlayingHandle = _playingHandle,
+                HorizonHandle = _horizonHandle,
                 Handles = handles,
                 Counters = counters,
-                StepDir = SystemAPI.GetSingleton<TimelineStep>().Forward ? 1 : -1,
+                StepDir = stepDir,
                 LastSystemVersion = state.LastSystemVersion,
+                HorizonLimit = limit,
+                ForgetHorizons = forget,
             };
             dependency = tick.ScheduleParallel(_query, dependency);
             var senders = _tick.Senders;

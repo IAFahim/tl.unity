@@ -12,7 +12,8 @@ namespace Tl.Unity
     {
         public const int DroppedPulses = 0;
         public const int DroppedStarts = 1;
-        public const int Count = 2;
+        public const int ManagedRuns = 2;
+        public const int Count = 3;
     }
 
     [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
@@ -22,14 +23,27 @@ namespace Tl.Unity
         public BufferTypeHandle<Playback> PlaybackHandle;
         public BufferTypeHandle<TimelineRequest> RequestHandle;
         public ComponentTypeHandle<TimelinePlaying> PlayingHandle;
+        public ComponentTypeHandle<TimelineHorizon> HorizonHandle;
         [NativeDisableContainerSafetyRestriction] public KindHandleSet Handles;
         [NativeDisableUnsafePtrRestriction] public int* Counters;
         public int StepDir;
         public uint LastSystemVersion;
+        public int HorizonLimit;
+        public bool ForgetHorizons;
+
+        [BurstDiscard]
+        static void CountManagedRun(int* counters) => System.Threading.Interlocked.Increment(ref counters[KindCounter.ManagedRuns]);
 
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
         {
+            CountManagedRun(Counters);
             var count = chunk.Count;
+            byte* horizons = null;
+            if (HorizonLimit > 0 && chunk.Has(ref HorizonHandle))
+            {
+                horizons = (byte*)chunk.GetNativeArray(ref HorizonHandle).GetUnsafePtr();
+                if (ForgetHorizons || chunk.DidChange(ref PlaybackHandle, LastSystemVersion)) UnsafeUtility.MemClear(horizons, count);
+            }
             var requested = chunk.Has(ref RequestHandle) && chunk.DidChange(ref RequestHandle, LastSystemVersion);
             if (!requested)
             {
@@ -48,6 +62,7 @@ namespace Tl.Unity
                 {
                     var queue = requests[row];
                     if (queue.Length == 0) continue;
+                    if (horizons != null) horizons[row] = 0;
                     var slots = new KindSlots(playbacks[row], &ctx, row);
                     for (var r = 0; r < queue.Length; r++)
                         global::Tl.PlaybackRules.Apply(ref slots, Index.Timelines, Index.TimelineCount, queue[r].Op, queue[r].Timeline, queue[r].At);
@@ -59,6 +74,7 @@ namespace Tl.Unity
             if (playing.ULong0 != 0 || (count > 64 && playing.ULong1 != 0))
             {
                 var tables = ctx.Tables;
+                var reverse = global::Tl.SlotWord.WorldReverse(StepDir > 0);
                 for (var kw = 0; kw < 2; kw++)
                 {
                     if (kw == 1 && count <= 64) break;
@@ -69,7 +85,22 @@ namespace Tl.Unity
                         kb &= kb - 1;
                         if (row >= count) break;
                         var slots = playbacks[row];
-                        if (!global::Tl.KindRules.TickEntity(in tables, (global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, ref ctx, row, StepDir))
+                        if (horizons == null)
+                        {
+                            if (!global::Tl.KindRules.TickEntity(in tables, (global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, ref ctx, row, StepDir))
+                                chunk.SetComponentEnabled(ref PlayingHandle, row, false);
+                            continue;
+                        }
+                        var steps = horizons[row];
+                        if (steps != 0)
+                        {
+                            horizons[row] = (byte)(steps - 1);
+                            global::Tl.GlideKernel.RunScalar((ulong*)slots.GetUnsafePtr(), slots.Length, reverse);
+                            continue;
+                        }
+                        if (global::Tl.KindRules.TickEntity(in tables, (global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, ref ctx, row, StepDir))
+                            horizons[row] = global::Tl.Horizon.OfKindRun((global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, in tables, in Index.Calm, reverse, HorizonLimit);
+                        else
                             chunk.SetComponentEnabled(ref PlayingHandle, row, false);
                     }
                 }

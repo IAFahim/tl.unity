@@ -81,7 +81,7 @@ namespace Tl.Unity
             {
                 var entity = scene.Entities[e];
                 var states = entity.States.Select(s => ResolveType(s.Type)).ToList();
-                var types = new List<ComponentType> { typeof(Playback), typeof(TimelineRequest), typeof(TimelinePlaying) };
+                var types = new List<ComponentType> { typeof(Playback), typeof(TimelineRequest), typeof(TimelinePlaying), typeof(TimelineHorizon) };
                 types.AddRange(states.Select(t => ComponentType.ReadWrite(t)));
                 var kinds = new List<KindDescriptor>();
                 for (var k = 0; k < registry.Count; k++)

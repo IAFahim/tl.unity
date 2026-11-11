@@ -36,6 +36,7 @@ namespace Tl.Unity
         public int* OwnerKinds;
         public int* OwnerIds;
         public int OwnerCount;
+        public global::Tl.KindCalm Calm;
 
         public bool IsCreated => Timelines != null || KindCount == 0 && Closure != null;
 
@@ -235,6 +236,9 @@ namespace Tl.Unity
             index.PairCount = pairs.Count;
             index.Pairs = Zeroed<uint>(Math.Max(1, pairs.Count));
             for (var n = 0; n < pairs.Count; n++) index.Pairs[n] = pairs[n];
+            var tables = index.Tables;
+            var calm = Math.Max(1, global::Tl.KindCalm.Length(in tables));
+            index.Calm = global::Tl.KindCalm.Build(in tables, Zeroed<byte>(calm), Zeroed<byte>(calm), Zeroed<int>(Math.Max(1, count)));
             BuildSteps(ref index, view, world);
             return index;
         }
@@ -318,6 +322,9 @@ namespace Tl.Unity
             Free(OwnerKeys);
             Free(OwnerKinds);
             Free(OwnerIds);
+            Free(Calm.Forward);
+            Free(Calm.Backward);
+            Free(Calm.Start);
             this = default;
         }
 

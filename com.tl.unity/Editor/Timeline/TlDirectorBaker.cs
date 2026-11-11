@@ -20,6 +20,7 @@ namespace Tl.Unity.Editor
                 ComponentType.ReadWrite<Playback>(),
                 ComponentType.ReadWrite<TimelineRequest>(),
                 ComponentType.ReadWrite<TimelinePlaying>(),
+                ComponentType.ReadWrite<TimelineHorizon>(),
                 ComponentType.ReadWrite<TlUnregistered>(),
                 ComponentType.ReadWrite<TlPlayOnAwake>(),
             };
@@ -51,6 +52,7 @@ namespace Tl.Unity.Editor
             AddBuffer<TimelineRequest>(entity);
             AddComponent<TimelinePlaying>(entity);
             SetComponentEnabled<TimelinePlaying>(entity, false);
+            AddComponent<TimelineHorizon>(entity);
             AddComponent<TlUnregistered>(entity);
             if (director.playOnAwake && ReferenceEquals(director.playableAsset, timelines[0]))
                 AddComponent(entity, new TlPlayOnAwake { Slot = 0, At = (ushort)Math.Min(ushort.MaxValue, TlTimelinePacker.Ticks(director.initialTime, rate)) });
