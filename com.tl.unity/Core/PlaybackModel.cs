@@ -93,11 +93,18 @@ public sealed unsafe class PlaybackTable : IDisposable
     int _growGate;
     bool _disposed;
     internal ulong LibraryGeneration;
+    readonly PlaybackHorizon* _horizon;
 
-    public PlaybackTable(int entityCapacity, int slotsPerEntity = 4)
+    public PlaybackTable(int entityCapacity, int slotsPerEntity = 4) : this(entityCapacity, slotsPerEntity, 0)
+    {
+    }
+
+    public PlaybackTable(int entityCapacity, int slotsPerEntity, int horizonLimit)
     {
         if (entityCapacity <= 0) throw new ArgumentOutOfRangeException(nameof(entityCapacity));
         if (slotsPerEntity <= 0 || slotsPerEntity > MaxSlots) throw new ArgumentOutOfRangeException(nameof(slotsPerEntity));
+        if ((uint)horizonLimit > Horizon.Max) throw new ArgumentOutOfRangeException(nameof(horizonLimit));
+        if (horizonLimit != 0 && (!BitConverter.IsLittleEndian || sizeof(Playback) != 8)) throw new PlatformNotSupportedException("Glide requires little-endian 8-byte playback storage.");
         _entities = entityCapacity;
         _slotsPerEntity = slotsPerEntity;
         var slots = NativeMemory.AlignedAlloc((nuint)entityCapacity * (nuint)slotsPerEntity * 8u, 64u);
@@ -117,6 +124,22 @@ public sealed unsafe class PlaybackTable : IDisposable
         _consumer = RequestQueue.Create();
         _pending = RequestQueue.Create();
         _closing = ClosingList.Create();
+        if (horizonLimit != 0)
+        {
+            try
+            {
+                var bytes = (nuint)sizeof(PlaybackHorizon) + (nuint)entityCapacity;
+                _horizon = (PlaybackHorizon*)NativeMemory.AlignedAlloc(bytes, 64u);
+                NativeMemory.Clear(_horizon, bytes);
+                _horizon->Limit = (byte)horizonLimit;
+                _horizon->Forward = 1;
+            }
+            catch
+            {
+                Dispose();
+                throw;
+            }
+        }
     }
 
     public const int MaxSlots = 256;
@@ -128,6 +151,7 @@ public sealed unsafe class PlaybackTable : IDisposable
 
     internal void SetPlaying(int entity, bool value)
     {
+        if (value) InvalidateGlide(entity);
         if (value) _playing[entity >> 6] |= 1ul << (entity & 63);
         else _playing[entity >> 6] &= ~(1ul << (entity & 63));
     }
@@ -135,11 +159,48 @@ public sealed unsafe class PlaybackTable : IDisposable
     internal void AttachKinds(KindStore? kinds)
     {
         if (kinds != null && _kinds != null) throw new InvalidOperationException("A KindStore is already attached to this PlaybackTable.");
+        ForgetGlide();
         _kinds = kinds;
     }
 
     public int SlotsPerEntity => _slotsPerEntity;
-    public PlaybackView View => new(_slots, _counts, _spilled, _blocks, _entities, _slotsPerEntity);
+    public PlaybackView View
+    {
+        get
+        {
+            if (_horizon != null) _horizon->Limit = 0;
+            return new(_slots, _counts, _spilled, _blocks, _entities, _slotsPerEntity);
+        }
+    }
+    public int HorizonLimit => _horizon == null ? 0 : _horizon->Limit;
+    internal ulong* SpilledBits => _spilled;
+    internal Playback* InlineSlots => _slots;
+    internal byte* Horizons => _horizon == null ? null : (byte*)(_horizon + 1);
+
+    internal void InvalidateGlide(int entity)
+    {
+        if (_horizon != null && _horizon->Limit != 0) ((byte*)(_horizon + 1))[entity] = 0;
+    }
+
+    internal void ForgetGlide()
+    {
+        if (_horizon != null) _horizon->World = 0;
+    }
+
+    internal byte* PrepareGlide(long world, ulong generation, bool forward)
+    {
+        if (_horizon == null || _horizon->Limit == 0) return null;
+        var horizons = (byte*)(_horizon + 1);
+        var direction = forward ? (byte)1 : (byte)0;
+        if (_horizon->World != world || _horizon->Generation != generation || _horizon->Forward != direction)
+        {
+            NativeMemory.Clear(horizons, (nuint)_entities);
+            _horizon->World = world;
+            _horizon->Generation = generation;
+            _horizon->Forward = direction;
+        }
+        return horizons;
+    }
     public RequestQueue* Pending => _pending;
     public RequestQueue* Consumer => _consumer;
     public ClosingList* Closing => _closing;
@@ -154,14 +215,12 @@ public sealed unsafe class PlaybackTable : IDisposable
         return IsSpilled(entity) ? *(int*)((byte*)inline + 4) : _slotsPerEntity;
     }
 
-    // Playback storage only: inline slots, counts, the Spilled bitset and
-    // the Blocks arena capacity. Excludes the Playing bitset, the request
-    // queues and the closing list.
     internal long NativeBytes =>
         (long)_entities * _slotsPerEntity * 8
         + (long)_entities * 4
         + (long)_spilledWords * 8
-        + (long)_blocksCapacity * 8;
+        + (long)_blocksCapacity * 8
+        + (_horizon == null ? 0 : (long)sizeof(PlaybackHorizon) + _entities);
     public bool IsPlaying(int entity, ushort timeline)
     {
         var slots = new Slots(this, entity);
@@ -290,6 +349,7 @@ public sealed unsafe class PlaybackTable : IDisposable
 
     internal void ResetEntity(int entity)
     {
+        InvalidateGlide(entity);
         _kinds?.ResetEntity(entity);
         var slots = SlotsOf(entity);
         new Span<Playback>(slots, _counts[entity]).Clear();
@@ -404,6 +464,7 @@ public sealed unsafe class PlaybackTable : IDisposable
         NativeMemory.AlignedFree(_slots);
         NativeMemory.AlignedFree(_counts);
         NativeMemory.AlignedFree(_spilled);
+        if (_horizon != null) NativeMemory.AlignedFree(_horizon);
         if (_blocks != null) NativeMemory.AlignedFree(_blocks);
         GC.SuppressFinalize(this);
     }

@@ -41,7 +41,13 @@ public sealed partial class TimelineWorld
         var timelines = _view.Timelines;
         if (timelines == null) return;
         var count = _view.TimelineCount;
-        AdvanceRange(players, timelines, count, forward, 0, players.PlayingWords);
+        if (players.HorizonLimit == 0) AdvanceRange(players, timelines, count, forward, 0, players.PlayingWords);
+        else if (_glideViewEscaped)
+        {
+            players.ForgetGlide();
+            AdvanceRange(players, timelines, count, forward, 0, players.PlayingWords);
+        }
+        else AdvanceGlideRange(players, timelines, count, forward, players.PrepareGlide(GlideIdentity(), _generation, forward));
         ClosingList.Clear(players.Closing);
     }
 
@@ -101,6 +107,7 @@ public sealed partial class TimelineWorld
     unsafe void SyncPlaybacks(PlaybackTable players)
     {
         if (players.LibraryGeneration == _generation) return;
+        players.ForgetGlide();
         for (var entity = 0; entity < players.EntityCapacity; entity++)
         {
             var slots = players.SlotsOf(entity);
@@ -119,6 +126,7 @@ public sealed partial class TimelineWorld
     {
         if ((uint)record.Entity >= (uint)players.EntityCapacity)
             throw new ArgumentOutOfRangeException(nameof(record), $"Request names entity {record.Entity} outside the table capacity.");
+        players.InvalidateGlide(record.Entity);
         if (record.Op == RequestOp.Start && (record.Timeline == 0 || (uint)(record.Timeline - 1) >= (uint)_view.TimelineCount))
             throw new ArgumentException($"Request starts timeline {record.Timeline}; the loaded library holds {_view.TimelineCount}.");
         if (record.Op == RequestOp.Reset)

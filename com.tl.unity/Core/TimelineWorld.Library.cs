@@ -128,9 +128,18 @@ namespace Tl
             LoadLibrary(library);
         }
 
-        public LibraryView View => _view;
+        public LibraryView View
+        {
+            get
+            {
+                _glideViewEscaped = true;
+                return _view;
+            }
+        }
         internal void AdoptView(LibraryView view)
         {
+            _glideIdentity = 0;
+            _glideViewEscaped = true;
             Free();
             _view = view;
             _ownsView = false;
@@ -138,6 +147,7 @@ namespace Tl
 
         public unsafe void Reload(ReadOnlySpan<byte> library)
         {
+            _glideIdentity = 0;
             Free();
             LoadLibrary(library);
             _generation++;
