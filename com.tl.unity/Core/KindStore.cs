@@ -325,9 +325,13 @@ public sealed unsafe class KindStore : IDisposable
 
     internal void ValidateStart(int entity, ushort timeline)
     {
+        if (Unreachable(entity, timeline) is { } bad) throw bad;
+    }
+
+    internal ArgumentException? Unreachable(int entity, ushort timeline)
+    {
         var missing = _closure[timeline - 1] & ~_mask[entity];
-        if (missing == 0) return;
-        throw new ArgumentException($"Entity {entity} cannot reach kind '{_kindNames[Tz(missing)]}' fed by timeline {timeline} or its next chain; add the kind to the entity's reach.");
+        return missing == 0 ? null : new ArgumentException($"Entity {entity} cannot reach kind '{_kindNames[Tz(missing)]}' fed by timeline {timeline} or its next chain; add the kind to the entity's reach.");
     }
 
     internal void Purge(int entity, int slot, in Playback playback)
@@ -398,7 +402,7 @@ public sealed unsafe class KindStore : IDisposable
 
         public PlaybackTable Players;
 
-        public Playback* Reserve(int entity, int used, int length) => Players.Reserve(entity, length);
+        public Playback* Reserve(int entity, int used, int length) => Players.Reserve(entity, length, used);
 
         public void Sample(int entity, byte slot, byte sample)
         {
@@ -407,8 +411,18 @@ public sealed unsafe class KindStore : IDisposable
             {
                 var kind = Tz(kinds);
                 kinds &= kinds - 1;
-                Tables[kind]->Sample(RowOf(entity, kind), slot, sample);
+                if (!Repeat(entity, kind)) Tables[kind]->Sample(RowOf(entity, kind), slot, sample);
             }
+        }
+
+        bool Repeat(int entity, int kind)
+        {
+            var table = Tables[kind];
+            if (!table->Grouped) return false;
+            var prior = Mask[entity] & ((1ul << kind) - 1);
+            for (; prior != 0; prior &= prior - 1)
+                if (Tables[Tz(prior)] == table) return true;
+            return false;
         }
 
         public void Unsample(int entity)

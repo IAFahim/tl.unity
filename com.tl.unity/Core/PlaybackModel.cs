@@ -286,11 +286,11 @@ public sealed unsafe class PlaybackTable : IDisposable
         _freeHeads[index] = offset;
     }
 
-    void Unspill(int entity, Playback* inline)
+    void Unspill(int entity, Playback* inline, int count = -1)
     {
         var offset = *(int*)inline;
         var capacity = *(int*)((byte*)inline + 4);
-        var count = _counts[entity];
+        if (count < 0) count = _counts[entity];
         new ReadOnlySpan<Playback>(_blocks + (nuint)offset, count).CopyTo(new Span<Playback>(inline, count));
         _spilled[entity >> 6] &= ~(1ul << (entity & 63));
         FreeBlock(offset, capacity);
@@ -298,17 +298,17 @@ public sealed unsafe class PlaybackTable : IDisposable
 
     // Ensures one entity's run holds at least length playbacks and returns
     // the run pointer. Other entities' runs are untouched.
-    internal Playback* Reserve(int entity, int length)
+    internal Playback* Reserve(int entity, int length, int used = 0)
     {
         EnterGate();
         try
         {
             var inline = InlineRun(entity);
-            var count = _counts[entity];
+            var count = Math.Max(_counts[entity], used);
             var needed = Math.Max(length, count);
             if (needed <= _slotsPerEntity)
             {
-                if (IsSpilled(entity)) Unspill(entity, inline);
+                if (IsSpilled(entity)) Unspill(entity, inline, count);
                 return inline;
             }
             var size = NextPow2(Math.Min(needed, MaxSlots));

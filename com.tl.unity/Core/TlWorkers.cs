@@ -63,8 +63,8 @@ public sealed unsafe class TlWorkers : IDisposable
         if (chunks < 0) throw new ArgumentOutOfRangeException(nameof(chunks));
         if (chunks > 0 && ends == null) throw new ArgumentNullException(nameof(ends));
         if (chunks == 0) return;
-        if (_w == 1) { for (var c = 0; c < chunks; c++) body(state, c == 0 ? 0 : ends[c - 1], ends[c], c); return; }
-        _next = 0; _d = 0; _error = null; _body = body; _state = state; _ends = ends; _chunks = chunks; _done.Reset(); _gate.Release(_w - 1);
+        _next = 0; _d = 0; _error = null; _body = body; _state = state; _ends = ends; _chunks = chunks;
+        if (_w > 1) { _done.Reset(); _gate.Release(_w - 1); }
         while (true)
         {
             var c = Interlocked.Increment(ref _next) - 1;
@@ -72,7 +72,7 @@ public sealed unsafe class TlWorkers : IDisposable
             try { body(state, c == 0 ? 0 : ends[c - 1], ends[c], c); }
             catch (Exception ex) { Interlocked.CompareExchange(ref _error, ex, null); }
         }
-        _done.Wait();
+        if (_w > 1) _done.Wait();
         if (_error != null) ExceptionDispatchInfo.Capture(_error).Throw();
     }
     void WorkerLoop()

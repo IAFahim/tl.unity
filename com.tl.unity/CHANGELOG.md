@@ -4,6 +4,9 @@ Newest first. Taken from the commit history since the zero-config plan started (
 
 ## Unreleased
 
+### Fixed
+- tl `46f702d2` (IAFahim/tl#628 runtime fuzz): a rejected request batch no longer wedges the queue (#630); `TlWorkers(1)` runs every chunk before rethrowing (#629); a full 256-slot row refuses a channel replace instead of dropping both playbacks (#631); `KindStore` super-sampling keeps scratch slots on spill (#634) and grouped kinds sample once (#633) and remove only their own pulses (#632). The ECS kind tick was not affected (one buffer per kind; `KindCursor.Reserve` honours `used`); the fixes reach the copied Core and the generators.
+
 ### Added
 - Horizon glide in the kind tick (tl `d0b77476`, `KindCalm`, `Horizon.OfKindRun`): `TimelineHorizon` (1 B per row) caches how many ticks are proven ordinary, so `TimelineKindTickSystem` only moves the tick between kind edges; `TimelineGlide { Limit }` on the system entity (default 255, 0 = off); `KindIndex.Calm` is built at library bind (2 B per timeline tick); invalidation by `ArchetypeChunk.DidChange` on `Playback`, library rebind, direction or limit change; `TimelineKindTick.ManagedRuns` and `KindCounter.ManagedRuns` Burst probes. On by default for baked directors and `TlSceneRun` rows; code-made archetypes add `TimelineHorizon`. Byte-identical to the full rules (pinned KindScript hashes, a 1500-tick differential at limits 1/7/255). See `docs/KINDS.md` "Horizon glide".
 - Generated kind and feed jobs resolve a window that lies in one stage directly: `KindIndex.WindowStep` and `KindIndex.StepInWindow(timeline, window, tick)` replace the per-entry stage search, with the old search as fallback; `KindStepTests` checks it against the search on every tick.

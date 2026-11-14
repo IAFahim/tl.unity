@@ -137,6 +137,7 @@ public static unsafe class PlaybackRules
             for (var i = 0; i < slots.Length; i++)
                 if (IsLive(in slots[i]) && slots[i].Channel == channel)
                 {
+                    if (slots.StartsPending && slots.Length >= PlaybackTable.MaxSlots && !HasFree(ref slots)) return false;
                     slots.Close(i);
                     replaced = true;
                     break;
@@ -156,6 +157,13 @@ public static unsafe class PlaybackRules
             return true;
         }
         return slots.TryAdd(in playback);
+    }
+
+    static bool HasFree<TSlots>(ref TSlots slots) where TSlots : struct, IPlaybackSlots
+    {
+        for (var i = 0; i < slots.Length; i++)
+            if (slots[i].Timeline == 0) return true;
+        return false;
     }
 
     public static bool Stop<TSlots>(ref TSlots slots, ushort timeline) where TSlots : struct, IPlaybackSlots

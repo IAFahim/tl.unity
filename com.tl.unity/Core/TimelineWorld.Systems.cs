@@ -18,8 +18,36 @@ public sealed partial class TimelineWorld
         if (players is null) throw new ArgumentNullException(nameof(players));
         if (players.Kinds != null) players.Kinds.Sync();
         else SyncPlaybacks(players);
+        var bad = Invalid(players, players.Consumer) ?? Invalid(players, players.Pending);
+        if (bad != null)
+        {
+            Reject(players, players.Consumer);
+            Reject(players, players.Pending);
+            throw bad;
+        }
         Drain(players, players.Consumer);
         Drain(players, players.Pending);
+    }
+
+    static unsafe void Reject(PlaybackTable players, RequestQueue* queue)
+    {
+        for (var i = 0; i < queue->Count; i++)
+            if ((uint)queue->Item(i).Entity < (uint)players.EntityCapacity) players.InvalidateGlide(queue->Item(i).Entity);
+        RequestQueue.Clear(queue);
+    }
+
+    unsafe Exception? Invalid(PlaybackTable players, RequestQueue* queue)
+    {
+        for (var i = 0; i < queue->Count; i++)
+        {
+            ref readonly var record = ref queue->Item(i);
+            if ((uint)record.Entity >= (uint)players.EntityCapacity)
+                return new ArgumentOutOfRangeException(nameof(record), $"Request names entity {record.Entity} outside the table capacity.");
+            if (record.Op == RequestOp.Start && (record.Timeline == 0 || (uint)(record.Timeline - 1) >= (uint)_view.TimelineCount))
+                return new ArgumentException($"Request starts timeline {record.Timeline}; the loaded library holds {_view.TimelineCount}.");
+            if (record.Op == RequestOp.Start && players.Kinds?.Unreachable(record.Entity, record.Timeline) is { } unreachable) return unreachable;
+        }
+        return null;
     }
 
     public unsafe void Tick(PlaybackTable players, bool forward = true)
@@ -124,11 +152,7 @@ public sealed partial class TimelineWorld
 
     unsafe void ApplyRecord(PlaybackTable players, in RequestRecord record)
     {
-        if ((uint)record.Entity >= (uint)players.EntityCapacity)
-            throw new ArgumentOutOfRangeException(nameof(record), $"Request names entity {record.Entity} outside the table capacity.");
         players.InvalidateGlide(record.Entity);
-        if (record.Op == RequestOp.Start && (record.Timeline == 0 || (uint)(record.Timeline - 1) >= (uint)_view.TimelineCount))
-            throw new ArgumentException($"Request starts timeline {record.Timeline}; the loaded library holds {_view.TimelineCount}.");
         if (record.Op == RequestOp.Reset)
         {
             players.ResetEntity(record.Entity);
