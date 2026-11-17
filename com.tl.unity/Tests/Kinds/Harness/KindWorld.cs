@@ -78,14 +78,22 @@ namespace KindGame
         {
         }
 
-        public KindWorld(int count, bool events, Func<World, SystemHandle> library)
+        public KindWorld(int count, byte[] library) : this(count, false, null, library)
+        {
+        }
+
+        public KindWorld(int count, bool events, Func<World, SystemHandle> library) : this(count, events, library, null)
+        {
+        }
+
+        KindWorld(int count, bool events, Func<World, SystemHandle> library, byte[] bytes)
         {
             _events = events;
             World = new World("TlKinds");
             Entities = World.EntityManager;
             if (library == null)
             {
-                _library = TlLibrary.FromBytes(KindLibraryBytes.Bytes());
+                _library = TlLibrary.FromBytes(bytes ?? KindLibraryBytes.Bytes());
                 _library.Publish(Entities);
             }
             else

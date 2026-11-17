@@ -2,9 +2,13 @@
   "name": "Tl.Unity.Kinds.Bench",
   "rootNamespace": "KindGame",
   "references": [
+    "Tl.Core",
     "Tl.Unity",
+    "Tl.Unity.Bake",
     "Tl.Unity.Kinds",
-    "Unity.Burst"
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities"
   ],
   "includePlatforms": [
     "Editor"
