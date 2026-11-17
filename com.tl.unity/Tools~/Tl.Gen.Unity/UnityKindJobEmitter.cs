@@ -385,6 +385,8 @@ namespace Tl.Gen.Unity
             W(writer, "var __eme = chunk.GetEnableableBits(ref " + info.Name + "EnabledHandle);");
             W(writer, "var __stride = sizeof(" + info.Entry + ");");
             W(writer, "var __count = chunk.Count;");
+            W(writer, "var __active = default(global::Unity.Entities.EnabledMask);");
+            W(writer, "var __masked = false;");
             W(writer, "for (var __kw = 0; __kw < 2; __kw++)");
             W(writer, "{");
             W(writer, "if (__kw == 1 && __count <= 64) break;");
@@ -529,7 +531,8 @@ namespace Tl.Gen.Unity
             W(writer, "if (__pulses == __len)");
             W(writer, "{");
             W(writer, "__buf.Clear();");
-            W(writer, "chunk.SetComponentEnabled(ref " + info.Name + "ActiveHandle, __row, false);");
+            W(writer, "if (!__masked) { __active = chunk.GetEnabledMask(ref " + info.Name + "ActiveHandle); __masked = true; }");
+            W(writer, "__active[__row] = false;");
             W(writer, "}");
             W(writer, "else if (__pulses != 0)");
             W(writer, "{");

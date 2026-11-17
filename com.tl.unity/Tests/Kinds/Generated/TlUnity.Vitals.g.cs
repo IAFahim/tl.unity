@@ -42,6 +42,8 @@ var __ema = chunk.GetEnableableBits(ref DamageActiveHandle);
 var __eme = chunk.GetEnableableBits(ref DamageEnabledHandle);
 var __stride = sizeof(global::KindGame.DamageEntry);
 var __count = chunk.Count;
+var __active = default(global::Unity.Entities.EnabledMask);
+var __masked = false;
 for (var __kw = 0; __kw < 2; __kw++)
 {
 if (__kw == 1 && __count <= 64) break;
@@ -200,7 +202,8 @@ if ((((global::Tl.KindEntry*)(__data + (long)__j * __stride))->Flags & global::T
 if (__pulses == __len)
 {
 __buf.Clear();
-chunk.SetComponentEnabled(ref DamageActiveHandle, __row, false);
+if (!__masked) { __active = chunk.GetEnabledMask(ref DamageActiveHandle); __masked = true; }
+__active[__row] = false;
 }
 else if (__pulses != 0)
 {

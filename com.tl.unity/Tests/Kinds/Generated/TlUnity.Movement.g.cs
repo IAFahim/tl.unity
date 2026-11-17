@@ -80,6 +80,8 @@ var __ema = chunk.GetEnableableBits(ref LiftActiveHandle);
 var __eme = chunk.GetEnableableBits(ref LiftEnabledHandle);
 var __stride = sizeof(global::KindGame.LiftEntry);
 var __count = chunk.Count;
+var __active = default(global::Unity.Entities.EnabledMask);
+var __masked = false;
 for (var __kw = 0; __kw < 2; __kw++)
 {
 if (__kw == 1 && __count <= 64) break;
@@ -258,7 +260,8 @@ if ((((global::Tl.KindEntry*)(__data + (long)__j * __stride))->Flags & global::T
 if (__pulses == __len)
 {
 __buf.Clear();
-chunk.SetComponentEnabled(ref LiftActiveHandle, __row, false);
+if (!__masked) { __active = chunk.GetEnabledMask(ref LiftActiveHandle); __masked = true; }
+__active[__row] = false;
 }
 else if (__pulses != 0)
 {
@@ -286,6 +289,8 @@ var __ema = chunk.GetEnableableBits(ref LocomotionActiveHandle);
 var __eme = chunk.GetEnableableBits(ref LocomotionEnabledHandle);
 var __stride = sizeof(global::KindGame.LocomotionEntry);
 var __count = chunk.Count;
+var __active = default(global::Unity.Entities.EnabledMask);
+var __masked = false;
 for (var __kw = 0; __kw < 2; __kw++)
 {
 if (__kw == 1 && __count <= 64) break;
@@ -444,7 +449,8 @@ if ((((global::Tl.KindEntry*)(__data + (long)__j * __stride))->Flags & global::T
 if (__pulses == __len)
 {
 __buf.Clear();
-chunk.SetComponentEnabled(ref LocomotionActiveHandle, __row, false);
+if (!__masked) { __active = chunk.GetEnabledMask(ref LocomotionActiveHandle); __masked = true; }
+__active[__row] = false;
 }
 else if (__pulses != 0)
 {
@@ -472,6 +478,8 @@ var __ema = chunk.GetEnableableBits(ref StatChangeActiveHandle);
 var __eme = chunk.GetEnableableBits(ref StatChangeEnabledHandle);
 var __stride = sizeof(global::KindGame.StatChangeEntry);
 var __count = chunk.Count;
+var __active = default(global::Unity.Entities.EnabledMask);
+var __masked = false;
 for (var __kw = 0; __kw < 2; __kw++)
 {
 if (__kw == 1 && __count <= 64) break;
@@ -642,7 +650,8 @@ if ((((global::Tl.KindEntry*)(__data + (long)__j * __stride))->Flags & global::T
 if (__pulses == __len)
 {
 __buf.Clear();
-chunk.SetComponentEnabled(ref StatChangeActiveHandle, __row, false);
+if (!__masked) { __active = chunk.GetEnabledMask(ref StatChangeActiveHandle); __masked = true; }
+__active[__row] = false;
 }
 else if (__pulses != 0)
 {

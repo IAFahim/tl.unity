@@ -47,7 +47,8 @@ namespace Tl.Unity
             ushort* clocks = null;
             var dues = default(BufferAccessor<PlaybackDue>);
             var buffers = stackalloc UnsafeUntypedBufferAccessor[Index.KindCount];
-            var ctx = new KindCursor { Index = Index, Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers, Counters = Counters };
+            var masks = stackalloc EnabledMask[Index.KindCount];
+            var ctx = new KindCursor { Index = Index, Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers, Masks = masks, Counters = Counters };
             ctx.Bind(in chunk);
             if (chunk.Has(ref ClockHandle) && chunk.Has(ref DueHandle))
             {
@@ -66,7 +67,7 @@ namespace Tl.Unity
                         for (var row = 0; row < count; row++)
                         {
                             DueNow(dues[row], all[row].Length);
-                            ctx.Refresh(row, (global::Tl.Playback*)all[row].GetUnsafePtr(), null);
+                            ctx.Refresh(row, (global::Tl.Playback*)all[row].GetUnsafePtr(), null, ulong.MaxValue);
                         }
                     }
                 }
@@ -112,9 +113,9 @@ namespace Tl.Unity
                     {
                         TimelineTicks.Encode((global::Tl.Playback*)playbacks[row].GetUnsafePtr(), playbacks[row].Length, clocks[row]);
                         DueNow(dues[row], playbacks[row].Length);
-                        ctx.Refresh(row, (global::Tl.Playback*)playbacks[row].GetUnsafePtr(), null);
+                        ctx.Refresh(row, (global::Tl.Playback*)playbacks[row].GetUnsafePtr(), null, ulong.MaxValue);
                     }
-                    chunk.SetComponentEnabled(ref PlayingHandle, row, true);
+                    ctx.SetPlaying(ref PlayingHandle, row, true);
                 }
             }
             var playing = chunk.GetEnableableBits(ref PlayingHandle);
@@ -139,14 +140,14 @@ namespace Tl.Unity
                                 clocks[row] = (ushort)(clocks[row] + StepDir);
                             }
                             else if (!TickLazy(in tables, ref ctx, playbacks[row], dues[row], ref clocks[row], ref horizons[row], row, reverse))
-                                chunk.SetComponentEnabled(ref PlayingHandle, row, false);
+                                ctx.SetPlaying(ref PlayingHandle, row, false);
                             continue;
                         }
                         var slots = playbacks[row];
                         if (horizons == null)
                         {
                             if (!global::Tl.KindRules.TickEntity(in tables, (global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, ref ctx, row, StepDir))
-                                chunk.SetComponentEnabled(ref PlayingHandle, row, false);
+                                ctx.SetPlaying(ref PlayingHandle, row, false);
                             continue;
                         }
                         var steps = horizons[row];
@@ -159,7 +160,7 @@ namespace Tl.Unity
                         if (global::Tl.KindRules.TickEntity(in tables, (global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, ref ctx, row, StepDir))
                             horizons[row] = global::Tl.Horizon.OfKindRun((global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, in tables, in Index.Calm, reverse, HorizonLimit);
                         else
-                            chunk.SetComponentEnabled(ref PlayingHandle, row, false);
+                            ctx.SetPlaying(ref PlayingHandle, row, false);
                     }
                 }
             }
@@ -203,7 +204,7 @@ namespace Tl.Unity
                     d[i] = TimelineTicks.Due(pb + i, in tables, in Index.Calm, reverse, now);
                     TimelineTicks.Encode(pb + i, after);
                 }
-                ctx.Refresh(row, pb, null);
+                ctx.Refresh(row, pb, null, ulong.MaxValue);
                 horizon = 0;
                 return live;
             }
@@ -213,7 +214,7 @@ namespace Tl.Unity
             changed[2] = 0;
             changed[3] = 0;
             var touched = false;
-            var appended = ctx.Appended;
+            ctx.AppendedKinds = 0;
             for (var k = 0; k < held; k++)
             {
                 var i = hits[k];
@@ -234,7 +235,8 @@ namespace Tl.Unity
                 var distance = (due - now) & TimelineTicks.Mask;
                 if (distance < near) near = distance;
             }
-            if (touched || ctx.Appended != appended) ctx.Refresh(row, pb, changed);
+            if (touched) ctx.Refresh(row, pb, changed, ulong.MaxValue);
+            else if (ctx.AppendedKinds != 0) ctx.Refresh(row, pb, changed, ctx.AppendedKinds);
             var limit = HorizonLimit < global::Tl.Horizon.Max ? HorizonLimit : global::Tl.Horizon.Max;
             horizon = (byte)(near - 1 < limit ? near - 1 : limit);
             return live;
@@ -306,7 +308,11 @@ namespace Tl.Unity
         public int* Counters;
         public ulong Reach;
         public ulong Taken;
-        public int Appended;
+        public ulong AppendedKinds;
+        public EnabledMask* Masks;
+        public ulong Masked;
+        public EnabledMask Playing;
+        public bool HasPlaying;
         public BufferAccessor<Playback> Playbacks;
 
         public void Bind(in ArchetypeChunk chunk)
@@ -315,9 +321,38 @@ namespace Tl.Unity
             Tables = Index.Tables;
             Reach = 0;
             Taken = 0;
+            Masked = 0;
+            HasPlaying = false;
             for (var k = 0; k < Index.KindCount; k++)
                 if (KindHandleSet.IsMapped(Handles, k) && chunk.Has(ref *KindHandleSet.Entry(Handles, k)))
                     Reach |= 1ul << k;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        void SetActive(int row, int kind, bool value)
+        {
+            if (Masks == null)
+            {
+                Chunk.SetComponentEnabled(ref *KindHandleSet.Active(Handles, kind), row, value);
+                return;
+            }
+            if ((Masked & (1ul << kind)) == 0)
+            {
+                Masks[kind] = Chunk.GetEnabledMask(ref *KindHandleSet.Active(Handles, kind));
+                Masked |= 1ul << kind;
+            }
+            Masks[kind][row] = value;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void SetPlaying(ref ComponentTypeHandle<TimelinePlaying> handle, int row, bool value)
+        {
+            if (!HasPlaying)
+            {
+                Playing = Chunk.GetEnabledMask(ref handle);
+                HasPlaying = true;
+            }
+            Playing[row] = value;
         }
 
         UnsafeUntypedBufferAccessor* Buffer(int kind)
@@ -350,16 +385,16 @@ namespace Tl.Unity
             buffer->ResizeUninitialized(row, length + 1);
             var entry = (byte*)buffer->GetUnsafePtr(row) + (long)length * stride;
             UnsafeUtility.MemClear(entry, stride);
-            Appended++;
-            if (length == 0) Chunk.SetComponentEnabled(ref *KindHandleSet.Active(Handles, kind), row, true);
+            AppendedKinds |= 1ul << kind;
+            if (length == 0) SetActive(row, kind, true);
             return (global::Tl.KindEntry*)entry;
         }
 
-        public void Refresh(int row, global::Tl.Playback* slots, ulong* changed)
+        public void Refresh(int row, global::Tl.Playback* slots, ulong* changed, ulong kinds)
         {
             for (var kind = 0; kind < Index.KindCount; kind++)
             {
-                if ((Reach & (1ul << kind)) == 0) continue;
+                if ((Reach & kinds & (1ul << kind)) == 0) continue;
                 var stride = Index.EntryStride[kind];
                 if (stride < KindEntryCache.MinStride) continue;
                 var buffer = Buffer(kind);
@@ -414,7 +449,7 @@ namespace Tl.Unity
                 }
                 if (kept == length) continue;
                 buffer->ResizeUninitialized(row, kept);
-                if (kept == 0) Chunk.SetComponentEnabled(ref *KindHandleSet.Active(Handles, kind), row, false);
+                if (kept == 0) SetActive(row, kind, false);
             }
         }
 
@@ -501,7 +536,7 @@ namespace Tl.Unity
                 }
                 if (kept == length) continue;
                 buffer->ResizeUninitialized(row, kept);
-                if (kept == 0) Chunk.SetComponentEnabled(ref *KindHandleSet.Active(Handles, kind), row, false);
+                if (kept == 0) SetActive(row, kind, false);
             }
         }
 
@@ -519,7 +554,7 @@ namespace Tl.Unity
                 var tail = (length - i - 1) * stride;
                 if (tail > 0) UnsafeUtility.MemMove(data + (long)i * stride, data + (long)(i + 1) * stride, tail);
                 buffer->ResizeUninitialized(row, length - 1);
-                if (length == 1) Chunk.SetComponentEnabled(ref *KindHandleSet.Active(Handles, kind), row, false);
+                if (length == 1) SetActive(row, kind, false);
                 return;
             }
         }

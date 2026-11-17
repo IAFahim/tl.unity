@@ -220,7 +220,6 @@ namespace Tl.Unity
             index.Timelines = view.Timelines;
             index.Sec = view.Kinds;
             index.KindCount = view.Kinds.IsEmpty ? 0 : view.Kinds.KindCount;
-            index.TickVersion = Zeroed<uint>(1);
             var count = view.TimelineCount;
             index.Closure = Zeroed<ulong>(Math.Max(1, count));
             index.PairStart = Zeroed<int>(count + 2);
@@ -349,7 +348,6 @@ namespace Tl.Unity
             Free(Calm.Forward);
             Free(Calm.Backward);
             Free(Calm.Start);
-            Free(TickVersion);
             this = default;
         }
 

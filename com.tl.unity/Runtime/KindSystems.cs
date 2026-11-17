@@ -12,6 +12,7 @@ namespace Tl.Unity
         [NativeDisableUnsafePtrRestriction] internal UnsafeList<JobHandle>* Writers;
         [NativeDisableUnsafePtrRestriction] internal int* Counters;
         [NativeDisableUnsafePtrRestriction] internal JobHandle* Last;
+        [NativeDisableUnsafePtrRestriction] internal uint* Version;
 
         public bool IsCreated => Counters != null;
 
@@ -49,6 +50,8 @@ namespace Tl.Unity
             UnsafeUtility.MemClear(tick.Counters, bytes);
             tick.Last = (JobHandle*)UnsafeUtility.Malloc(sizeof(JobHandle), 16, Allocator.Persistent);
             *tick.Last = default;
+            tick.Version = (uint*)UnsafeUtility.Malloc(sizeof(uint), 16, Allocator.Persistent);
+            *tick.Version = 0;
             return tick;
         }
 
@@ -62,6 +65,7 @@ namespace Tl.Unity
             UnsafeList<JobHandle>.Destroy(Writers);
             UnsafeUtility.Free(Counters, Allocator.Persistent);
             UnsafeUtility.Free(Last, Allocator.Persistent);
+            UnsafeUtility.Free(Version, Allocator.Persistent);
             this = default;
         }
     }
@@ -115,6 +119,11 @@ namespace Tl.Unity
         public void OnDestroy(ref SystemState state)
         {
             state.CompleteDependency();
+            if (SystemAPI.TryGetSingleton<TimelineLibrary>(out var library) && library.Kinds.TickVersion == _tick.Version)
+            {
+                library.Kinds.TickVersion = null;
+                SystemAPI.SetSingleton(library);
+            }
             _tick.Dispose();
         }
 
@@ -134,9 +143,14 @@ namespace Tl.Unity
         public void OnUpdate(ref SystemState state)
         {
             var library = SystemAPI.GetSingleton<TimelineLibrary>();
-            var index = library.Kinds;
-            if (index.KindCount == 0)
+            if (library.Kinds.KindCount == 0)
                 return;
+            if (library.Kinds.TickVersion != _tick.Version)
+            {
+                library.Kinds.TickVersion = _tick.Version;
+                SystemAPI.SetSingleton(library);
+            }
+            var index = library.Kinds;
             if (!_isBound || _bound != library.Generation)
             {
                 state.CompleteDependency();
