@@ -2,7 +2,7 @@ namespace Tl.Unity
 {
     public static unsafe class TimelineKernel
     {
-        public const int MaxSlotsPerEntity = 64;
+        public const int MaxSlotsPerEntity = global::Tl.PlaybackTable.MaxSlots;
 
         public static global::Tl.LibraryTimeline* GetTimeline(in global::Tl.LibraryView view, ushort timeline)
         {

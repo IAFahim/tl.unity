@@ -47,11 +47,13 @@ namespace Tl.Unity
             var scratch = new NativeArray<global::Tl.RequestRecord>(gathered.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
             global::Tl.RequestQueue.Sort((global::Tl.RequestRecord*)gathered.GetUnsafePtr(), gathered.Length, (global::Tl.RequestRecord*)scratch.GetUnsafePtr());
             var closed = new NativeList<ClosedPlayback>(gathered.Length, Allocator.Temp);
+            var byIndex = new NativeHashMap<int, Entity>(entities.Length, Allocator.Temp);
+            for (var e = 0; e < entities.Length; e++)
+                byIndex[entities[e].Index] = entities[e];
             for (var i = 0; i < gathered.Length; i++)
             {
                 var entry = gathered[i];
-                var target = FindEntity(entities, entry.Entity);
-                if (target == Entity.Null)
+                if (!byIndex.TryGetValue(entry.Entity, out var target))
                     continue;
                 var slots = new PlaybackSlots(manager.GetBuffer<Playback>(target), entry.Entity, closed);
                 global::Tl.PlaybackRules.Apply(ref slots, view.Timelines, view.TimelineCount, entry.Op, entry.Timeline, entry.At);
@@ -65,14 +67,6 @@ namespace Tl.Unity
             var sink = manager.GetBuffer<ClosedPlayback>(holders[0]);
             for (var i = 0; i < closed.Length; i++)
                 sink.Add(closed[i]);
-        }
-
-        static Entity FindEntity(NativeArray<Entity> entities, int index)
-        {
-            for (var i = 0; i < entities.Length; i++)
-                if (entities[i].Index == index)
-                    return entities[i];
-            return Entity.Null;
         }
     }
 
