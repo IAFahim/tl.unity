@@ -377,6 +377,8 @@ namespace Tl.Gen.Unity
             W(writer, "void Kind_" + ordinal + "(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks" + ColumnArgs(shape, true) + ")");
             W(writer, "{");
             W(writer, "var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;");
+            if (info.EntryBytes >= 12)
+                W(writer, "var __cached = __clocks != null && Index.TickVersion != null && chunk.GetChangeVersion(ref PlaybackHandle) == *Index.TickVersion;");
             W(writer, "if (!chunk.Has(ref " + info.Name + "EntryHandle)) return;");
             W(writer, "var __acc = chunk.GetBufferAccessor(ref " + info.Name + "EntryHandle);");
             W(writer, "var __ema = chunk.GetEnableableBits(ref " + info.Name + "ActiveHandle);");
@@ -427,10 +429,23 @@ namespace Tl.Gen.Unity
                 W(writer, "else");
                 W(writer, "{");
                 W(writer, "var __pb = __pbase + __en->Slot;");
-                W(writer, "if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;");
-                W(writer, "var __tl = Index.Timelines + (__en->Timeline - 1);");
-                W(writer, "ushort __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);");
-                W(writer, "var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;");
+                if (!sampled && info.EntryBytes >= 12)
+                {
+                    W(writer, "var __cb = __cached ? global::Tl.Unity.KindEntryCache.Bits(__en) : (byte)0;");
+                    W(writer, "var __hit = (__cb & global::Tl.Unity.KindEntryCache.Valid) != 0;");
+                    W(writer, "if (!__isPulse && (__hit ? (__cb & global::Tl.Unity.KindEntryCache.Paused) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0)) continue;");
+                    W(writer, "var __tl = Index.Timelines + (__en->Timeline - 1);");
+                    W(writer, "ushort __tick = __hit ? global::Tl.Unity.KindEntryCache.Tick(__en, __clocks[__row], __cb) : global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);");
+                    W(writer, "var __rev = __hit ? (__cb & global::Tl.Unity.KindEntryCache.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0;");
+                    W(writer, "var __backward = Forward ? __rev : !__rev;");
+                }
+                else
+                {
+                    W(writer, "if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;");
+                    W(writer, "var __tl = Index.Timelines + (__en->Timeline - 1);");
+                    W(writer, "ushort __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);");
+                    W(writer, "var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;");
+                }
                 W(writer, "var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)");
                 W(writer, "| ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)");
                 W(writer, "| ((__en->Flags & global::Tl.KindEntryFlags.Interrupted) != 0 ? global::Tl.FrameFlags.Interrupted : global::Tl.FrameFlags.None);");

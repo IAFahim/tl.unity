@@ -33,6 +33,7 @@ namespace Tl.Unity
         public int HorizonLimit;
         public bool ForgetHorizons;
         public ushort Now;
+        public uint TickVersion;
 
         [BurstDiscard]
         static void CountManagedRun(int* counters) => System.Threading.Interlocked.Increment(ref counters[KindCounter.ManagedRuns]);
@@ -40,10 +41,14 @@ namespace Tl.Unity
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
         {
             CountManagedRun(Counters);
+            if (Index.TickVersion != null) *Index.TickVersion = TickVersion;
             var count = chunk.Count;
             byte* horizons = null;
             ushort* clocks = null;
             var dues = default(BufferAccessor<PlaybackDue>);
+            var buffers = stackalloc UnsafeUntypedBufferAccessor[Index.KindCount];
+            var ctx = new KindCursor { Index = Index, Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers, Counters = Counters };
+            ctx.Bind(in chunk);
             if (chunk.Has(ref ClockHandle) && chunk.Has(ref DueHandle))
             {
                 clocks = (ushort*)chunk.GetNativeArray(ref ClockHandle).GetUnsafePtr();
@@ -56,8 +61,14 @@ namespace Tl.Unity
                 {
                     UnsafeUtility.MemClear(horizons, count);
                     if (clocks != null)
+                    {
+                        var all = chunk.GetBufferAccessor(ref PlaybackHandle);
                         for (var row = 0; row < count; row++)
-                            DueNow(dues[row], chunk.GetBufferAccessor(ref PlaybackHandle)[row].Length);
+                        {
+                            DueNow(dues[row], all[row].Length);
+                            ctx.Refresh(row, (global::Tl.Playback*)all[row].GetUnsafePtr(), null);
+                        }
+                    }
                 }
             }
             else if (clocks != null)
@@ -65,6 +76,11 @@ namespace Tl.Unity
                 var all = chunk.GetBufferAccessor(ref PlaybackHandle);
                 for (var row = 0; row < count; row++)
                 {
+                    if (dues[row].Length != 0)
+                    {
+                        ctx.Forget(row);
+                        dues[row].Clear();
+                    }
                     if (clocks[row] == 0) continue;
                     TimelineTicks.Decode((global::Tl.Playback*)all[row].GetUnsafePtr(), all[row].Length, clocks[row]);
                     clocks[row] = 0;
@@ -78,10 +94,7 @@ namespace Tl.Unity
                 if (idle.ULong0 == 0 && (count <= 64 || idle.ULong1 == 0)) return;
             }
             var playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
-            var buffers = stackalloc UnsafeUntypedBufferAccessor[Index.KindCount];
-            var ctx = new KindCursor { Index = Index, Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers, Counters = Counters };
             ctx.Playbacks = playbacks;
-            ctx.Bind(in chunk);
             if (requested)
             {
                 var requests = chunk.GetBufferAccessor(ref RequestHandle);
@@ -99,6 +112,7 @@ namespace Tl.Unity
                     {
                         TimelineTicks.Encode((global::Tl.Playback*)playbacks[row].GetUnsafePtr(), playbacks[row].Length, clocks[row]);
                         DueNow(dues[row], playbacks[row].Length);
+                        ctx.Refresh(row, (global::Tl.Playback*)playbacks[row].GetUnsafePtr(), null);
                     }
                     chunk.SetComponentEnabled(ref PlayingHandle, row, true);
                 }
@@ -161,6 +175,7 @@ namespace Tl.Unity
             for (var i = 0; i < length; i++) d[i] = (ushort)(Now & TimelineTicks.Mask);
         }
 
+        [global::Unity.Burst.CompilerServices.SkipLocalsInit]
         bool TickLazy(in global::Tl.KindTables tables, ref KindCursor ctx, DynamicBuffer<Playback> buffer, DynamicBuffer<PlaybackDue> dueBuffer, ref ushort clock, ref byte horizon, int row, ulong reverse)
         {
             var before = clock;
@@ -172,24 +187,12 @@ namespace Tl.Unity
             var pb = (global::Tl.Playback*)buffer.GetUnsafePtr();
             var now = (ushort)(Now & TimelineTicks.Mask);
             var hits = stackalloc byte[KindSlots.MaxSlots];
-            var held = 0;
             var live = false;
             var near = TimelineTicks.MaxCalm + 1;
+            var held = DueScan.Collect(d, n, now, hits, ref near, ref live);
             var rated = false;
-            for (var i = 0; i < n; i++)
-            {
-                var due = d[i];
-                if ((due & TimelineTicks.Inert) != 0) continue;
-                var distance = (due - now) & TimelineTicks.Mask;
-                if (distance == 0 || distance > TimelineTicks.MaxCalm + 1)
-                {
-                    hits[held++] = (byte)i;
-                    rated |= pb[i].Rate != 0;
-                    continue;
-                }
-                live = true;
-                if (distance < near) near = distance;
-            }
+            for (var k = 0; k < held; k++)
+                rated |= pb[hits[k]].Rate != 0;
             if (rated)
             {
                 TimelineTicks.Decode(pb, n, before);
@@ -200,23 +203,38 @@ namespace Tl.Unity
                     d[i] = TimelineTicks.Due(pb + i, in tables, in Index.Calm, reverse, now);
                     TimelineTicks.Encode(pb + i, after);
                 }
+                ctx.Refresh(row, pb, null);
                 horizon = 0;
                 return live;
             }
+            var changed = stackalloc ulong[4];
+            changed[0] = 0;
+            changed[1] = 0;
+            changed[2] = 0;
+            changed[3] = 0;
+            var touched = false;
+            var appended = ctx.Appended;
             for (var k = 0; k < held; k++)
             {
                 var i = hits[k];
                 var s = pb + i;
+                var word = *(ulong*)s;
                 TimelineTicks.Decode(s, before);
                 live |= global::Tl.KindRules.TickSlot(in tables, ref ctx, row, i, s, StepDir);
                 var due = TimelineTicks.Due(s, in tables, in Index.Calm, reverse, now);
                 TimelineTicks.Encode(s, after);
                 d[i] = due;
+                if (*(ulong*)s != word)
+                {
+                    changed[i >> 6] |= 1ul << (i & 63);
+                    touched = true;
+                }
                 if ((due & TimelineTicks.Inert) != 0) continue;
                 live = true;
                 var distance = (due - now) & TimelineTicks.Mask;
                 if (distance < near) near = distance;
             }
+            if (touched || ctx.Appended != appended) ctx.Refresh(row, pb, changed);
             var limit = HorizonLimit < global::Tl.Horizon.Max ? HorizonLimit : global::Tl.Horizon.Max;
             horizon = (byte)(near - 1 < limit ? near - 1 : limit);
             return live;
@@ -288,6 +306,7 @@ namespace Tl.Unity
         public int* Counters;
         public ulong Reach;
         public ulong Taken;
+        public int Appended;
         public BufferAccessor<Playback> Playbacks;
 
         public void Bind(in ArchetypeChunk chunk)
@@ -331,8 +350,48 @@ namespace Tl.Unity
             buffer->ResizeUninitialized(row, length + 1);
             var entry = (byte*)buffer->GetUnsafePtr(row) + (long)length * stride;
             UnsafeUtility.MemClear(entry, stride);
+            Appended++;
             if (length == 0) Chunk.SetComponentEnabled(ref *KindHandleSet.Active(Handles, kind), row, true);
             return (global::Tl.KindEntry*)entry;
+        }
+
+        public void Refresh(int row, global::Tl.Playback* slots, ulong* changed)
+        {
+            for (var kind = 0; kind < Index.KindCount; kind++)
+            {
+                if ((Reach & (1ul << kind)) == 0) continue;
+                var stride = Index.EntryStride[kind];
+                if (stride < KindEntryCache.MinStride) continue;
+                var buffer = Buffer(kind);
+                var length = buffer->GetBufferLength(row);
+                if (length == 0) continue;
+                var data = (byte*)buffer->GetUnsafePtr(row);
+                for (var i = 0; i < length; i++)
+                {
+                    var e = (global::Tl.KindEntry*)(data + (long)i * stride);
+                    if (!KindEntryCache.Cacheable(e)) continue;
+                    if (changed != null && (KindEntryCache.Bits(e) & KindEntryCache.Valid) != 0 && (changed[e->Slot >> 6] & (1ul << (e->Slot & 63))) == 0) continue;
+                    KindEntryCache.Write(e, slots + e->Slot);
+                }
+            }
+        }
+
+        public void Forget(int row)
+        {
+            for (var kind = 0; kind < Index.KindCount; kind++)
+            {
+                if ((Reach & (1ul << kind)) == 0) continue;
+                var stride = Index.EntryStride[kind];
+                if (stride < KindEntryCache.MinStride) continue;
+                var buffer = Buffer(kind);
+                var length = buffer->GetBufferLength(row);
+                var data = (byte*)buffer->GetUnsafePtr(row);
+                for (var i = 0; i < length; i++)
+                {
+                    var e = (global::Tl.KindEntry*)(data + (long)i * stride);
+                    if (KindEntryCache.Cacheable(e)) *((byte*)e + 10) = 0;
+                }
+            }
         }
 
         public void Purge(int row, byte slot, ushort timeline)

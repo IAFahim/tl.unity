@@ -65,6 +65,36 @@ namespace KindGame
                 into.Add(data[i]);
         }
 
+        static int EntryBytes<T>(List<byte> into, EntityManager entities, Entity entity) where T : unmanaged, IBufferElementData
+        {
+            var buffer = entities.GetBuffer<T>(entity, true);
+            var slots = entities.GetBuffer<Playback>(entity, true);
+            var stride = UnsafeUtility.SizeOf<T>();
+            var data = (byte*)buffer.GetUnsafeReadOnlyPtr();
+            var expected = stackalloc byte[stride];
+            var valid = 0;
+            into.Add((byte)buffer.Length);
+            for (var i = 0; i < buffer.Length; i++)
+            {
+                var entry = (global::Tl.KindEntry*)(data + (long)i * stride);
+                var cacheable = stride >= KindEntryCache.MinStride && KindEntryCache.Cacheable(entry);
+                if (cacheable && (KindEntryCache.Bits(entry) & KindEntryCache.Valid) != 0)
+                {
+                    UnsafeUtility.MemCpy(expected, entry, stride);
+                    var slot = slots[entry->Slot];
+                    KindEntryCache.Write((global::Tl.KindEntry*)expected, (CorePlayback*)&slot);
+                    for (var b = 8; b < 12; b++)
+                        Assert.AreEqual(expected[b], ((byte*)entry)[b], "stale cache for slot " + entry->Slot);
+                    valid++;
+                }
+                for (var b = 0; b < stride; b++)
+                    into.Add(cacheable && b >= 8 && b < 12 ? (byte)0 : ((byte*)entry)[b]);
+            }
+            return valid;
+        }
+
+        int _cachedEntries;
+
         static void Value<T>(List<byte> into, T value) where T : unmanaged
         {
             var data = (byte*)&value;
@@ -72,7 +102,7 @@ namespace KindGame
                 into.Add(data[i]);
         }
 
-        static byte[] Snapshot(KindWorld game)
+        byte[] Snapshot(KindWorld game)
         {
             var entities = game.Entities;
             entities.CompleteAllTrackedJobs();
@@ -80,10 +110,10 @@ namespace KindGame
             foreach (var row in game.Rows)
             {
                 PlaybackBytes(bytes, entities, row);
-                Bytes<LocomotionEntry>(bytes, entities, row);
-                Bytes<LiftEntry>(bytes, entities, row);
-                Bytes<StatChangeEntry>(bytes, entities, row);
-                Bytes<DamageEntry>(bytes, entities, row);
+                _cachedEntries += EntryBytes<LocomotionEntry>(bytes, entities, row);
+                _cachedEntries += EntryBytes<LiftEntry>(bytes, entities, row);
+                _cachedEntries += EntryBytes<StatChangeEntry>(bytes, entities, row);
+                _cachedEntries += EntryBytes<DamageEntry>(bytes, entities, row);
                 bytes.Add((byte)((entities.IsComponentEnabled<TimelinePlaying>(row) ? 1 : 0) | (entities.IsComponentEnabled<LocomotionActive>(row) ? 2 : 0) | (entities.IsComponentEnabled<LiftActive>(row) ? 4 : 0) | (entities.IsComponentEnabled<StatChangeActive>(row) ? 8 : 0) | (entities.IsComponentEnabled<DamageActive>(row) ? 16 : 0)));
                 Value(bytes, entities.GetComponentData<Movement_MotionData>(row));
                 Value(bytes, entities.GetComponentData<Movement_StaminaData>(row));
@@ -278,6 +308,7 @@ namespace KindGame
             Lazy(candidate, (byte)limit);
             var rng = 0x6A09E667u;
             var calm = 0;
+            _cachedEntries = 0;
             for (var step = 0; step < 1500; step++)
             {
                 if (step == 700) candidate.Entities.SetComponentData(candidate.TickHandle, new TimelineGlide { Limit = 0 });
@@ -320,6 +351,85 @@ namespace KindGame
                         calm++;
             }
             Assert.Greater(calm, 1000);
+            Assert.Greater(_cachedEntries, 1000);
+            Assert.AreEqual(reference.Tick.DroppedStarts, candidate.Tick.DroppedStarts);
+        }
+
+        static void EditReal(KindWorld game, int row, int slot, Func<Playback, Playback> change)
+        {
+            var entity = game.Rows[row];
+            var clock = game.Entities.HasComponent<TimelineClock>(entity) ? game.Entities.GetComponentData<TimelineClock>(entity).Value : (ushort)0;
+            game.Edit(row, slot, p =>
+            {
+                p.Tick = TimelineTicks.Real(in p, clock);
+                p = change(p);
+                var encoded = p;
+                TimelineTicks.Encode((CorePlayback*)&encoded, clock);
+                return encoded;
+            });
+        }
+
+        static void Request(KindWorld reference, KindWorld candidate, int row, TimelineRequest request)
+        {
+            reference.Entities.GetBuffer<TimelineRequest>(reference.Rows[row]).Add(request);
+            candidate.Entities.GetBuffer<TimelineRequest>(candidate.Rows[row]).Add(request);
+        }
+
+        [TestCase(1)]
+        [TestCase(255)]
+        public void KindEntryCachesMatchTheirSlotsThroughRequestsEditsAndModeChanges(int limit)
+        {
+            var ids = new[] { KindWorld.Jump, KindWorld.PotionHop, KindWorld.Run, KindWorld.SpeedBoost, KindWorld.Stomp, KindWorld.Vault, KindWorld.Waltz };
+            using var reference = new KindWorld(24);
+            using var candidate = new KindWorld(24);
+            Lazy(candidate, (byte)limit);
+            var rng = 0x3C6EF372u;
+            _cachedEntries = 0;
+            for (var step = 0; step < 1200; step++)
+            {
+                if (step == 400) candidate.Entities.SetComponentData(candidate.TickHandle, new TimelineGlide { Limit = 0 });
+                if (step == 430) candidate.Entities.SetComponentData(candidate.TickHandle, new TimelineGlide { Limit = (byte)limit });
+                var forward = !(step >= 600 && step < 650) && !(step >= 900 && step < 902);
+                for (var row = 0; row < 24; row++)
+                {
+                    var r = Next(ref rng);
+                    var timeline = ids[(r >> 8) % (uint)ids.Length];
+                    switch (r % 48)
+                    {
+                        case 0:
+                        case 1:
+                            Request(reference, candidate, row, TimelineRequest.Start(0, timeline, (ushort)((r >> 16) & 7)));
+                            break;
+                        case 2:
+                            Request(reference, candidate, row, TimelineRequest.Pause(0, timeline));
+                            break;
+                        case 3:
+                            Request(reference, candidate, row, TimelineRequest.Resume(0, timeline));
+                            break;
+                        case 4:
+                            Request(reference, candidate, row, TimelineRequest.Seek(0, timeline, (ushort)((r >> 16) & 15)));
+                            break;
+                        case 5:
+                            Request(reference, candidate, row, TimelineRequest.Reverse(0, timeline, ((r >> 16) & 1) != 0));
+                            break;
+                        case 6:
+                            Request(reference, candidate, row, TimelineRequest.Stop(0, timeline));
+                            break;
+                        case 7:
+                            if (reference.Entities.GetBuffer<Playback>(reference.Rows[row], true).Length > 0)
+                            {
+                                var shift = (ushort)((r >> 16) & 3);
+                                EditReal(reference, row, 0, p => { if (p.Tick > shift) p.Tick -= shift; return p; });
+                                EditReal(candidate, row, 0, p => { if (p.Tick > shift) p.Tick -= shift; return p; });
+                            }
+                            break;
+                    }
+                }
+                reference.Step(forward);
+                candidate.Step(forward);
+                Assert.AreEqual(Snapshot(reference), Snapshot(candidate), "step " + step);
+            }
+            Assert.Greater(_cachedEntries, 1000);
             Assert.AreEqual(reference.Tick.DroppedStarts, candidate.Tick.DroppedStarts);
         }
 

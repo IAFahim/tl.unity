@@ -180,6 +180,7 @@ namespace Tl.Unity
                 LastSystemVersion = state.LastSystemVersion,
                 HorizonLimit = limit,
                 ForgetHorizons = forget,
+                TickVersion = state.GlobalSystemVersion,
             };
             dependency = tick.ScheduleParallel(_query, dependency);
             var senders = _tick.Senders;
