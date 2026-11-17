@@ -434,6 +434,39 @@ namespace KindGame
         }
 
         [Test]
+        public void ALazyRowThatLosesItsDueBufferDecodesAndDropsItsCaches()
+        {
+            using var reference = new KindWorld(4);
+            using var candidate = new KindWorld(4);
+            Lazy(candidate);
+            for (var row = 0; row < 4; row++)
+            {
+                reference.Start(row, KindWorld.Run);
+                candidate.Start(row, KindWorld.Run);
+                reference.Start(row, KindWorld.Waltz);
+                candidate.Start(row, KindWorld.Waltz);
+            }
+            _cachedEntries = 0;
+            var cachedBefore = 0;
+            for (var step = 0; step < 240; step++)
+            {
+                if (step == 97)
+                {
+                    cachedBefore = _cachedEntries;
+                    for (var row = 0; row < 4; row++)
+                        candidate.Entities.RemoveComponent<PlaybackDue>(candidate.Rows[row]);
+                }
+                reference.Step();
+                candidate.Step();
+                Assert.AreEqual(Snapshot(reference), Snapshot(candidate), "step " + step);
+            }
+            Assert.Greater(cachedBefore, 0);
+            Assert.AreEqual(cachedBefore, _cachedEntries);
+            for (var row = 0; row < 4; row++)
+                Assert.AreEqual(0, candidate.Entities.GetComponentData<TimelineClock>(candidate.Rows[row]).Value);
+        }
+
+        [Test]
         public void ACalmLazyRowKeepsItsSlotBytesAndOnlyMovesItsClock()
         {
             using var game = new KindWorld(1);

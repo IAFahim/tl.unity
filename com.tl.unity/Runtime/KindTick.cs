@@ -41,7 +41,7 @@ namespace Tl.Unity
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
         {
             CountManagedRun(Counters);
-            if (Index.TickVersion != null) *Index.TickVersion = TickVersion;
+            if (Index.TickVersion != null && *Index.TickVersion != TickVersion) *Index.TickVersion = TickVersion;
             var count = chunk.Count;
             byte* horizons = null;
             ushort* clocks = null;
@@ -50,10 +50,15 @@ namespace Tl.Unity
             var masks = stackalloc EnabledMask[Index.KindCount];
             var ctx = new KindCursor { Index = Index, Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers, Masks = masks, Counters = Counters };
             ctx.Bind(in chunk);
-            if (chunk.Has(ref ClockHandle) && chunk.Has(ref DueHandle))
+            if (chunk.Has(ref ClockHandle))
             {
-                clocks = (ushort*)chunk.GetNativeArray(ref ClockHandle).GetUnsafePtr();
-                dues = chunk.GetBufferAccessor(ref DueHandle);
+                if (chunk.Has(ref DueHandle))
+                {
+                    clocks = (ushort*)chunk.GetNativeArray(ref ClockHandle).GetUnsafePtr();
+                    dues = chunk.GetBufferAccessor(ref DueHandle);
+                }
+                else
+                    Unclock(in chunk, ref ctx, count);
             }
             if (HorizonLimit > 0 && chunk.Has(ref HorizonHandle))
             {
@@ -169,6 +174,28 @@ namespace Tl.Unity
 
     public unsafe partial struct KindTickJob
     {
+        void Unclock(in ArchetypeChunk chunk, ref KindCursor ctx, int count)
+        {
+            var clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle);
+            var moved = chunk.DidChange(ref PlaybackHandle, LastSystemVersion);
+            var stale = moved;
+            for (var row = 0; row < count && !stale; row++)
+                stale = clocks[row] != 0;
+            if (!stale) return;
+            clocks = (ushort*)chunk.GetNativeArray(ref ClockHandle).GetUnsafePtr();
+            var all = chunk.GetBufferAccessor(ref PlaybackHandle);
+            for (var row = 0; row < count; row++)
+            {
+                if (clocks[row] == 0 && !moved) continue;
+                if (clocks[row] != 0)
+                {
+                    TimelineTicks.Decode((global::Tl.Playback*)all[row].GetUnsafePtr(), all[row].Length, clocks[row]);
+                    clocks[row] = 0;
+                }
+                ctx.Forget(row);
+            }
+        }
+
         void DueNow(DynamicBuffer<PlaybackDue> dues, int length)
         {
             dues.ResizeUninitialized(length);
