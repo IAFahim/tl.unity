@@ -5,6 +5,7 @@ Newest first. Taken from the commit history since the zero-config plan started (
 ## Unreleased
 
 ### Fixed
+- Kind-free libraries: a character could hold only 64 playbacks (`TimelineKernel.MaxSlotsPerEntity`), and further starts were dropped silently; it now holds 256, the same as Core and the kinds path. `TimelineRequestSystem` found each request's entity by scanning every requesting entity (quadratic in the number of characters that start timelines in one frame); it now uses a hash map (`79a099c`).
 - tl `46f702d2` (IAFahim/tl#628 runtime fuzz): a rejected request batch no longer wedges the queue (#630); `TlWorkers(1)` runs every chunk before rethrowing (#629); a full 256-slot row refuses a channel replace instead of dropping both playbacks (#631); `KindStore` super-sampling keeps scratch slots on spill (#634) and grouped kinds sample once (#633) and remove only their own pulses (#632). The ECS kind tick was not affected (one buffer per kind; `KindCursor.Reserve` honours `used`); the fixes reach the copied Core and the generators.
 
 ### Added
