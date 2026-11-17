@@ -21,7 +21,7 @@ namespace KindGame
             var log = Path.Combine(UnityEngine.Application.dataPath, "..", "OwnerScaleBench.log");
             var shapes = "10000x40,20000x100,20000x200";
             var durations = "120,600,3000";
-            var modes = "eager,glide";
+            var modes = "eager,glide,lazy";
             var warmup = 64;
             var measure = 128;
             for (var i = 0; i + 1 < args.Length; i++)
@@ -126,6 +126,11 @@ namespace KindGame
             {
                 using var all = game.Entities.CreateEntityQuery(typeof(Playback));
                 game.Entities.AddComponent<TimelineHorizon>(all);
+                if (mode == "lazy")
+                {
+                    game.Entities.AddComponent<TimelineClock>(all);
+                    game.Entities.AddComponent<PlaybackDue>(all);
+                }
             }
             game.Entities.SetComponentData(game.TickHandle, new TimelineGlide { Limit = mode == "eager" ? (byte)0 : (byte)global::Tl.Horizon.Max });
             var setup = Stopwatch.StartNew();
@@ -193,10 +198,15 @@ namespace KindGame
             for (var row = 0; row < game.Rows.Length; row++)
             {
                 var buffer = game.Entities.GetBuffer<Playback>(game.Rows[row], true);
-                var data = (byte*)buffer.GetUnsafeReadOnlyPtr();
-                var length = buffer.Length * sizeof(Playback);
-                for (var i = 0; i < length; i++)
-                    hash = (hash ^ data[i]) * 1099511628211ul;
+                var clock = game.Entities.HasComponent<TimelineClock>(game.Rows[row]) ? game.Entities.GetComponentData<TimelineClock>(game.Rows[row]).Value : (ushort)0;
+                for (var slot = 0; slot < buffer.Length; slot++)
+                {
+                    var copy = buffer[slot];
+                    copy.Tick = TimelineTicks.Real(in copy, clock);
+                    var data = (byte*)&copy;
+                    for (var i = 0; i < sizeof(Playback); i++)
+                        hash = (hash ^ data[i]) * 1099511628211ul;
+                }
                 var motion = game.Motion(row);
                 hash = (hash ^ (ulong)BitConverter.SingleToInt32Bits(motion.X)) * 1099511628211ul;
                 hash = (hash ^ (ulong)game.Health(row)) * 1099511628211ul;

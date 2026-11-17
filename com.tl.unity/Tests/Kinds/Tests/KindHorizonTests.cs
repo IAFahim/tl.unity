@@ -20,6 +20,32 @@ namespace KindGame
 
         static int Steps(KindWorld game, int row) => game.Entities.GetComponentData<TimelineHorizon>(game.Rows[row]).Steps;
 
+        static void Lazy(KindWorld game, byte limit = global::Tl.Horizon.Max)
+        {
+            for (var i = 0; i < game.Rows.Length; i++)
+            {
+                game.Entities.AddComponent<TimelineHorizon>(game.Rows[i]);
+                game.Entities.AddComponent<TimelineClock>(game.Rows[i]);
+                game.Entities.AddBuffer<PlaybackDue>(game.Rows[i]);
+            }
+            game.Entities.SetComponentData(game.TickHandle, new TimelineGlide { Limit = limit });
+        }
+
+        static void PlaybackBytes(List<byte> into, EntityManager entities, Entity entity)
+        {
+            var clock = entities.HasComponent<TimelineClock>(entity) ? entities.GetComponentData<TimelineClock>(entity).Value : (ushort)0;
+            var buffer = entities.GetBuffer<Playback>(entity, true);
+            into.Add((byte)buffer.Length);
+            for (var i = 0; i < buffer.Length; i++)
+            {
+                var slot = buffer[i];
+                slot.Tick = TimelineTicks.Real(in slot, clock);
+                var data = (byte*)&slot;
+                for (var b = 0; b < sizeof(Playback); b++)
+                    into.Add(data[b]);
+            }
+        }
+
         static int Expected(KindWorld game, int row, bool forward, int limit)
         {
             using var query = game.Entities.CreateEntityQuery(typeof(TimelineLibrary));
@@ -53,7 +79,7 @@ namespace KindGame
             var bytes = new List<byte>();
             foreach (var row in game.Rows)
             {
-                Bytes<Playback>(bytes, entities, row);
+                PlaybackBytes(bytes, entities, row);
                 Bytes<LocomotionEntry>(bytes, entities, row);
                 Bytes<LiftEntry>(bytes, entities, row);
                 Bytes<StatChangeEntry>(bytes, entities, row);
@@ -223,6 +249,114 @@ namespace KindGame
             Assert.AreEqual(managedBefore, game.Tick.ManagedRuns);
             Assert.AreEqual(0, game.Tick.ManagedRuns, "the kind tick job ran without Burst");
             Assert.Greater(Steps(game, 0) + Steps(game, 1) + Steps(game, 2), 0);
+        }
+
+        [Test]
+        public void LazyRowsReproduceThePinnedKindScriptHashes()
+        {
+            using (var game = new KindWorld(KindScript.Rows))
+            {
+                Lazy(game);
+                Assert.AreEqual(KindScript.Pinned, KindScript.Play(game, KindScript.Steps));
+                Assert.AreEqual(0, game.Tick.DroppedStarts);
+            }
+            using (var game = new KindWorld(KindScript.Rows, true))
+            {
+                Lazy(game);
+                Assert.AreEqual(KindScript.EventsPinned, KindScript.PlayEvents(game, KindScript.Steps));
+            }
+        }
+
+        [TestCase(1)]
+        [TestCase(7)]
+        [TestCase(255)]
+        public void LazyRowsMatchTheEdgeLawEveryTickThroughLimitAndDirectionChanges(int limit)
+        {
+            var ids = new[] { KindWorld.Jump, KindWorld.PotionHop, KindWorld.Run, KindWorld.SpeedBoost, KindWorld.Stomp, KindWorld.Vault, KindWorld.Waltz };
+            using var reference = new KindWorld(16);
+            using var candidate = new KindWorld(16);
+            Lazy(candidate, (byte)limit);
+            var rng = 0x6A09E667u;
+            var calm = 0;
+            for (var step = 0; step < 1500; step++)
+            {
+                if (step == 700) candidate.Entities.SetComponentData(candidate.TickHandle, new TimelineGlide { Limit = 0 });
+                if (step == 760) candidate.Entities.SetComponentData(candidate.TickHandle, new TimelineGlide { Limit = (byte)limit });
+                var forward = !(step >= 500 && step < 560) && !(step >= 1100 && step < 1103);
+                for (var row = 0; row < 16; row++)
+                {
+                    var r = Next(ref rng);
+                    switch (r % 64)
+                    {
+                        case 0:
+                        case 1:
+                            var start = ids[(r >> 8) % (uint)ids.Length];
+                            reference.Start(row, start);
+                            candidate.Start(row, start);
+                            break;
+                        case 2:
+                            var stop = ids[(r >> 8) % (uint)ids.Length];
+                            reference.Stop(row, stop);
+                            candidate.Stop(row, stop);
+                            break;
+                        case 3:
+                            reference.Damage(row, 1 + (int)((r >> 8) & 3));
+                            candidate.Damage(row, 1 + (int)((r >> 8) & 3));
+                            break;
+                        case 4:
+                            if (((r >> 8) & 3) == 0 && reference.Entities.GetBuffer<Playback>(reference.Rows[row], true).Length > 0)
+                            {
+                                reference.Edit(row, 0, p => p);
+                                candidate.Edit(row, 0, p => p);
+                            }
+                            break;
+                    }
+                }
+                reference.Step(forward);
+                candidate.Step(forward);
+                Assert.AreEqual(Snapshot(reference), Snapshot(candidate), "step " + step);
+                for (var row = 0; row < 16; row++)
+                    if (Steps(candidate, row) > 0)
+                        calm++;
+            }
+            Assert.Greater(calm, 1000);
+            Assert.AreEqual(reference.Tick.DroppedStarts, candidate.Tick.DroppedStarts);
+        }
+
+        [Test]
+        public void ACalmLazyRowKeepsItsSlotBytesAndOnlyMovesItsClock()
+        {
+            using var game = new KindWorld(1);
+            Lazy(game);
+            game.Start(0, KindWorld.Run);
+            game.Step();
+            game.Step();
+            Assert.Greater(Steps(game, 0), 0);
+            var before = game.Entities.GetBuffer<Playback>(game.Rows[0], true)[0];
+            var clock = game.Entities.GetComponentData<TimelineClock>(game.Rows[0]).Value;
+            game.Step();
+            var after = game.Entities.GetBuffer<Playback>(game.Rows[0], true)[0];
+            Assert.AreEqual(before.Tick, after.Tick);
+            Assert.AreEqual((ushort)(clock + 1), game.Entities.GetComponentData<TimelineClock>(game.Rows[0]).Value);
+            Assert.AreEqual((ushort)(TimelineTicks.Real(in before, clock) + 1), TimelineTicks.Real(in after, (ushort)(clock + 1)));
+        }
+
+        [Test]
+        public void WarmLazyTicksRunUnderBurstAndAllocateNothingOnTheMainThread()
+        {
+            using var game = new KindWorld(256);
+            Lazy(game);
+            for (var row = 0; row < 256; row++)
+                game.Start(row, KindWorld.Run);
+            for (var step = 0; step < 64; step++)
+                game.Step();
+            game.Entities.CompleteAllTrackedJobs();
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var step = 0; step < 1000; step++)
+                game.Step();
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.AreEqual(0L, allocated);
+            Assert.AreEqual(0, game.Tick.ManagedRuns, "the kind tick job ran without Burst");
         }
     }
 }

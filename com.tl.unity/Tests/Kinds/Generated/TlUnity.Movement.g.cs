@@ -17,6 +17,7 @@ public unsafe partial struct MovementChunkJob : IJobChunk
 [global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public global::Tl.Unity.KindIndex Index;
 public bool Forward;
 [ReadOnly] public BufferTypeHandle<global::Tl.Unity.Playback> PlaybackHandle;
+[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelineClock> ClockHandle;
 public ComponentTypeHandle<Movement_MotionData> MotionHandle;
 [ReadOnly] public ComponentTypeHandle<Movement_WalkStatData> WalkStatHandle;
 [ReadOnly] public ComponentTypeHandle<Movement_JumpPowerData> JumpPowerHandle;
@@ -71,6 +72,7 @@ if (__l2 && __c4 != null) Kind_2(chunk, __playbacks, __c0, __c1, __c2, __c3, __c
 }
 void Kind_0(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Motion* __c0, global::KindGame.WalkStat* __c1, global::KindGame.JumpPower* __c2, global::KindGame.Target* __c3, global::KindGame.Stamina* __c4)
 {
+var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;
 if (!chunk.Has(ref LiftEntryHandle)) return;
 var __acc = chunk.GetBufferAccessor(ref LiftEntryHandle);
 var __ema = chunk.GetEnableableBits(ref LiftActiveHandle);
@@ -120,7 +122,7 @@ else
 var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
-ushort __tick = __pb->Tick;
+ushort __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);
 var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
 var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)
@@ -197,7 +199,7 @@ else
 var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
-ushort __tick = __pb->Tick;
+ushort __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);
 var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
 var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)
@@ -272,6 +274,7 @@ if (__buf.Capacity > global::KindGame.KindCapacity.Lift && __buf.Length <= globa
 }
 void Kind_1(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Motion* __c0, global::KindGame.WalkStat* __c1, global::KindGame.JumpPower* __c2, global::KindGame.Target* __c3, global::KindGame.Stamina* __c4)
 {
+var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;
 if (!chunk.Has(ref LocomotionEntryHandle)) return;
 var __acc = chunk.GetBufferAccessor(ref LocomotionEntryHandle);
 var __ema = chunk.GetEnableableBits(ref LocomotionActiveHandle);
@@ -321,7 +324,7 @@ else
 var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
-ushort __tick = __pb->Tick;
+ushort __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);
 var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
 var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)
@@ -388,7 +391,7 @@ else
 var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
-ushort __tick = __pb->Tick;
+ushort __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);
 var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
 var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)
@@ -453,6 +456,7 @@ if (__buf.Capacity > global::KindGame.KindCapacity.Locomotion && __buf.Length <=
 }
 void Kind_2(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Motion* __c0, global::KindGame.WalkStat* __c1, global::KindGame.JumpPower* __c2, global::KindGame.Target* __c3, global::KindGame.Stamina* __c4)
 {
+var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;
 if (!chunk.Has(ref StatChangeEntryHandle)) return;
 var __acc = chunk.GetBufferAccessor(ref StatChangeEntryHandle);
 var __ema = chunk.GetEnableableBits(ref StatChangeActiveHandle);
@@ -500,7 +504,7 @@ else
 var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
-ushort __tick = __pb->Tick;
+ushort __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);
 var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
 var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)
@@ -573,7 +577,7 @@ else
 var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
-ushort __tick = __pb->Tick;
+ushort __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);
 var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
 var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)
@@ -646,6 +650,7 @@ if (__buf.Capacity > global::KindGame.KindCapacity.StatChange && __buf.Length <=
 }
 void Events(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks)
 {
+var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;
 byte* __h0 = stackalloc byte[global::Tl.Events<global::KindGame.Cue>.HeaderBytes];
 var __has0 = chunk.Has(ref CuesEventHandle);
 var __acc0 = __has0 ? chunk.GetBufferAccessor(ref CuesEventHandle) : default;
@@ -669,7 +674,7 @@ var __pb = __pbs + __s;
 if (__pb->Timeline == 0 || (__pb->Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Stopping)) != 0) continue;
 var __tl = global::Tl.LibraryViewReader.GetTimeline(in View, new global::Tl.TimelineId(__pb->Timeline));
 if (__tl == null || __tl->Duration == 0) continue;
-var __tick = __pb->Tick;
+var __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);
 var __stage = global::Tl.LibraryViewReader.StageAt(__tl, __tick);
 if (__stage == null) continue;
 var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
@@ -710,6 +715,7 @@ public struct Movement
 {
 EntityQuery _query;
 BufferTypeHandle<global::Tl.Unity.Playback> _PlaybackHandle;
+ComponentTypeHandle<global::Tl.Unity.TimelineClock> _ClockHandle;
 ComponentTypeHandle<Movement_MotionData> _MotionHandle;
 ComponentTypeHandle<Movement_WalkStatData> _WalkStatHandle;
 ComponentTypeHandle<Movement_JumpPowerData> _JumpPowerHandle;
@@ -739,6 +745,7 @@ jobs._query = builder.Build(ref state);
 any.Dispose();
 builder.Dispose();
 jobs._PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true);
+jobs._ClockHandle = state.GetComponentTypeHandle<global::Tl.Unity.TimelineClock>(true);
 jobs._MotionHandle = state.GetComponentTypeHandle<Movement_MotionData>(false);
 jobs._WalkStatHandle = state.GetComponentTypeHandle<Movement_WalkStatData>(true);
 jobs._JumpPowerHandle = state.GetComponentTypeHandle<Movement_JumpPowerData>(true);
@@ -759,6 +766,7 @@ return jobs;
 public JobHandle Schedule(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward, global::KindGame.AnchorLookup Anchors, JobHandle dependsOn)
 {
 _PlaybackHandle.Update(ref state);
+_ClockHandle.Update(ref state);
 _MotionHandle.Update(ref state);
 _WalkStatHandle.Update(ref state);
 _JumpPowerHandle.Update(ref state);
@@ -776,6 +784,7 @@ _StatChangeActiveHandle.Update(ref state);
 _StatChangeEnabledHandle.Update(ref state);
 var job = new MovementChunkJob { View = view, Index = index, Forward = forward
 , PlaybackHandle = _PlaybackHandle
+, ClockHandle = _ClockHandle
 , MotionHandle = _MotionHandle
 , WalkStatHandle = _WalkStatHandle
 , JumpPowerHandle = _JumpPowerHandle

@@ -33,18 +33,4 @@ public static unsafe class Horizon
         }
         return plain ? (byte)horizon : (byte)0;
     }
-
-    internal static bool Decrement64(byte* horizons)
-    {
-        const ulong ones = 0x0101010101010101ul;
-        const ulong highs = 0x8080808080808080ul;
-        var words = (ulong*)horizons;
-        for (var i = 0; i < 8; i++)
-        {
-            var word = words[i];
-            if ((unchecked(word - ones) & ~word & highs) != 0) return false;
-        }
-        for (var i = 0; i < 8; i++) words[i] = unchecked(words[i] - ones);
-        return true;
-    }
 }

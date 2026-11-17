@@ -195,6 +195,7 @@ namespace Tl.Unity.Tests
                 Index = new KindIndex { Timelines = _view.Timelines, TimelineCount = _view.TimelineCount },
                 PlaybackHandle = state.GetBufferTypeHandle<Playback>(false),
                 PlayingHandle = state.GetComponentTypeHandle<TimelinePlaying>(false),
+                ClockHandle = state.GetComponentTypeHandle<TimelineClock>(true),
                 Swapped = changed,
             }.Run(query);
             var advance = new TimelineAdvanceJob { View = _view, PlaybackHandle = state.GetBufferTypeHandle<Playback>(false) };

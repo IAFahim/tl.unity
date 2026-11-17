@@ -49,6 +49,7 @@ namespace KindGame
                 Handles = handles,
                 PlaybackHandle = state.GetBufferTypeHandle<Playback>(false),
                 PlayingHandle = state.GetComponentTypeHandle<TimelinePlaying>(false),
+                ClockHandle = state.GetComponentTypeHandle<TimelineClock>(true),
                 Swapped = changed,
             }.Run(targets);
         }

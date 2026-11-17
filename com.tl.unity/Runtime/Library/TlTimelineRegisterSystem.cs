@@ -15,6 +15,7 @@ namespace Tl.Unity
         EntityQuery _playbacks;
         BufferTypeHandle<Playback> _playbackHandle;
         ComponentTypeHandle<TimelinePlaying> _playingHandle;
+        ComponentTypeHandle<TimelineClock> _clockHandle;
 
         public void OnCreate(ref SystemState state)
         {
@@ -26,6 +27,7 @@ namespace Tl.Unity
             _playbacks = new EntityQueryBuilder(Allocator.Temp).WithAllRW<Playback>().WithOptions(EntityQueryOptions.IgnoreComponentEnabledState).Build(ref state);
             _playbackHandle = state.GetBufferTypeHandle<Playback>(false);
             _playingHandle = state.GetComponentTypeHandle<TimelinePlaying>(false);
+            _clockHandle = state.GetComponentTypeHandle<TimelineClock>(true);
             state.RequireForUpdate(_store);
             state.RequireForUpdate<TlTimelineSet>();
         }
@@ -103,11 +105,13 @@ namespace Tl.Unity
             }
             _playbackHandle.Update(ref state);
             _playingHandle.Update(ref state);
+            _clockHandle.Update(ref state);
             new TlTimelineSwapJob
             {
                 Index = index,
                 PlaybackHandle = _playbackHandle,
                 PlayingHandle = _playingHandle,
+                ClockHandle = _clockHandle,
                 Handles = handles,
                 Swapped = ids,
             }.Run(_playbacks);

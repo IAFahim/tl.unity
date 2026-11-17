@@ -134,6 +134,18 @@ built once per library bind). Results are byte-identical to the full rules on ev
   4M rows x 4 timelines 38.2 -> 31.4 ms per tick (tick job 14.0 -> 9.9 ms, kind jobs 24.9 -> 22.0 ms with `StepInWindow`), 10k rows x
   150 timelines 2.87 -> 1.94 ms. The tick job stays near 10 ms at 4M because it still reads and writes every row's `Playback`.
 
+## Lazy rows
+
+A row with `TimelineHorizon`, `TimelineClock` and a `PlaybackDue` buffer in its archetype is stepped lazily: the kind tick only touches the slots that change this tick. Opt in per entity; rows without the two extra types are unchanged.
+
+- Each ordinary slot (a timeline, Rate 0, no flag but Reverse) stores `tick - clock` (`tick + clock` when Reverse is set), where `clock` is the row's `TimelineClock.Value`. The tick job moves the clock by the world direction every tick, so a calm slot's bytes never change. The stored bytes do not depend on the world direction, so reversing time needs no re-encoding. Every other slot stores its real tick.
+- `PlaybackDue` holds, per slot, the tick on which it must really be stepped: the next kind event or timeline boundary from `KindIndex.Calm`, every tick for a slot that is not ordinary, never for a paused or ended one. `TimelineHorizon.Steps` is the number of ticks until the row's next due slot; a row with nothing due only moves its clock. A due row steps its due slots with `KindRules.TickSlot` in slot order, so kind entries are appended in the same order as the full rules. A row with a rated slot runs the full rules for the whole row.
+- Reading a tick: `TimelineTicks.Real(in playback, clock)` (or the pointer overload) returns the real tick for any slot; generated kind and feed jobs, `TlPanel` and the library swap do this already. Code that reads `Playback.Tick` of a lazy row directly sees the stored value.
+- Writing: change playbacks through `TimelineRequest`/`TlRequests`. A system that writes `Playback` of a lazy row itself must decode with `TimelineTicks.Decode` and encode again with `TimelineTicks.Encode` using the row clock; the write marks the chunk changed, which makes every slot of the chunk due on the next tick.
+- `TimelineGlide { Limit = 0 }` or removing `TimelineHorizon` turns a row eager again: the tick job decodes its slots and sets its clock to 0, which makes the stored and real ticks equal.
+- Memory: 2 B per slot (`PlaybackDue`, 4 inline in the chunk) and 2 B per row.
+- Measured (Unity 7000.0.0a16, Burst, 11 workers, safety checks off, `OwnerScaleBench`: 1,000 looping kind timelines with one clip each, median of 128 steps), tick job in ms, eager against lazy: 10,000 x 40 rows x playbacks 0.31 -> 0.16 (duration 120), 0.27 -> 0.06 (600), 0.27 -> 0.04 (3000); 20,000 x 100 1.28 -> 0.94, 1.17 -> 0.35, 1.27 -> 0.13; 20,000 x 200 2.46 -> 1.71, 2.42 -> 0.72, 2.60 -> 0.26. The whole timeline frame (tick plus generated kind jobs) gains 1.1x to 2.4x: the generated kind jobs are unchanged, and at duration 120 most of the tick's remaining time is the kind events themselves (span begins and ends, pulses), which both paths must do.
+
 ## Kind Report
 
 `Tools > Tl > Kind Report` logs what the kinds cost in the entities that

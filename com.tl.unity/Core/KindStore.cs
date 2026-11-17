@@ -452,7 +452,7 @@ public sealed unsafe class KindStore : IDisposable
 
     internal void TickPassRange(int stepDir, int firstWord, int endWord)
     {
-        var playing = _players.Playing;
+        var playing = _players.PlayingBits;
         if (firstWord < 0) firstWord = 0; if (endWord > _players.PlayingWords) endWord = _players.PlayingWords;
         for (var w = firstWord; w < endWord; w++)
         {
@@ -479,7 +479,9 @@ public sealed unsafe class KindStore : IDisposable
             var q = _queues + k;
             if (q->Count == 0) continue;
             var table = _tables[k];
-            for (var n = 0; n < q->Count; n++)
+            var count = q->Count;
+            q->Count = 0;
+            for (var n = 0; n < count; n++)
             {
                 var at = q->Items + (nuint)n * (nuint)q->Stride;
                 var entity = *(int*)at;
@@ -494,7 +496,6 @@ public sealed unsafe class KindStore : IDisposable
                 if (table->Grouped) *(ushort*)((byte*)entry + 8) = (ushort)k;
                 CopyValue((byte*)entry + table->ValueAt, at + 4, _valueBytes[k]);
             }
-            q->Count = 0;
         }
     }
 
@@ -517,22 +518,27 @@ public sealed unsafe class KindStore : IDisposable
             else fixed (byte* v = value) Send(k, entity, v);
         }
         var p = _players;
-        for (var e = 0; e < p.EntityCapacity; e++)
-        {
-            var slots = p.SlotsOf(e);
-            var count = p.CountOf(e);
-            for (var i = 0; i < count; i++)
+        for (var pass = 0; pass < 2; pass++)
+            for (var e = 0; e < p.EntityCapacity; e++)
             {
-                var s = slots + i;
-                if (s->Timeline == 0) continue;
-                if ((s->Flags & PlaybackFlags.Stopping) == 0)
+                var slots = p.SlotsOf(e);
+                var count = p.CountOf(e);
+                for (var i = 0; i < count; i++)
                 {
-                    if (s->Timeline > _timelineCount) throw new ArgumentException($"Playback slot {i} of entity {e} names no timeline in the reloaded library.");
-                    ValidateStart(e, s->Timeline);
+                    var s = slots + i;
+                    if (s->Timeline == 0) continue;
+                    if (pass == 1)
+                    {
+                        if (KindRules.Rebind(in _t, ref _kindRows, e, ref *s, i)) p.SetPlaying(e, true);
+                        continue;
+                    }
+                    if ((s->Flags & PlaybackFlags.Stopping) != 0) continue;
+                    var bad = s->Timeline > _timelineCount ? new ArgumentException($"Playback slot {i} of entity {e} names no timeline in the reloaded library.") : Unreachable(e, s->Timeline);
+                    if (bad == null) continue;
+                    _generation = 0;
+                    throw bad;
                 }
-                if (KindRules.Rebind(in _t, ref _kindRows, e, ref *s, i)) p.SetPlaying(e, true);
             }
-        }
     }
 
     void Build()

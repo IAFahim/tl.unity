@@ -13,6 +13,7 @@ public unsafe partial struct VitalsChunkJob : IJobChunk
 [global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public global::Tl.Unity.KindIndex Index;
 public bool Forward;
 [ReadOnly] public BufferTypeHandle<global::Tl.Unity.Playback> PlaybackHandle;
+[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelineClock> ClockHandle;
 public ComponentTypeHandle<Vitals_HealthData> HealthHandle;
 public BufferTypeHandle<global::KindGame.DamageEntry> DamageEntryHandle;
 public ComponentTypeHandle<global::KindGame.DamageActive> DamageActiveHandle;
@@ -33,6 +34,7 @@ if (__l0 && __c0 != null) Kind_0(chunk, __playbacks, __c0);
 }
 void Kind_0(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Health* __c0)
 {
+var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;
 if (!chunk.Has(ref DamageEntryHandle)) return;
 var __acc = chunk.GetBufferAccessor(ref DamageEntryHandle);
 var __ema = chunk.GetEnableableBits(ref DamageActiveHandle);
@@ -82,7 +84,7 @@ else
 var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
-ushort __tick = __pb->Tick;
+ushort __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);
 var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
 var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)
@@ -149,7 +151,7 @@ else
 var __pb = __pbase + __en->Slot;
 if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
 var __tl = Index.Timelines + (__en->Timeline - 1);
-ushort __tick = __pb->Tick;
+ushort __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);
 var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
 var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)
@@ -219,6 +221,7 @@ public struct Vitals
 {
 EntityQuery _query;
 BufferTypeHandle<global::Tl.Unity.Playback> _PlaybackHandle;
+ComponentTypeHandle<global::Tl.Unity.TimelineClock> _ClockHandle;
 ComponentTypeHandle<Vitals_HealthData> _HealthHandle;
 BufferTypeHandle<global::KindGame.DamageEntry> _DamageEntryHandle;
 ComponentTypeHandle<global::KindGame.DamageActive> _DamageActiveHandle;
@@ -234,6 +237,7 @@ jobs._query = builder.Build(ref state);
 any.Dispose();
 builder.Dispose();
 jobs._PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true);
+jobs._ClockHandle = state.GetComponentTypeHandle<global::Tl.Unity.TimelineClock>(true);
 jobs._HealthHandle = state.GetComponentTypeHandle<Vitals_HealthData>(false);
 jobs._DamageEntryHandle = state.GetBufferTypeHandle<global::KindGame.DamageEntry>(false);
 jobs._DamageActiveHandle = state.GetComponentTypeHandle<global::KindGame.DamageActive>(false);
@@ -243,12 +247,14 @@ return jobs;
 public JobHandle Schedule(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward, JobHandle dependsOn)
 {
 _PlaybackHandle.Update(ref state);
+_ClockHandle.Update(ref state);
 _HealthHandle.Update(ref state);
 _DamageEntryHandle.Update(ref state);
 _DamageActiveHandle.Update(ref state);
 _DamageEnabledHandle.Update(ref state);
 var job = new VitalsChunkJob { View = view, Index = index, Forward = forward
 , PlaybackHandle = _PlaybackHandle
+, ClockHandle = _ClockHandle
 , HealthHandle = _HealthHandle
 , DamageEntryHandle = _DamageEntryHandle
 , DamageActiveHandle = _DamageActiveHandle

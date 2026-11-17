@@ -17,19 +17,22 @@ namespace Tl.Unity
     }
 
     [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
-    public unsafe struct KindTickJob : IJobChunk
+    public unsafe partial struct KindTickJob : IJobChunk
     {
         [NativeDisableUnsafePtrRestriction] public KindIndex Index;
         public BufferTypeHandle<Playback> PlaybackHandle;
         public BufferTypeHandle<TimelineRequest> RequestHandle;
         public ComponentTypeHandle<TimelinePlaying> PlayingHandle;
         public ComponentTypeHandle<TimelineHorizon> HorizonHandle;
+        public ComponentTypeHandle<TimelineClock> ClockHandle;
+        public BufferTypeHandle<PlaybackDue> DueHandle;
         [NativeDisableContainerSafetyRestriction] public KindHandleSet Handles;
         [NativeDisableUnsafePtrRestriction] public int* Counters;
         public int StepDir;
         public uint LastSystemVersion;
         public int HorizonLimit;
         public bool ForgetHorizons;
+        public ushort Now;
 
         [BurstDiscard]
         static void CountManagedRun(int* counters) => System.Threading.Interlocked.Increment(ref counters[KindCounter.ManagedRuns]);
@@ -39,10 +42,34 @@ namespace Tl.Unity
             CountManagedRun(Counters);
             var count = chunk.Count;
             byte* horizons = null;
+            ushort* clocks = null;
+            var dues = default(BufferAccessor<PlaybackDue>);
+            if (chunk.Has(ref ClockHandle) && chunk.Has(ref DueHandle))
+            {
+                clocks = (ushort*)chunk.GetNativeArray(ref ClockHandle).GetUnsafePtr();
+                dues = chunk.GetBufferAccessor(ref DueHandle);
+            }
             if (HorizonLimit > 0 && chunk.Has(ref HorizonHandle))
             {
                 horizons = (byte*)chunk.GetNativeArray(ref HorizonHandle).GetUnsafePtr();
-                if (ForgetHorizons || chunk.DidChange(ref PlaybackHandle, LastSystemVersion)) UnsafeUtility.MemClear(horizons, count);
+                if (ForgetHorizons || chunk.DidChange(ref PlaybackHandle, LastSystemVersion))
+                {
+                    UnsafeUtility.MemClear(horizons, count);
+                    if (clocks != null)
+                        for (var row = 0; row < count; row++)
+                            DueNow(dues[row], chunk.GetBufferAccessor(ref PlaybackHandle)[row].Length);
+                }
+            }
+            else if (clocks != null)
+            {
+                var all = chunk.GetBufferAccessor(ref PlaybackHandle);
+                for (var row = 0; row < count; row++)
+                {
+                    if (clocks[row] == 0) continue;
+                    TimelineTicks.Decode((global::Tl.Playback*)all[row].GetUnsafePtr(), all[row].Length, clocks[row]);
+                    clocks[row] = 0;
+                }
+                clocks = null;
             }
             var requested = chunk.Has(ref RequestHandle) && chunk.DidChange(ref RequestHandle, LastSystemVersion);
             if (!requested)
@@ -63,10 +90,16 @@ namespace Tl.Unity
                     var queue = requests[row];
                     if (queue.Length == 0) continue;
                     if (horizons != null) horizons[row] = 0;
+                    if (clocks != null) TimelineTicks.Decode((global::Tl.Playback*)playbacks[row].GetUnsafePtr(), playbacks[row].Length, clocks[row]);
                     var slots = new KindSlots(playbacks[row], &ctx, row);
                     for (var r = 0; r < queue.Length; r++)
                         global::Tl.PlaybackRules.Apply(ref slots, Index.Timelines, Index.TimelineCount, queue[r].Op, queue[r].Timeline, queue[r].At);
                     queue.Clear();
+                    if (clocks != null)
+                    {
+                        TimelineTicks.Encode((global::Tl.Playback*)playbacks[row].GetUnsafePtr(), playbacks[row].Length, clocks[row]);
+                        DueNow(dues[row], playbacks[row].Length);
+                    }
                     chunk.SetComponentEnabled(ref PlayingHandle, row, true);
                 }
             }
@@ -84,6 +117,17 @@ namespace Tl.Unity
                         var row = (kw << 6) + (int)global::Unity.Mathematics.math.tzcnt(kb);
                         kb &= kb - 1;
                         if (row >= count) break;
+                        if (clocks != null)
+                        {
+                            if (horizons[row] != 0)
+                            {
+                                horizons[row]--;
+                                clocks[row] = (ushort)(clocks[row] + StepDir);
+                            }
+                            else if (!TickLazy(in tables, ref ctx, playbacks[row], dues[row], ref clocks[row], ref horizons[row], row, reverse))
+                                chunk.SetComponentEnabled(ref PlayingHandle, row, false);
+                            continue;
+                        }
                         var slots = playbacks[row];
                         if (horizons == null)
                         {
@@ -105,6 +149,77 @@ namespace Tl.Unity
                     }
                 }
             }
+        }
+    }
+
+    public unsafe partial struct KindTickJob
+    {
+        void DueNow(DynamicBuffer<PlaybackDue> dues, int length)
+        {
+            dues.ResizeUninitialized(length);
+            var d = (ushort*)dues.GetUnsafePtr();
+            for (var i = 0; i < length; i++) d[i] = (ushort)(Now & TimelineTicks.Mask);
+        }
+
+        bool TickLazy(in global::Tl.KindTables tables, ref KindCursor ctx, DynamicBuffer<Playback> buffer, DynamicBuffer<PlaybackDue> dueBuffer, ref ushort clock, ref byte horizon, int row, ulong reverse)
+        {
+            var before = clock;
+            var after = (ushort)(clock + StepDir);
+            clock = after;
+            var n = buffer.Length;
+            if (dueBuffer.Length != n) DueNow(dueBuffer, n);
+            var d = (ushort*)dueBuffer.GetUnsafePtr();
+            var pb = (global::Tl.Playback*)buffer.GetUnsafePtr();
+            var now = (ushort)(Now & TimelineTicks.Mask);
+            var hits = stackalloc byte[KindSlots.MaxSlots];
+            var held = 0;
+            var live = false;
+            var near = TimelineTicks.MaxCalm + 1;
+            var rated = false;
+            for (var i = 0; i < n; i++)
+            {
+                var due = d[i];
+                if ((due & TimelineTicks.Inert) != 0) continue;
+                var distance = (due - now) & TimelineTicks.Mask;
+                if (distance == 0 || distance > TimelineTicks.MaxCalm + 1)
+                {
+                    hits[held++] = (byte)i;
+                    rated |= pb[i].Rate != 0;
+                    continue;
+                }
+                live = true;
+                if (distance < near) near = distance;
+            }
+            if (rated)
+            {
+                TimelineTicks.Decode(pb, n, before);
+                live = global::Tl.KindRules.TickEntity(in tables, pb, n, ref ctx, row, StepDir);
+                pb = (global::Tl.Playback*)buffer.GetUnsafePtr();
+                for (var i = 0; i < n; i++)
+                {
+                    d[i] = TimelineTicks.Due(pb + i, in tables, in Index.Calm, reverse, now);
+                    TimelineTicks.Encode(pb + i, after);
+                }
+                horizon = 0;
+                return live;
+            }
+            for (var k = 0; k < held; k++)
+            {
+                var i = hits[k];
+                var s = pb + i;
+                TimelineTicks.Decode(s, before);
+                live |= global::Tl.KindRules.TickSlot(in tables, ref ctx, row, i, s, StepDir);
+                var due = TimelineTicks.Due(s, in tables, in Index.Calm, reverse, now);
+                TimelineTicks.Encode(s, after);
+                d[i] = due;
+                if ((due & TimelineTicks.Inert) != 0) continue;
+                live = true;
+                var distance = (due - now) & TimelineTicks.Mask;
+                if (distance < near) near = distance;
+            }
+            var limit = HorizonLimit < global::Tl.Horizon.Max ? HorizonLimit : global::Tl.Horizon.Max;
+            horizon = (byte)(near - 1 < limit ? near - 1 : limit);
+            return live;
         }
     }
 

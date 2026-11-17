@@ -138,7 +138,6 @@ namespace Tl
         }
         internal void AdoptView(LibraryView view)
         {
-            _glideIdentity = 0;
             _glideViewEscaped = true;
             Free();
             _view = view;
@@ -147,7 +146,7 @@ namespace Tl
 
         public unsafe void Reload(ReadOnlySpan<byte> library)
         {
-            _glideIdentity = 0;
+            Validate(library);
             Free();
             LoadLibrary(library);
             _generation++;
@@ -404,10 +403,15 @@ namespace Tl
             }
         }
 
-        unsafe void LoadLibrary(ReadOnlySpan<byte> library)
+        static void Validate(ReadOnlySpan<byte> library)
         {
             var error = Check(library, out var offset);
             if (error != LibraryError.None) throw new ArgumentException(Describe(error, library, offset));
+        }
+
+        unsafe void LoadLibrary(ReadOnlySpan<byte> library)
+        {
+            Validate(library);
             var version = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(4));
             var count = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(8));
             var manifestOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(12));

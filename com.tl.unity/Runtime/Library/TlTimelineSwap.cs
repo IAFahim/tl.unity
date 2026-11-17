@@ -13,12 +13,14 @@ namespace Tl.Unity
         [NativeDisableUnsafePtrRestriction] public KindIndex Index;
         public BufferTypeHandle<Playback> PlaybackHandle;
         public ComponentTypeHandle<TimelinePlaying> PlayingHandle;
+        [ReadOnly] public ComponentTypeHandle<TimelineClock> ClockHandle;
         [NativeDisableContainerSafetyRestriction] public KindHandleSet Handles;
         [ReadOnly] public NativeArray<ushort> Swapped;
 
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
         {
             var playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
+            var clocks = chunk.Has(ref ClockHandle) ? (ushort*)chunk.GetNativeArray(ref ClockHandle).GetUnsafeReadOnlyPtr() : null;
             var kinds = Index.KindCount;
             var buffers = stackalloc UnsafeUntypedBufferAccessor[kinds > 0 ? kinds : 1];
             var cursor = new KindCursor { Index = Index, Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers };
@@ -34,7 +36,10 @@ namespace Tl.Unity
                     if (s.Timeline == 0 || !IsSwapped(s.Timeline))
                         continue;
                     var tables = Index.Tables;
+                    var clock = clocks == null ? (ushort)0 : clocks[row];
+                    TimelineTicks.Decode((global::Tl.Playback*)&s, clock);
                     touched |= global::Tl.KindRules.Rebind(in tables, ref cursor, row, ref *(global::Tl.Playback*)&s, i);
+                    TimelineTicks.Encode((global::Tl.Playback*)&s, clock);
                     slots[i] = s;
                 }
                 if (touched && chunk.Has(ref PlayingHandle))

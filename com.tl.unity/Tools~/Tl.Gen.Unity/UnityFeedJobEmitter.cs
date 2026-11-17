@@ -76,6 +76,7 @@ namespace Tl.Gen.Unity
             W(writer, "[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public global::Tl.Unity.KindIndex Index;");
             W(writer, "public bool Forward;");
             W(writer, "[ReadOnly] public BufferTypeHandle<global::Tl.Unity.Playback> PlaybackHandle;");
+            W(writer, "[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelineClock> ClockHandle;");
             for (var i = 0; i < shape.Columns.Count; i++)
                 if (shape.UsedColumns[i])
                     W(writer, "[ReadOnly] public ComponentTypeHandle<" + ComponentName(model, shape.Columns[i]) + "> " + shape.Columns[i].Name + "Handle;");
@@ -115,6 +116,7 @@ namespace Tl.Gen.Unity
         {
             var handles = new List<(string field, string type, string getter, bool readOnly)>();
             handles.Add(("PlaybackHandle", "BufferTypeHandle<global::Tl.Unity.Playback>", "GetBufferTypeHandle<global::Tl.Unity.Playback>", true));
+            handles.Add(("ClockHandle", "ComponentTypeHandle<global::Tl.Unity.TimelineClock>", "GetComponentTypeHandle<global::Tl.Unity.TimelineClock>", true));
             for (var i = 0; i < shape.Columns.Count; i++)
                 if (shape.UsedColumns[i])
                     handles.Add((shape.Columns[i].Name + "Handle", "ComponentTypeHandle<" + ComponentName(model, shape.Columns[i]) + ">", "GetComponentTypeHandle<" + ComponentName(model, shape.Columns[i]) + ">", true));
@@ -166,6 +168,7 @@ namespace Tl.Gen.Unity
             var value = info.Decl.ValueTypeName;
             W(writer, "void Feed_" + ordinal + "(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks" + ColumnArgs(shape, true) + ")");
             W(writer, "{");
+            W(writer, "var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;");
             W(writer, "if (" + info.Name + "Owner < 0 || !chunk.Has(ref " + info.Name + "EntryHandle)) return;");
             W(writer, "var __owner = (byte)" + info.Name + "Owner;");
             W(writer, "var __acc = chunk.GetBufferAccessor(ref " + info.Name + "EntryHandle);");
@@ -193,7 +196,7 @@ namespace Tl.Gen.Unity
             W(writer, "var __pb = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr() + __en->Slot;");
             W(writer, "if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;");
             W(writer, "var __tl = Index.Timelines + (__en->Timeline - 1);");
-            W(writer, "ushort __tick = __pb->Tick;");
+            W(writer, "ushort __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);");
             W(writer, "var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;");
             W(writer, "var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)");
             W(writer, "| ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)");

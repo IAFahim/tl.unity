@@ -95,7 +95,6 @@ public readonly unsafe struct TimelineRef
 
 	NativeHeader* Header => (NativeHeader*)_p;
 	internal NativePair* Pairs => (NativePair*)(_p + Header->PairOffset);
-	internal nint Address => (nint)_p;
 	internal uint PairCount => _p == null ? 0 : Header->PairCount;
 
 

@@ -74,11 +74,13 @@ namespace Tl.Unity
         {
             if (!TryTimeline(out var entity, out var entry))
                 return default;
-            foreach (var playback in _world.EntityManager.GetBuffer<Playback>(entity, true))
+            var manager = _world.EntityManager;
+            var clock = manager.HasComponent<TimelineClock>(entity) ? manager.GetComponentData<TimelineClock>(entity).Value : (ushort)0;
+            foreach (var playback in manager.GetBuffer<Playback>(entity, true))
                 if (playback.Timeline == entry.Id)
                 {
                     var flags = playback.Flags;
-                    return new PanelState(true, playback.Tick, playback.Rate == 0 ? (byte)16 : playback.Rate, (flags & PlaybackFlags.Paused) != 0, (flags & PlaybackFlags.Reverse) != 0, (flags & PlaybackFlags.Ended) != 0, playback.Channel);
+                    return new PanelState(true, TimelineTicks.Real(in playback, clock), playback.Rate == 0 ? (byte)16 : playback.Rate, (flags & PlaybackFlags.Paused) != 0, (flags & PlaybackFlags.Reverse) != 0, (flags & PlaybackFlags.Ended) != 0, playback.Channel);
                 }
             return default;
         }

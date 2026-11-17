@@ -93,7 +93,13 @@ public sealed unsafe class PlaybackTable : IDisposable
     int _growGate;
     bool _disposed;
     internal ulong LibraryGeneration;
-    readonly PlaybackHorizon* _horizon;
+    internal readonly ushort* Next;
+    readonly ushort* _due;
+    ushort* _blockDue;
+    int _limit;
+    TimelineWorld? _owner;
+    internal ushort Clock;
+    internal bool Forward = true, Frozen;
 
     public PlaybackTable(int entityCapacity, int slotsPerEntity = 4) : this(entityCapacity, slotsPerEntity, 0)
     {
@@ -107,20 +113,14 @@ public sealed unsafe class PlaybackTable : IDisposable
         if (horizonLimit != 0 && (!BitConverter.IsLittleEndian || sizeof(Playback) != 8)) throw new PlatformNotSupportedException("Glide requires little-endian 8-byte playback storage.");
         _entities = entityCapacity;
         _slotsPerEntity = slotsPerEntity;
-        var slots = NativeMemory.AlignedAlloc((nuint)entityCapacity * (nuint)slotsPerEntity * 8u, 64u);
-        var counts = NativeMemory.AlignedAlloc((nuint)entityCapacity * 4u, 8u);
-        NativeMemory.Clear(slots, (nuint)entityCapacity * (nuint)slotsPerEntity * 8u);
-        NativeMemory.Clear(counts, (nuint)entityCapacity * 4u);
-        _slots = (Playback*)slots;
-        _counts = (int*)counts;
+        _slots = (Playback*)Zeroed((nuint)entityCapacity * (nuint)slotsPerEntity * 8u, 64u);
+        _counts = (int*)Zeroed((nuint)entityCapacity * 4u, 8u);
         _spilledWords = (entityCapacity + 63) >> 6;
-        _spilled = (ulong*)NativeMemory.AlignedAlloc((nuint)_spilledWords * 8u, 8u);
-        NativeMemory.Clear(_spilled, (nuint)_spilledWords * 8u);
+        _spilled = (ulong*)Zeroed((nuint)_spilledWords * 8u, 8u);
         _freeHeads = new int[9];
         for (var i = 0; i < _freeHeads.Length; i++) _freeHeads[i] = -1;
         _playingWords = (entityCapacity + 63) >> 6;
-        _playing = (ulong*)NativeMemory.AlignedAlloc((nuint)_playingWords * 8u, 8u);
-        NativeMemory.Clear(_playing, (nuint)_playingWords * 8u);
+        _playing = (ulong*)Zeroed((nuint)_playingWords * 8u, 8u);
         _consumer = RequestQueue.Create();
         _pending = RequestQueue.Create();
         _closing = ClosingList.Create();
@@ -128,30 +128,31 @@ public sealed unsafe class PlaybackTable : IDisposable
         {
             try
             {
-                var bytes = (nuint)sizeof(PlaybackHorizon) + (nuint)entityCapacity;
-                _horizon = (PlaybackHorizon*)NativeMemory.AlignedAlloc(bytes, 64u);
-                NativeMemory.Clear(_horizon, bytes);
-                _horizon->Limit = (byte)horizonLimit;
-                _horizon->Forward = 1;
+                Next = (ushort*)Zeroed((nuint)entityCapacity * (nuint)(slotsPerEntity + 1) * 2u, 64u);
+                _due = Next + entityCapacity;
+                _limit = horizonLimit;
             }
-            catch
-            {
-                Dispose();
-                throw;
-            }
+            catch { Dispose(); throw; }
         }
+    }
+
+    static void* Zeroed(nuint bytes, nuint alignment)
+    {
+        var block = NativeMemory.AlignedAlloc(bytes, alignment);
+        NativeMemory.Clear(block, bytes);
+        return block;
     }
 
     public const int MaxSlots = 256;
 
     public int EntityCapacity => _entities;
     public KindStore? Kinds => _kinds;
-    public ulong* Playing => _playing;
+    public ulong* Playing { get { Escape(); return _playing; } }
+    internal ulong* PlayingBits => _playing;
     public int PlayingWords => _playingWords;
 
     internal void SetPlaying(int entity, bool value)
     {
-        if (value) InvalidateGlide(entity);
         if (value) _playing[entity >> 6] |= 1ul << (entity & 63);
         else _playing[entity >> 6] &= ~(1ul << (entity & 63));
     }
@@ -159,48 +160,59 @@ public sealed unsafe class PlaybackTable : IDisposable
     internal void AttachKinds(KindStore? kinds)
     {
         if (kinds != null && _kinds != null) throw new InvalidOperationException("A KindStore is already attached to this PlaybackTable.");
-        ForgetGlide();
+        Thaw();
         _kinds = kinds;
     }
 
     public int SlotsPerEntity => _slotsPerEntity;
-    public PlaybackView View
+    public PlaybackView View { get { Escape(); return new(_slots, _counts, _spilled, _blocks, _entities, _slotsPerEntity); } }
+    public int HorizonLimit => _limit;
+    ushort* InlineDue(int entity) => _due + (nuint)entity * (nuint)_slotsPerEntity;
+    internal ushort* DueOf(int entity) => IsSpilled(entity) ? _blockDue + *(int*)InlineRun(entity) : InlineDue(entity);
+
+    void Escape() { Thaw(); _limit = 0; }
+
+    internal void Edit(int entity) { if (Frozen) LazyTicks.Shift(SlotsOf(entity), _counts[entity], Clock, Forward); }
+
+    internal void Seal(int entity)
     {
-        get
+        if (!Frozen) return;
+        var view = _owner!._view;
+        var slots = SlotsOf(entity);
+        var due = DueOf(entity);
+        for (var i = 0; i < _counts[entity]; i++) due[i] = LazyTicks.Settle(slots + i, view.Timelines, view.TimelineCount, Clock, Forward);
+        Next[entity] = (ushort)(Clock + 1);
+    }
+
+    internal void Thaw(int entity = -1, int slot = 0)
+    {
+        if (!Frozen) return;
+        Frozen = false;
+        for (var e = 0; e < _entities; e++)
         {
-            if (_horizon != null) _horizon->Limit = 0;
-            return new(_slots, _counts, _spilled, _blocks, _entities, _slotsPerEntity);
+            var slots = SlotsOf(e);
+            var count = _counts[e];
+            if (e != entity) LazyTicks.Shift(slots, count, e < entity ? Clock + 1 : Clock, Forward);
+            else
+            {
+                LazyTicks.Shift(slots, slot, Clock + 1, Forward);
+                LazyTicks.Shift(slots + slot + 1, count - slot - 1, Clock, Forward);
+            }
         }
     }
-    public int HorizonLimit => _horizon == null ? 0 : _horizon->Limit;
-    internal ulong* SpilledBits => _spilled;
-    internal Playback* InlineSlots => _slots;
-    internal byte* Horizons => _horizon == null ? null : (byte*)(_horizon + 1);
 
-    internal void InvalidateGlide(int entity)
+    internal bool Lazy(TimelineWorld? world, bool forward)
     {
-        if (_horizon != null && _horizon->Limit != 0) ((byte*)(_horizon + 1))[entity] = 0;
+        if (_limit == 0 || world == null) { Thaw(); return false; }
+        if (_owner != world || Forward != forward) Thaw();
+        _owner = world;
+        Forward = forward;
+        if (Frozen) return true;
+        Frozen = true;
+        for (var e = 0; e < _entities; e++) Seal(e);
+        return true;
     }
 
-    internal void ForgetGlide()
-    {
-        if (_horizon != null) _horizon->World = 0;
-    }
-
-    internal byte* PrepareGlide(long world, ulong generation, bool forward)
-    {
-        if (_horizon == null || _horizon->Limit == 0) return null;
-        var horizons = (byte*)(_horizon + 1);
-        var direction = forward ? (byte)1 : (byte)0;
-        if (_horizon->World != world || _horizon->Generation != generation || _horizon->Forward != direction)
-        {
-            NativeMemory.Clear(horizons, (nuint)_entities);
-            _horizon->World = world;
-            _horizon->Generation = generation;
-            _horizon->Forward = direction;
-        }
-        return horizons;
-    }
     public RequestQueue* Pending => _pending;
     public RequestQueue* Consumer => _consumer;
     public ClosingList* Closing => _closing;
@@ -220,7 +232,7 @@ public sealed unsafe class PlaybackTable : IDisposable
         + (long)_entities * 4
         + (long)_spilledWords * 8
         + (long)_blocksCapacity * 8
-        + (_horizon == null ? 0 : (long)sizeof(PlaybackHorizon) + _entities);
+        + (Next == null ? 0 : ((long)_entities * (_slotsPerEntity + 1) + _blocksCapacity) * 2);
     public bool IsPlaying(int entity, ushort timeline)
     {
         var slots = new Slots(this, entity);
@@ -242,11 +254,7 @@ public sealed unsafe class PlaybackTable : IDisposable
     static int SizeIndex(int size)
     {
         var index = 0;
-        while (size > 1)
-        {
-            size >>= 1;
-            index++;
-        }
+        for (; size > 1; size >>= 1) index++;
         return index;
     }
 
@@ -272,6 +280,13 @@ public sealed unsafe class PlaybackTable : IDisposable
             }
             _blocks = blocks;
             _blocksCapacity = capacity;
+            if (Next != null)
+            {
+                var due = (ushort*)NativeMemory.AlignedAlloc((nuint)capacity * 2u, 64u);
+                new ReadOnlySpan<ushort>(_blockDue, _blocksUsed).CopyTo(new Span<ushort>(due, _blocksUsed));
+                NativeMemory.AlignedFree(_blockDue);
+                _blockDue = due;
+            }
         }
         var offset = _blocksUsed;
         _blocksUsed += size;
@@ -292,12 +307,11 @@ public sealed unsafe class PlaybackTable : IDisposable
         var capacity = *(int*)((byte*)inline + 4);
         if (count < 0) count = _counts[entity];
         new ReadOnlySpan<Playback>(_blocks + (nuint)offset, count).CopyTo(new Span<Playback>(inline, count));
+        if (_blockDue != null) new ReadOnlySpan<ushort>(_blockDue + (nuint)offset, count).CopyTo(new Span<ushort>(InlineDue(entity), count));
         _spilled[entity >> 6] &= ~(1ul << (entity & 63));
         FreeBlock(offset, capacity);
     }
 
-    // Ensures one entity's run holds at least length playbacks and returns
-    // the run pointer. Other entities' runs are untouched.
     internal Playback* Reserve(int entity, int length, int used = 0)
     {
         EnterGate();
@@ -317,26 +331,21 @@ public sealed unsafe class PlaybackTable : IDisposable
                 var offset = *(int*)inline;
                 var capacity = *(int*)((byte*)inline + 4);
                 if (capacity >= Math.Min(needed, MaxSlots)) return _blocks + (nuint)offset;
-                var grown = size;
-                var newOffset = AllocBlock(grown);
+                var newOffset = AllocBlock(size);
                 new ReadOnlySpan<Playback>(_blocks + (nuint)offset, count).CopyTo(new Span<Playback>(_blocks + (nuint)newOffset, count));
                 FreeBlock(offset, capacity);
                 *(int*)inline = newOffset;
-                *(int*)((byte*)inline + 4) = grown;
+                *(int*)((byte*)inline + 4) = size;
                 return _blocks + (nuint)newOffset;
             }
-            var block = size;
-            var blockOffset = AllocBlock(block);
+            var blockOffset = AllocBlock(size);
             new ReadOnlySpan<Playback>(inline, count).CopyTo(new Span<Playback>(_blocks + (nuint)blockOffset, count));
             *(int*)inline = blockOffset;
-            *(int*)((byte*)inline + 4) = block;
+            *(int*)((byte*)inline + 4) = size;
             _spilled[entity >> 6] |= 1ul << (entity & 63);
             return _blocks + (nuint)blockOffset;
         }
-        finally
-        {
-            ExitGate();
-        }
+        finally { ExitGate(); }
     }
 
     internal void CloseSlot(int entity, int slot)
@@ -349,7 +358,6 @@ public sealed unsafe class PlaybackTable : IDisposable
 
     internal void ResetEntity(int entity)
     {
-        InvalidateGlide(entity);
         _kinds?.ResetEntity(entity);
         var slots = SlotsOf(entity);
         new Span<Playback>(slots, _counts[entity]).Clear();
@@ -380,7 +388,9 @@ public sealed unsafe class PlaybackTable : IDisposable
     public bool Find(int entity, byte channel, out Playback playback)
     {
         var slots = new Slots(this, entity);
-        return PlaybackRules.Find(ref slots, channel, out playback);
+        var found = PlaybackRules.Find(ref slots, channel, out playback);
+        if (Frozen) fixed (Playback* at = &playback) LazyTicks.Shift(at, 1, Clock, Forward);
+        return found;
     }
 
     internal struct Slots : IPlaybackSlots
@@ -464,7 +474,8 @@ public sealed unsafe class PlaybackTable : IDisposable
         NativeMemory.AlignedFree(_slots);
         NativeMemory.AlignedFree(_counts);
         NativeMemory.AlignedFree(_spilled);
-        if (_horizon != null) NativeMemory.AlignedFree(_horizon);
+        NativeMemory.AlignedFree(Next);
+        NativeMemory.AlignedFree(_blockDue);
         if (_blocks != null) NativeMemory.AlignedFree(_blocks);
         GC.SuppressFinalize(this);
     }

@@ -94,8 +94,6 @@ public unsafe struct KindTable
         return p;
     }
 
-    // Marginal bytes per row: the Entity slot (4 B), the Length (2 B) and
-    // the inline run. The Spilled bit (1 bit per row) is bitset overhead.
     public long StorageBytesPerRow => 6 + (long)Inline * Stride;
 
     public bool IsActive(int row) => (Active[row >> 6] & (1ul << (row & 63))) != 0;
@@ -108,8 +106,6 @@ public unsafe struct KindTable
         else Spilled[row >> 6] &= ~(1ul << (row & 63));
     }
 
-    // Heap blocks carry an 8 B header holding the capacity; the pointer
-    // stored for a spilled row names the header.
     byte* HeapOf(int row) => Inline == 0 ? _heap[row] : *(byte**)(_inline + (nuint)row * (nuint)Inline * (nuint)Stride);
 
     int Capacity(int row) => IsSpilled(row) ? *(int*)HeapOf(row) : Inline;
@@ -134,8 +130,8 @@ public unsafe struct KindTable
 
     void Grow(int row)
     {
-        var capacity = Math.Max(4, Capacity(row) * 2);
-        if (capacity > ushort.MaxValue) throw new InvalidOperationException($"kind {Kind} row {row} holds more than 65,535 entries.");
+        var capacity = Math.Min(Math.Max(4, Capacity(row) * 2), ushort.MaxValue);
+        if (capacity == Capacity(row)) throw new InvalidOperationException($"kind {Kind} row {row} holds more than 65,535 entries.");
         var raw = (byte*)NativeMemory.AlignedAlloc(8u + (nuint)capacity * (nuint)Stride, 64);
         NativeMemory.Clear(raw, 8u + (nuint)capacity * (nuint)Stride);
         *(int*)raw = capacity;
