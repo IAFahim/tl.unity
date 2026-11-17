@@ -9,21 +9,22 @@ namespace Tl.Unity
 {
     public static class TlSceneRun
     {
-        static readonly Dictionary<string, Type> Resolved = new Dictionary<string, Type>(StringComparer.Ordinal);
-
         public static Type ResolveType(string fullName)
         {
-            if (Resolved.TryGetValue(fullName, out var cached))
-                return cached;
             foreach (var assembly in TlAssemblies.Loaded())
             {
                 var type = assembly.GetType(fullName, false);
-                if (type == null)
-                    continue;
-                Resolved[fullName] = type;
-                return type;
+                if (type != null)
+                    return type;
             }
             throw new InvalidOperationException("Tl scene: no loaded assembly has the state type " + fullName + ".");
+        }
+
+        static Type ResolveType(Dictionary<string, Type> resolved, string fullName)
+        {
+            if (!resolved.TryGetValue(fullName, out var type))
+                resolved[fullName] = type = ResolveType(fullName);
+            return type;
         }
 
         public static unsafe ulong Run(TlSceneData scene, byte[] library, int steps, Action<int, ulong> checkpoint = null)
@@ -76,11 +77,12 @@ namespace Tl.Unity
         public static unsafe Entity[] Spawn(EntityManager manager, TlSceneData scene)
         {
             var registry = KindRegistry.Discover();
+            var resolved = new Dictionary<string, Type>(StringComparer.Ordinal);
             var rows = new Entity[scene.Entities.Count];
             for (var e = 0; e < rows.Length; e++)
             {
                 var entity = scene.Entities[e];
-                var states = entity.States.Select(s => ResolveType(s.Type)).ToList();
+                var states = entity.States.Select(s => ResolveType(resolved, s.Type)).ToList();
                 var types = new List<ComponentType> { typeof(Playback), typeof(TimelineRequest), typeof(TimelinePlaying), typeof(TimelineHorizon) };
                 types.AddRange(states.Select(t => ComponentType.ReadWrite(t)));
                 var kinds = new List<KindDescriptor>();
@@ -100,7 +102,7 @@ namespace Tl.Unity
                     manager.SetComponentEnabled(rows[e], ComponentType.ReadWrite(kind.Active), false);
                 foreach (var state in entity.States)
                 {
-                    var type = ResolveType(state.Type);
+                    var type = ResolveType(resolved, state.Type);
                     var size = UnsafeUtility.SizeOf(type);
                     if (size != state.Bytes.Length)
                         throw new InvalidOperationException("Tl scene: " + state.Type + " is " + size + " bytes here but " + state.Bytes.Length + " in the scene.");
