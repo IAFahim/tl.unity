@@ -143,14 +143,22 @@ namespace Tl.Unity.Editor
                     if (EditorGUI.EndChangeCheck() || remove)
                     {
                         Undo.RecordObject(also, "Also Plays");
-                        also.PlayOnAwake.Remove(current);
+                        var ticked = also.PlayOnAwake.IndexOf(current);
                         if (remove)
+                        {
                             also.Timelines.RemoveAt(i);
+                            if (ticked >= 0)
+                                also.PlayOnAwake.RemoveAt(ticked);
+                        }
                         else
                         {
                             also.Timelines[i] = picked;
-                            if (playOnAwake && picked != null)
+                            if (playOnAwake && picked != null && ticked >= 0)
+                                also.PlayOnAwake[ticked] = picked;
+                            else if (playOnAwake && picked != null)
                                 also.PlayOnAwake.Add(picked);
+                            else if (ticked >= 0)
+                                also.PlayOnAwake.RemoveAt(ticked);
                         }
                         EditorUtility.SetDirty(also);
                         GUIUtility.ExitGUI();

@@ -47,15 +47,17 @@ namespace ManyAtOnceTests
             while (Time.realtimeSinceStartup < deadline)
             {
                 yield return null;
+                var ride = entities.GetBuffer<TlTimelineSet>(platform)[0].Id;
                 var rideTick = -1;
                 var playing = 0;
                 foreach (var playback in entities.GetBuffer<Playback>(platform))
-                    if (playback.Timeline != 0)
-                    {
-                        playing++;
-                        if (rideTick < 0)
-                            rideTick = playback.Tick;
-                    }
+                {
+                    if (playback.Timeline == 0)
+                        continue;
+                    playing++;
+                    if (playback.Timeline == ride)
+                        rideTick = playback.Tick;
+                }
                 if (rideTick < 0)
                 {
                     if (heightAtTick.Count > 0)

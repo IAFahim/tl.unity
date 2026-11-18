@@ -54,8 +54,8 @@ Short names used below:
 | `[Pulse]` on a marker (`IMarker<T>`) | D (CLI JSON only) | **gap**: Unity's Timeline window has no Tl marker yet |
 | Game pulses from code (`KindPulses.To`) | G | damage sent from a gameplay job |
 | `ITlBaker`: components, buffers, blobs a clip needs | A, G | |
-| Overlapping clips on one track (first wins in `ITlTrack`) | C | |
-| `IBlend` (authored blend factor between overlapping clips) | none | plain-host only; `ITlTrack` has no blend. **gap** in Unity authoring |
+| Overlapping clips on one track (first wins in `ITlTrack` when the clip has no `IBlend`) | C | |
+| `IBlend` (authored blend factor between overlapping clips) | none of A to H; the Many At Once sample | a `[TlClip]` that implements `IBlend<TClip>` crossfades on one Timeline-window track (IAFahim/tl#649); the factor is linear and Timeline's ease curves are not read |
 | Start, Stop, Pause, Resume from code | B, G | |
 | StopChannel, StopAll | B | needs two small `TlRequests` helpers (section 4) |
 | Start at a tick (seek) | B, H | seek is Stop + Start(at) today; a real `Seek` op is missing |

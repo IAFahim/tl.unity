@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Entities;
 using UnityEngine;
 using UnityEngine.Playables;
@@ -59,12 +60,14 @@ namespace Tl.Unity.Editor
             SetComponentEnabled<TimelinePlaying>(entity, false);
             AddComponent<TimelineHorizon>(entity);
             AddComponent<TlUnregistered>(entity);
-            var playableSlot = director.playOnAwake ? packed.IndexOf(director.playableAsset as TimelineAsset) : -1;
+            var playable = director.playableAsset as TimelineAsset;
+            var playableOnAwake = director.playOnAwake || alsoPlays != null && playable != null && alsoPlays.PlayOnAwake.Contains(playable);
+            var playableSlot = playableOnAwake ? packed.IndexOf(playable) : -1;
             var alsoSlots = new List<int>();
             if (alsoPlays != null)
-                foreach (var alsoOnAwake in alsoPlays.PlayOnAwake)
+                foreach (var alsoTimeline in alsoPlays.Timelines.Concat(alsoPlays.PlayOnAwake))
                 {
-                    var slot = alsoOnAwake == null ? -1 : packed.IndexOf(alsoOnAwake);
+                    var slot = alsoTimeline == null || !alsoPlays.PlayOnAwake.Contains(alsoTimeline) ? -1 : packed.IndexOf(alsoTimeline);
                     if (slot >= 0 && slot != playableSlot && !alsoSlots.Contains(slot))
                         alsoSlots.Add(slot);
                 }

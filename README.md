@@ -554,7 +554,7 @@ Note the heal is a **negative damage**. One rule for all damage and healing keep
 
 ## 7. Many at once: timelines, tracks, blending, order
 
-So far one timeline played, and each track had one clip at a time. A real object has more going on: a platform rides up while something shakes it. Values from many clips can meet in three ways, and this chapter builds one platform that uses all three, one step at a time: two **timelines** at once (7.1), two **tracks** at once (7.2), and two **clips** at once on one track (7.3). The finished scene is the **Many At Once** sample: Package Manager > **Tl Unity Playback** > **Samples** > **Many At Once** > **Import**, menu **Tl Many At Once > Build Scene**, press **Play**.
+So far one timeline played, and each track had one clip at a time. A real object has more going on: a platform rides up while something shakes it. Values from many clips can meet in three ways, and this chapter adds them to one platform one at a time: two **timelines** at once (7.1), two **tracks** at once (7.2), and two **clips** at once on one track (7.3). The finished scene is the **Many At Once** sample: Package Manager > **Tl Unity Playback** > **Samples** > **Many At Once** > **Import**, menu **Tl Many At Once > Build Scene**, press **Play**. The sample ships the end of the chapter; to start where this chapter starts, untick **Play On Awake** on Shake's row (7.1) and use the `Platform.cs` below.
 
 The Tl part is one file, `Platform.cs`. It is chapter 5's wind with a height instead of a push: each clip says how high it lifts the platform this tick, `Combine` adds what arrives on the same tick, and `Apply` writes the total.
 
@@ -618,94 +618,71 @@ namespace ManyAtOnce
 }
 ```
 
-The sample also has `PlatformLogSystem.cs`, which prints the height every 15 ticks of Ride. It is a system in `TlSimulationGroup`, not a `MonoBehaviour`: Tl ticks in `FixedStepSimulationSystemGroup`, so one frame can run two ticks or none, and a `MonoBehaviour` would miss some.
+The sample also has `PlatformLogSystem.cs`, which prints a line every 15 ticks of Ride: Ride's tick, the height, and how many timelines play. It is a system in `TlSimulationGroup`, not a `MonoBehaviour`: Tl ticks in `FixedStepSimulationSystemGroup`, so one frame can run two ticks or none, and a `MonoBehaviour` would miss some.
 
-The timelines (the builder makes them; a designer edits them in the Timeline window):
+The platform's Playable Director plays **Ride** (the builder makes it; a designer edits it in the Timeline window):
 
-| Timeline | Track | Clip | Ticks | Height |
-|---|---|---|---|---|
-| Ride (the Playable) | Floor | Ground | 0 to 120 | 1 |
-| Ride | Floor | Top | 90 to 180 | 5 |
-| Ride | Wave | Wave | 30 to 60 | 0.5 |
-| Shake (Also Plays, Play On Awake) | Bump | Bump | 15 to 30 | 0.25 |
+| Track | Clip | Ticks | Height |
+|---|---|---|---|
+| Floor | Ground | 0 to 120 | 1 |
+| Floor | Top | 90 to 180 | 5 |
+| Wave | Wave | 30 to 60 | 0.5 |
 
-The sample ships the end of this chapter: its `Platform.cs` is the file above plus the blend from 7.3. Press **Play** and the Console prints:
+Press **Play**. The Console prints:
 
 ```
-Many at once: tick 0, platform height 1, playbacks 2
-Many at once: tick 15, platform height 1.25, playbacks 2
-Many at once: tick 30, platform height 1.5, playbacks 1
-Many at once: tick 45, platform height 1.5, playbacks 1
-Many at once: tick 60, platform height 1, playbacks 1
-Many at once: tick 75, platform height 1, playbacks 1
-Many at once: tick 90, platform height 1, playbacks 1
-Many at once: tick 105, platform height 3.0689654, playbacks 1
-Many at once: tick 120, platform height 5, playbacks 1
-Many at once: tick 135, platform height 5, playbacks 1
-Many at once: tick 150, platform height 5, playbacks 1
-Many at once: tick 165, platform height 5, playbacks 1
+Many at once: Ride tick 0, platform height 1, playbacks 1
+Many at once: Ride tick 15, platform height 1, playbacks 1
+Many at once: Ride tick 30, platform height 1.5, playbacks 1
+Many at once: Ride tick 45, platform height 1.5, playbacks 1
+Many at once: Ride tick 60, platform height 1, playbacks 1
+Many at once: Ride tick 75, platform height 1, playbacks 1
+Many at once: Ride tick 90, platform height 1, playbacks 1
+Many at once: Ride tick 105, platform height 1, playbacks 1
+Many at once: Ride tick 120, platform height 5, playbacks 1
+Many at once: Ride tick 135, platform height 5, playbacks 1
+Many at once: Ride tick 150, platform height 5, playbacks 1
+Many at once: Ride tick 165, platform height 5, playbacks 1
 ```
+
+One thing in it is not what the timeline seems to say: the platform waits at 1 while Top already plays (ticks 90 to 119), then jumps to 5. Section 7.3 turns that into a ride. First, a second timeline.
 
 ### 7.1 Two timelines on one platform
 
-The Playable Director plays **Ride**. **Shake** is a second timeline with one clip. Each timeline that plays is one **playback** on the entity (`playbacks 2` in the first lines), and every playback feeds the same kind. On the ticks where both have a clip, `Combine` adds them: tick 15 is Ground (1) plus Bump (0.25) = 1.25. When Shake ends at tick 30 its playback is removed and Ride goes on alone (`playbacks 1`).
+**Shake** is a second timeline with one track, **Bump**: one clip, ticks 15 to 30, height 0.25. The platform should play it at the same time as Ride.
 
-**Starting the second timeline.** **Play On Awake** on the Playable Director starts only its Playable. In the director's **Tl** foldout, put Shake in **Also Plays** and tick **Play On Awake** on its row: it starts with the scene, right after the Playable. With the box unticked Shake waits for code and the bump is gone (measured):
-
-```
-Many at once: tick 0, platform height 1, playbacks 1
-Many at once: tick 15, platform height 1, playbacks 1
-Many at once: tick 30, platform height 1.5, playbacks 1
-Many at once: tick 45, platform height 1.5, playbacks 1
-Many at once: tick 60, platform height 1, playbacks 1
-Many at once: tick 75, platform height 1, playbacks 1
-Many at once: tick 90, platform height 1, playbacks 1
-Many at once: tick 105, platform height 3.0689654, playbacks 1
-Many at once: tick 120, platform height 5, playbacks 1
-Many at once: tick 135, platform height 5, playbacks 1
-Many at once: tick 150, platform height 5, playbacks 1
-Many at once: tick 165, platform height 5, playbacks 1
-```
-
-To start or stop it from your own code instead, use `requests.Start(shake)` and `requests.Stop(shake)` with a `TlTimeline` from your baker (8.4, 9.3).
-
-**Channels.** Ride and Shake are on channel **None**, so they play side by side. Only one timeline plays per channel: give both the same **Channel** (Timeline asset > **Tl** section) and starting Shake replaces Ride. Measured, both on channel 1:
+**Starting it.** **Play On Awake** on the Playable Director starts only its Playable. In the director's **Tl** foldout, put Shake in **Also Plays** and tick **Play On Awake** on its row. Now the Console prints:
 
 ```
-Many at once: tick 0, platform height 0, playbacks 2
-Many at once: tick 15, platform height 0.25, playbacks 1
+Many at once: Ride tick 0, platform height 1, playbacks 2
+Many at once: Ride tick 15, platform height 1.25, playbacks 2
+Many at once: Ride tick 30, platform height 1.5, playbacks 1
+Many at once: Ride tick 45, platform height 1.5, playbacks 1
+Many at once: Ride tick 60, platform height 1, playbacks 1
+Many at once: Ride tick 75, platform height 1, playbacks 1
+Many at once: Ride tick 90, platform height 1, playbacks 1
+Many at once: Ride tick 105, platform height 1, playbacks 1
+Many at once: Ride tick 120, platform height 5, playbacks 1
+Many at once: Ride tick 135, platform height 5, playbacks 1
+Many at once: Ride tick 150, platform height 5, playbacks 1
+Many at once: Ride tick 165, platform height 5, playbacks 1
 ```
 
-The first line still counts two playbacks, but the height is 0: no clip of Ride was applied. From the bump on only Shake plays, and when it ends at tick 30 nothing plays, so the log stops and the column keeps its last value (chapter 1, "An ability window"). Put timelines that must not overlap (walk and run) on one channel; leave the rest on None. 8.3 has the rest.
+Each timeline that plays is one **playback** on the entity (`playbacks 2`), and every playback feeds the same kind. On the ticks where both have a clip, `Combine` adds them: tick 15 is Ground (1) plus Bump (0.25) = 1.25. When Shake ends at tick 30 its playback is removed and Ride goes on alone (`playbacks 1`).
+
+The rules of **Play On Awake** in **Also Plays**: the ticked timelines start when the scene loads, right after the Playable, at tick 0, in the order of the **Also Plays** list. They also start when the director's own **Play On Awake** is off. The Playable always starts at the director's **Initial Time**, whether it is started by the director or ticked in **Also Plays**. To start or stop a timeline from your own code instead, use `requests.Start(shake)` and `requests.Stop(shake)` with a `TlTimeline` from your baker (8.4, 9.3).
+
+**Channels.** Ride and Shake are on channel **None**, so they play side by side. Only one timeline plays per channel: give both the same **Channel** (Timeline asset > **Tl** section) and Shake, which starts after Ride, replaces it. The package test `ATimelineTickedPlayOnAwakeOnThePlayablesChannelReplacesIt` checks this: one playback, and only the later timeline's values reach the kind. Put timelines that must not overlap (walk and run) on one channel; leave the rest on None. 8.3 has the rest.
 
 ### 7.2 Two clips at once on two tracks
 
-Ride has two tracks. **Wave** carries one clip, ticks 30 to 60, height 0.5. From tick 30 Floor and Wave both have a clip, so `Combine` adds them: 1 + 0.5 = 1.5 (ticks 30 and 45). It is the same rule as two timelines: whatever reaches a kind on one tick is combined, whichever track or timeline it came from. Chapter 5's two winds were this case.
+Ride has two tracks. **Wave** carries one clip, ticks 30 to 60, height 0.5. From tick 30 Floor and Wave both have a clip, so `Combine` adds them: 1 + 0.5 = 1.5 (ticks 30 and 45 in both runs above). It is the same rule as two timelines: whatever reaches a kind on one tick is combined, whichever track or timeline it came from. Chapter 5's two winds were this case.
 
 ### 7.3 Two clips at once on one track: blend, or the first counts
 
-On the Floor track, Top (ticks 90 to 180, height 5) overlaps Ground (ticks 0 to 120, height 1) for ticks 90 to 119. Clips on **one** track are never combined. What happens in the overlap depends on the clip type:
+On the Floor track, Top (ticks 90 to 180, height 5) overlaps Ground (ticks 0 to 120, height 1) for ticks 90 to 119. Clips on **one** track are never combined. A clip type that does not implement `IBlend`, like `HeightClip` so far, keeps the **first** clip (the one that starts earlier) until it ends. That is the wait at 1 and the jump to 5 at tick 120 in both runs above.
 
-**Without blending.** A clip that does not implement `IBlend` keeps the **first** clip (the one that starts earlier) until it ends. With `HeightClip` as in the file above, measured:
-
-```
-Many at once: tick 0, platform height 1, playbacks 2
-Many at once: tick 15, platform height 1.25, playbacks 2
-Many at once: tick 30, platform height 1.5, playbacks 1
-Many at once: tick 45, platform height 1.5, playbacks 1
-Many at once: tick 60, platform height 1, playbacks 1
-Many at once: tick 75, platform height 1, playbacks 1
-Many at once: tick 90, platform height 1, playbacks 1
-Many at once: tick 105, platform height 1, playbacks 1
-Many at once: tick 120, platform height 5, playbacks 1
-Many at once: tick 135, platform height 5, playbacks 1
-Many at once: tick 150, platform height 5, playbacks 1
-Many at once: tick 165, platform height 5, playbacks 1
-```
-
-The platform waits at 1 and jumps to 5 at tick 120.
-
-**With blending.** A clip that implements `IBlend<HeightClip>` **crossfades**. This is the whole change, and it is the sample's `Platform.cs`:
+A clip that implements `IBlend<HeightClip>` **crossfades** instead. This is the whole change, and it is the sample's `Platform.cs`:
 
 ```csharp
 using Tl;
@@ -746,7 +723,24 @@ namespace ManyAtOnce
 }
 ```
 
-`Blend` runs only on overlap ticks. It gets the first clip, the second clip and a `factor` that is 0 on the first tick of the overlap and 1 on its last, in equal steps (here 1/29 per tick; a one-tick overlap gets 0.5), and it fills `result` with the clip to use this tick. The output at the top of this chapter is this version: tick 105 is 1 + 4 x 15/29 = 3.0689654, and the platform rides from 1 to 5 between ticks 90 and 119.
+Press **Play** again (Shake still ticked):
+
+```
+Many at once: Ride tick 0, platform height 1, playbacks 2
+Many at once: Ride tick 15, platform height 1.25, playbacks 2
+Many at once: Ride tick 30, platform height 1.5, playbacks 1
+Many at once: Ride tick 45, platform height 1.5, playbacks 1
+Many at once: Ride tick 60, platform height 1, playbacks 1
+Many at once: Ride tick 75, platform height 1, playbacks 1
+Many at once: Ride tick 90, platform height 1, playbacks 1
+Many at once: Ride tick 105, platform height 3.0689654, playbacks 1
+Many at once: Ride tick 120, platform height 5, playbacks 1
+Many at once: Ride tick 135, platform height 5, playbacks 1
+Many at once: Ride tick 150, platform height 5, playbacks 1
+Many at once: Ride tick 165, platform height 5, playbacks 1
+```
+
+`Blend` runs only on overlap ticks. It gets the first clip, the second clip and a `factor` that is 0 on the first tick of the overlap and 1 on its last, in equal steps (here 1/29 per tick; a one-tick overlap gets 0.5), and it fills `result` with the clip to use this tick. Tick 105 is 1 + 4 x 15/29 = 3.0689654: the platform rides from 1 to 5 between ticks 90 and 119.
 
 What to know about overlaps on one track:
 

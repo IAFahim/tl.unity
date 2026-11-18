@@ -30,6 +30,7 @@ namespace Tl.Unity.Editor
             public Quaternion Rotation;
             public Vector3 Scale;
             public uint LastTick = uint.MaxValue;
+            public bool PlayableHandsOver;
 
             public void Dispose()
             {
@@ -125,7 +126,8 @@ namespace Tl.Unity.Editor
             var scale = rest != null ? rest.Scale : director.transform.localScale;
             session?.Dispose();
             s_Sessions.Remove(director);
-            var fresh = new Session { Version = version, Position = position, Rotation = rotation, Scale = scale };
+            var settings = TlDirectorTimelines.Settings(director.playableAsset as TimelineAsset);
+            var fresh = new Session { Version = version, Position = position, Rotation = rotation, Scale = scale, PlayableHandsOver = settings != null && settings.End == TlEnd.Next && settings.Next != null };
             try
             {
                 fresh.Blobs = new BlobAssetStore(128);
@@ -185,7 +187,7 @@ namespace Tl.Unity.Editor
             var delta = 1f / TlProjectSettings.instance.TicksPerSecond;
             var result = new Result { Ran = true };
             var started = false;
-            ushort timeline = 0;
+            ushort playable = 0;
             var handedOver = false;
             var held = entities.GetComponentData<LocalTransform>(entity);
             var limit = (int)tick + 64;
@@ -196,22 +198,28 @@ namespace Tl.Unity.Editor
                 group?.Update();
                 entities.CompleteAllTrackedJobs();
                 result.Steps = step + 1;
-                var playbacks = entities.GetBuffer<Playback>(entity);
-                if (playbacks.Length == 0 || playbacks[0].Timeline == 0)
+                if (playable == 0)
                 {
-                    if (started)
-                        break;
-                    continue;
+                    var set = entities.GetBuffer<TlTimelineSet>(entity, true);
+                    playable = set.Length > 0 ? set[0].Id : (ushort)0;
                 }
-                started = true;
-                var playback = playbacks[0];
-                if (timeline == 0)
-                    timeline = playback.Timeline;
-                else if (playback.Timeline != timeline)
+                var playbacks = entities.GetBuffer<Playback>(entity);
+                var followed = -1;
+                for (var i = 0; i < playbacks.Length && playable != 0; i++)
+                    if (playbacks[i].Timeline == playable)
+                    {
+                        followed = i;
+                        break;
+                    }
+                if (followed < 0)
                 {
-                    handedOver = true;
+                    if (!started)
+                        continue;
+                    handedOver = session.PlayableHandsOver;
                     break;
                 }
+                started = true;
+                var playback = playbacks[followed];
                 if ((playback.Flags & global::Tl.PlaybackFlags.StartPending) != 0)
                     continue;
                 result.Tick = playback.Tick;

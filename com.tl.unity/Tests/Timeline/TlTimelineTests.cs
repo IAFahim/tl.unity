@@ -369,6 +369,83 @@ namespace Tl.Unity.Tracks.Tests
             Assert.AreEqual(10f * 2f, glow);
         }
 
+        (List<(ushort Timeline, ushort At)> Starts, ushort[] SetIds) StartsQueuedAtLoad(PlayableDirector director)
+        {
+            using var baked = new Baked(director.gameObject);
+            var world = baked.World;
+            world.CreateSystem<TlLibrarySystem>().Update(world.Unmanaged);
+            world.CreateSystem<TlTimelineRegisterSystem>().Update(world.Unmanaged);
+            world.CreateSystem<TlPlayOnAwakeSystem>().Update(world.Unmanaged);
+            var entities = world.EntityManager;
+            var entity = baked.Single<TlTimelineSet>();
+            var starts = new List<(ushort Timeline, ushort At)>();
+            foreach (var request in entities.GetBuffer<TimelineRequest>(entity))
+            {
+                Assert.AreEqual(RequestOp.Start, request.Op);
+                starts.Add((request.Timeline, request.At));
+            }
+            var set = entities.GetBuffer<TlTimelineSet>(entity);
+            var ids = new ushort[set.Length];
+            for (var i = 0; i < ids.Length; i++)
+                ids[i] = set[i].Id;
+            return (starts, ids);
+        }
+
+        [Test]
+        public void AlsoPlaysTimelinesTickedPlayOnAwakeStartInAlsoPlaysOrderWhateverOrderTheyWereTicked()
+        {
+            var director = Director("Sky", GlowTimeline("Sky", 1f));
+            var also = director.gameObject.AddComponent<TlAlsoPlays>();
+            var flash = GlowTimeline("Flash", 2f);
+            var thunder = GlowTimeline("Thunder", 4f);
+            also.Timelines.Add(flash);
+            also.Timelines.Add(thunder);
+            also.PlayOnAwake.Add(thunder);
+            also.PlayOnAwake.Add(flash);
+            var (starts, ids) = StartsQueuedAtLoad(director);
+            CollectionAssert.AreEqual(new[] { ids[0], ids[1], ids[2] }, starts.ConvertAll(start => start.Timeline), "the Playable, then Flash and Thunder in Also Plays order");
+            CollectionAssert.AreEqual(new ushort[] { 0, 0, 0 }, starts.ConvertAll(start => start.At));
+        }
+
+        [Test]
+        public void ThePlayableTickedPlayOnAwakeInAlsoPlaysStartsAtTheDirectorsInitialTimeLikeTheDirectorsOwnPlayOnAwake()
+        {
+            var sky = GlowTimeline("Sky", 1f);
+            var byDirector = Director("ByDirector", sky);
+            byDirector.initialTime = 0.5;
+            var byAlsoPlays = Director("ByAlsoPlays", sky);
+            byAlsoPlays.initialTime = 0.5;
+            byAlsoPlays.playOnAwake = false;
+            var also = byAlsoPlays.gameObject.AddComponent<TlAlsoPlays>();
+            also.Timelines.Add(sky);
+            also.PlayOnAwake.Add(sky);
+            var (directorStarts, _) = StartsQueuedAtLoad(byDirector);
+            var (alsoStarts, _) = StartsQueuedAtLoad(byAlsoPlays);
+            CollectionAssert.AreEqual(new ushort[] { 30 }, directorStarts.ConvertAll(start => start.At));
+            CollectionAssert.AreEqual(directorStarts, alsoStarts, "one start of the Playable at Initial Time, not a second start at tick 0");
+        }
+
+        [Test]
+        public void ThePreviewFollowsOnlyTheDirectorsOwnTimeline()
+        {
+            var sky = GlowTimeline("Sky", 1f);
+            sky.GetOutputTracks().OfType<TlTrack>().Single().GetClips().Single().duration = 2;
+            var flash = GlowTimeline("Flash", 2f);
+            flash.GetOutputTracks().OfType<TlTrack>().Single().GetClips().Single().duration = 0.25;
+            var stacked = Director("Stacked", sky);
+            var stackedAlso = stacked.gameObject.AddComponent<TlAlsoPlays>();
+            stackedAlso.Timelines.Add(flash);
+            stackedAlso.PlayOnAwake.Add(flash);
+            Assert.AreEqual(60u, TlPreview.Evaluate(stacked, 1.0).Tick, "the preview keeps following the Playable after Flash ends");
+            var notPlaying = Director("NotPlaying", sky);
+            notPlaying.playOnAwake = false;
+            var notPlayingAlso = notPlaying.gameObject.AddComponent<TlAlsoPlays>();
+            notPlayingAlso.Timelines.Add(flash);
+            notPlayingAlso.PlayOnAwake.Add(flash);
+            Assert.AreEqual(0u, TlPreview.Evaluate(notPlaying, 1.0).Tick, "the Playable never starts, so there is nothing to follow; Flash is not followed");
+            TlPreview.Clear();
+        }
+
         [Test]
         public void ADirectorWithoutTlTracksBakesNothingOfTl()
         {
