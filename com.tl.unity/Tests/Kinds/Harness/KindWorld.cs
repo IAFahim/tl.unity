@@ -211,6 +211,24 @@ namespace KindGame
             return Entities.GetBuffer<T>(Rows[row]).Length;
         }
 
+        public int Spans(int row, string kind)
+        {
+            Entities.CompleteAllTrackedJobs();
+            using var query = Entities.CreateEntityQuery(typeof(TimelineLibrary));
+            var index = query.GetSingleton<TimelineLibrary>().Kinds;
+            var id = index.KindOf(KindIndex.IdOf(kind));
+            var slots = Entities.GetBuffer<Playback>(Rows[row], true);
+            var clock = Entities.HasComponent<TimelineClock>(Rows[row]) ? Entities.GetComponentData<TimelineClock>(Rows[row]).Value : (ushort)0;
+            var spans = 0;
+            for (var i = 0; i < slots.Length; i++)
+            {
+                var slot = slots[i];
+                if (slot.Timeline == 0 || !global::Tl.KindScore.Listed(slot.Flags)) continue;
+                spans += index.SpanCount(slot.Timeline, TimelineTicks.Real(in slot, clock), id);
+            }
+            return spans;
+        }
+
         public bool Active<T>(int row) where T : unmanaged, IComponentData, IEnableableComponent
         {
             return Entities.IsComponentEnabled<T>(Rows[row]);

@@ -6,6 +6,7 @@ namespace Tl.Unity
 {
     public struct TimelinePlaying : IComponentData, IEnableableComponent
     {
+        public byte Copies;
     }
 
     public interface IKindModule

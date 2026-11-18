@@ -636,9 +636,20 @@ namespace Tl.Unity.Tracks.Tests
             var after = entities.GetBuffer<Playback>(entity)[0];
             Assert.AreEqual(id, after.Timeline);
             Assert.AreEqual(before.Tick, after.Tick, "the playback keeps its tick across the swap");
-            Assert.AreEqual(1, entities.GetBuffer<TlUnityGenerated.ForceKindEntry>(entity).Length, "one Force span, not a stale copy");
+            Assert.AreEqual(0, entities.GetBuffer<TlUnityGenerated.ForceKindEntry>(entity).Length, "no stale Force entry");
+            Assert.AreEqual(1, ListedSpans(entities, after), "one Force span");
             live.Step(1);
             Assert.AreEqual(before.Tick + 1, entities.GetBuffer<Playback>(entity)[0].Tick, "and keeps playing");
+        }
+
+        static int ListedSpans(EntityManager entities, Playback slot)
+        {
+            using var query = entities.CreateEntityQuery(typeof(TimelineLibrary));
+            var index = query.GetSingleton<TimelineLibrary>().Kinds;
+            var spans = 0;
+            for (var kind = 0; kind < index.KindCount; kind++)
+                spans += index.SpanCount(slot.Timeline, slot.Tick, kind);
+            return spans;
         }
 
         [Test]

@@ -12,7 +12,6 @@ namespace Tl.Unity
         [NativeDisableUnsafePtrRestriction] internal UnsafeList<JobHandle>* Writers;
         [NativeDisableUnsafePtrRestriction] internal int* Counters;
         [NativeDisableUnsafePtrRestriction] internal JobHandle* Last;
-        [NativeDisableUnsafePtrRestriction] internal KindTickStamp* Stamp;
 
         public bool IsCreated => Counters != null;
 
@@ -50,8 +49,6 @@ namespace Tl.Unity
             UnsafeUtility.MemClear(tick.Counters, bytes);
             tick.Last = (JobHandle*)UnsafeUtility.Malloc(sizeof(JobHandle), 16, Allocator.Persistent);
             *tick.Last = default;
-            tick.Stamp = (KindTickStamp*)UnsafeUtility.Malloc(sizeof(KindTickStamp), 16, Allocator.Persistent);
-            *tick.Stamp = default;
             return tick;
         }
 
@@ -65,7 +62,6 @@ namespace Tl.Unity
             UnsafeList<JobHandle>.Destroy(Writers);
             UnsafeUtility.Free(Counters, Allocator.Persistent);
             UnsafeUtility.Free(Last, Allocator.Persistent);
-            UnsafeUtility.Free(Stamp, Allocator.Persistent);
             this = default;
         }
     }
@@ -120,11 +116,6 @@ namespace Tl.Unity
         public void OnDestroy(ref SystemState state)
         {
             state.CompleteDependency();
-            if (SystemAPI.TryGetSingleton<TimelineLibrary>(out var library) && library.Kinds.TickStamp == _tick.Stamp)
-            {
-                library.Kinds.TickStamp = null;
-                SystemAPI.SetSingleton(library);
-            }
             _tick.Dispose();
         }
 
@@ -146,12 +137,6 @@ namespace Tl.Unity
             var library = SystemAPI.GetSingleton<TimelineLibrary>();
             if (library.Kinds.KindCount == 0)
                 return;
-            var published = library.Kinds.TickStamp != _tick.Stamp;
-            if (published)
-            {
-                library.Kinds.TickStamp = _tick.Stamp;
-                SystemAPI.SetSingleton(library);
-            }
             var index = library.Kinds;
             var identity = (ulong)index.WindowStep;
             if (!_isBound || _bound != library.Generation)
@@ -170,7 +155,7 @@ namespace Tl.Unity
             _now = (ushort)((_now + 1) & TimelineTicks.Mask);
             var stepDir = SystemAPI.GetSingleton<TimelineStep>().Forward ? 1 : -1;
             var limit = (int)state.EntityManager.GetComponentData<TimelineGlide>(state.SystemHandle).Limit;
-            var forget = published || _glideIndex != identity || _glideGeneration != library.Generation || _glideStepDir != stepDir || _glideLimit != limit;
+            var forget = _glideIndex != identity || _glideGeneration != library.Generation || _glideStepDir != stepDir || _glideLimit != limit;
             _glideIndex = identity;
             _glideGeneration = library.Generation;
             _glideStepDir = stepDir;
@@ -198,8 +183,6 @@ namespace Tl.Unity
                 LastSystemVersion = state.LastSystemVersion,
                 HorizonLimit = limit,
                 ForgetHorizons = forget,
-                TickVersion = state.GlobalSystemVersion,
-                TickIndex = identity,
             };
             dependency = tick.ScheduleParallel(_query, dependency);
             var senders = _tick.Senders;

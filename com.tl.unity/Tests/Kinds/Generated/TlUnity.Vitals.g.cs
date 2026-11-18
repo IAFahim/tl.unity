@@ -14,6 +14,7 @@ public unsafe partial struct VitalsChunkJob : IJobChunk
 public bool Forward;
 [ReadOnly] public BufferTypeHandle<global::Tl.Unity.Playback> PlaybackHandle;
 [ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelineClock> ClockHandle;
+[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelinePlaying> PlayingHandle;
 public ComponentTypeHandle<Vitals_HealthData> HealthHandle;
 public BufferTypeHandle<global::KindGame.DamageEntry> DamageEntryHandle;
 public ComponentTypeHandle<global::KindGame.DamageActive> DamageActiveHandle;
@@ -25,7 +26,8 @@ if (chunk.Has(ref DamageEntryHandle))
 {
 var __a0 = chunk.GetEnableableBits(ref DamageActiveHandle);
 var __e0 = chunk.GetEnableableBits(ref DamageEnabledHandle);
-__l0 = ((__a0.ULong0 & __e0.ULong0) | (__a0.ULong1 & __e0.ULong1)) != 0;
+var __p0 = chunk.Has(ref PlayingHandle) ? chunk.GetEnableableBits(ref PlayingHandle) : default;
+__l0 = (((__a0.ULong0 | __p0.ULong0) & __e0.ULong0) | ((__a0.ULong1 | __p0.ULong1) & __e0.ULong1)) != 0;
 }
 if (!__l0) return;
 var __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
@@ -35,19 +37,21 @@ if (__l0 && __c0 != null) Kind_0(chunk, __playbacks, __c0);
 void Kind_0(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Health* __c0)
 {
 var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;
-var __cached = __clocks != null && Index.TickStamp != null && Index.TickStamp->Index == (ulong)Index.WindowStep && chunk.GetChangeVersion(ref PlaybackHandle) == Index.TickStamp->Version;
 if (!chunk.Has(ref DamageEntryHandle)) return;
+var __kid = Index.KindOf(804387256);
+if (__kid < 0) return;
+var __copies = chunk.Has(ref PlayingHandle) ? (global::Tl.Unity.TimelinePlaying*)chunk.GetRequiredComponentDataPtrRO(ref PlayingHandle) : null;
+var __epl = chunk.Has(ref PlayingHandle) ? chunk.GetEnableableBits(ref PlayingHandle) : default;
 var __acc = chunk.GetBufferAccessor(ref DamageEntryHandle);
 var __ema = chunk.GetEnableableBits(ref DamageActiveHandle);
 var __eme = chunk.GetEnableableBits(ref DamageEnabledHandle);
 var __stride = sizeof(global::KindGame.DamageEntry);
 var __count = chunk.Count;
-var __active = default(global::Unity.Entities.EnabledMask);
-var __masked = false;
+var __active = chunk.GetEnabledMask(ref DamageActiveHandle);
 for (var __kw = 0; __kw < 2; __kw++)
 {
 if (__kw == 1 && __count <= 64) break;
-var __kb = __kw == 0 ? __ema.ULong0 & __eme.ULong0 : __ema.ULong1 & __eme.ULong1;
+var __kb = __kw == 0 ? (__ema.ULong0 | __epl.ULong0) & __eme.ULong0 : (__ema.ULong1 | __epl.ULong1) & __eme.ULong1;
 while (__kb != 0)
 {
 var __row = (__kw << 6) + (int)global::Unity.Mathematics.math.tzcnt(__kb);
@@ -56,97 +60,56 @@ if (__row >= __count) break;
 var __buf = __acc[__row];
 var __len = __buf.Length;
 byte* __data = (byte*)__buf.GetUnsafePtr();
-var __pulses = 0;
-var __pbase = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr();
-var __sampled = global::Tl.KindRules.IsSampled(__data, __len);
-if (!__sampled)
-{
-int __total = default;
-var __has = false;
-for (var __j = 0; __j < __len; __j++)
-{
-var __en = (global::Tl.KindEntry*)(__data + (long)__j * __stride);
-int __v = default;
-if (__en->Timeline == 0)
-{
-__v = *(int*)((byte*)__en + 8);
-__pulses++;
-}
-else
-{
-var __isPulse = (__en->Flags & global::Tl.KindEntryFlags.Pulse) != 0;
-if (__isPulse) __pulses++;
-if (__en->Owner != 0)
-{
-if ((__en->Flags & global::Tl.KindEntryFlags.Ready) == 0) continue;
-__v = *(int*)((byte*)__en + 8);
-__en->Flags &= ~global::Tl.KindEntryFlags.Ready;
-}
-else
-{
-var __pb = __pbase + __en->Slot;
-var __cb = __cached ? global::Tl.Unity.KindEntryCache.Bits(__en) : (byte)0;
-var __hit = (__cb & global::Tl.Unity.KindEntryCache.Valid) != 0;
-if (!__isPulse && (__hit ? (__cb & global::Tl.Unity.KindEntryCache.Paused) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0)) continue;
-var __tl = Index.Timelines + (__en->Timeline - 1);
-ushort __tick = __hit ? global::Tl.Unity.KindEntryCache.Tick(__en, __clocks[__row], __cb) : global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);
-var __rev = __hit ? (__cb & global::Tl.Unity.KindEntryCache.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0;
-var __backward = Forward ? __rev : !__rev;
-var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)
-| ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)
-| ((__en->Flags & global::Tl.KindEntryFlags.Interrupted) != 0 ? global::Tl.FrameFlags.Interrupted : global::Tl.FrameFlags.None);
-if (__tick == 0) __kflags |= global::Tl.FrameFlags.TimelineStart;
-if (__tick == (ushort)(__tl->Duration - 1)) __kflags |= global::Tl.FrameFlags.TimelineEnd;
-var __ok = false;
-switch (__en->Feeder)
-{
-case 0:
-{
-var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);
-if (__def == null) break;
-byte* __row0 = (byte*)__def->FrameRow;
-byte* __first0 = __row0 + sizeof(global::KindGame.HitTrack);
-byte* __second0 = __def->FactorSpan == 0 ? null : __first0 + sizeof(global::KindGame.HitClip);
-float __blend0 = __def->FactorSpan == 0 ? 0f : (__def->FactorSpan <= 1 ? 0.5f : (__tick - __def->FactorStart) / (float)(__def->FactorSpan - 1));
-ushort __len0 = (ushort)(__def->WindowEnd - __def->WindowStart);
-ushort __within0 = (ushort)(__tick - __def->WindowStart);
-sbyte __dir0 = __backward ? (sbyte)-1 : (sbyte)1;
-global::TlUnityGenerated.TlUnityFrames.Frame_1_0(__row0, __first0, __second0, __blend0, __tick, __len0, __within0, (ushort)__def->TrackIndex, (ushort)__tl->Duration, __dir0, __kflags, out var __t0, out var __cc0, out var __f0);
-__v = global::KindGame.Hit.Start(in __f0);
-__ok = true;
-break;
-}
-}
-if (!__ok) continue;
-}
-}
-if (__has) global::KindGame.Damage.Combine(ref __total, in __v);
-else { __total = __v; __has = true; }
-}
-if (__has) global::KindGame.Damage.Apply(in __total, ref __c0[__row]);
-}
-else
-{
-var __sk = global::Tl.KindRules.SampleDepth(__data, __len, __stride, __pbase);
+var __pbuf = __playbacks[__row];
+var __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr();
+var __cnt = __pbuf.Length;
+var __smp = __copies == null ? 0 : (int)__copies[__row].Copies;
+var __clock = __clocks == null ? (ushort)0 : __clocks[__row];
+var __listed = false;
+var __sampled = __smp != 0;
+var __sk = __sampled ? global::Tl.KindRules.Depth(__run + __cnt, __smp) : 1;
 for (var __sj = 0; __sj < __sk; __sj++)
 {
 int __total = default;
 var __has = false;
+for (var __q = 0; __q < __cnt + __smp; __q++)
+{
+var __i = __q < __smp ? __cnt + __q : __q - __smp;
+var __pb = __run + __i;
+if (__pb->Timeline == 0 || !global::Tl.KindScore.Listed(__pb->Flags)) continue;
+ushort __tick = __i < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;
+var __cell = Index.Score.CellOf(in Index.Sec, __pb->Timeline, __tick, __kid);
+if (__cell < 0 || Index.Score.Start[__cell] == Index.Score.Start[__cell + 1]) continue;
+if (__i < __cnt) { __listed = true; if (__sj != 0 || __pb->Rate != 0) continue; }
+else if (__pb->Phase != __sj) continue;
+if ((__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
+var __tl = Index.Timelines + (__pb->Timeline - 1);
+var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
+for (var __f = Index.Score.Start[__cell]; __f < Index.Score.Start[__cell + 1]; __f++)
+{
+var __sp = Index.Score.Spans + __f;
+var __r = Index.Routes[__sp->Feeder];
+if ((__r >> 8) != 0) continue;
+var __def = __sp->Step;
+if (__def == null) continue;
+var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None) | (global::Tl.KindScore.Synthetic(__pb->Flags, __tick, __def, __backward) ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None);
+if (__tick == 0) __kflags |= global::Tl.FrameFlags.TimelineStart;
+if (__tick == (ushort)(__tl->Duration - 1)) __kflags |= global::Tl.FrameFlags.TimelineEnd;
+int __v = default;
+var __ok = false;
+if (!__ok) continue;
+if (__has) global::KindGame.Damage.Combine(ref __total, in __v);
+else { __total = __v; __has = true; }
+}
+}
 for (var __j = 0; __j < __len; __j++)
 {
 var __en = (global::Tl.KindEntry*)(__data + (long)__j * __stride);
-if (!global::Tl.KindRules.Due(__en, __sj, __pbase + __en->Slot)) continue;
+if (__sampled && !global::Tl.KindRules.Due(__en, __sj, __run, __cnt)) continue;
 int __v = default;
 if (__en->Timeline == 0)
-{
 __v = *(int*)((byte*)__en + 8);
-__pulses++;
-}
-else
-{
-var __isPulse = (__en->Flags & global::Tl.KindEntryFlags.Pulse) != 0;
-if (__isPulse) __pulses++;
-if (__en->Owner != 0)
+else if (__en->Owner != 0)
 {
 if ((__en->Flags & global::Tl.KindEntryFlags.Ready) == 0) continue;
 __v = *(int*)((byte*)__en + 8);
@@ -154,10 +117,9 @@ __en->Flags &= ~global::Tl.KindEntryFlags.Ready;
 }
 else
 {
-var __pb = __pbase + __en->Slot;
-if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
+var __pb = __run + __en->Slot;
 var __tl = Index.Timelines + (__en->Timeline - 1);
-ushort __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);
+ushort __tick = __en->Slot < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;
 var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
 var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)
 | ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)
@@ -186,37 +148,25 @@ break;
 }
 if (!__ok) continue;
 }
-}
 if (__has) global::KindGame.Damage.Combine(ref __total, in __v);
 else { __total = __v; __has = true; }
 }
 if (__has) global::KindGame.Damage.Apply(in __total, ref __c0[__row]);
 }
-}
-if (__sampled)
-{
-__pulses = 0;
-for (var __j = 0; __j < __len; __j++)
-if ((((global::Tl.KindEntry*)(__data + (long)__j * __stride))->Flags & global::Tl.KindEntryFlags.Pulse) != 0) __pulses++;
-}
-if (__pulses == __len)
-{
-__buf.Clear();
-if (!__masked) { __active = chunk.GetEnabledMask(ref DamageActiveHandle); __masked = true; }
-__active[__row] = false;
-}
-else if (__pulses != 0)
+if (__len != 0)
 {
 var __kept = 0;
 for (var __j = 0; __j < __len; __j++)
 {
 var __en = (global::Tl.KindEntry*)(__data + (long)__j * __stride);
-if ((__en->Flags & global::Tl.KindEntryFlags.Pulse) != 0) continue;
+if ((__en->Flags & global::Tl.KindEntryFlags.Pulse) != 0 || __en->Timeline == 0) continue;
 if (__kept != __j) global::Unity.Collections.LowLevel.Unsafe.UnsafeUtility.MemCpy(__data + (long)__kept * __stride, __en, __stride);
 __kept++;
 }
 __buf.ResizeUninitialized(__kept);
+__listed |= __kept != 0;
 }
+__active[__row] = __listed;
 if (__buf.Capacity > global::KindGame.KindCapacity.Damage && __buf.Length <= global::KindGame.KindCapacity.Damage) __buf.TrimExcess();
 }
 }
@@ -229,6 +179,7 @@ public struct Vitals
 EntityQuery _query;
 BufferTypeHandle<global::Tl.Unity.Playback> _PlaybackHandle;
 ComponentTypeHandle<global::Tl.Unity.TimelineClock> _ClockHandle;
+ComponentTypeHandle<global::Tl.Unity.TimelinePlaying> _PlayingHandle;
 ComponentTypeHandle<Vitals_HealthData> _HealthHandle;
 BufferTypeHandle<global::KindGame.DamageEntry> _DamageEntryHandle;
 ComponentTypeHandle<global::KindGame.DamageActive> _DamageActiveHandle;
@@ -245,6 +196,7 @@ any.Dispose();
 builder.Dispose();
 jobs._PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true);
 jobs._ClockHandle = state.GetComponentTypeHandle<global::Tl.Unity.TimelineClock>(true);
+jobs._PlayingHandle = state.GetComponentTypeHandle<global::Tl.Unity.TimelinePlaying>(true);
 jobs._HealthHandle = state.GetComponentTypeHandle<Vitals_HealthData>(false);
 jobs._DamageEntryHandle = state.GetBufferTypeHandle<global::KindGame.DamageEntry>(false);
 jobs._DamageActiveHandle = state.GetComponentTypeHandle<global::KindGame.DamageActive>(false);
@@ -255,6 +207,7 @@ public JobHandle Schedule(ref SystemState state, global::Tl.LibraryView view, gl
 {
 _PlaybackHandle.Update(ref state);
 _ClockHandle.Update(ref state);
+_PlayingHandle.Update(ref state);
 _HealthHandle.Update(ref state);
 _DamageEntryHandle.Update(ref state);
 _DamageActiveHandle.Update(ref state);
@@ -262,6 +215,7 @@ _DamageEnabledHandle.Update(ref state);
 var job = new VitalsChunkJob { View = view, Index = index, Forward = forward
 , PlaybackHandle = _PlaybackHandle
 , ClockHandle = _ClockHandle
+, PlayingHandle = _PlayingHandle
 , HealthHandle = _HealthHandle
 , DamageEntryHandle = _DamageEntryHandle
 , DamageActiveHandle = _DamageActiveHandle

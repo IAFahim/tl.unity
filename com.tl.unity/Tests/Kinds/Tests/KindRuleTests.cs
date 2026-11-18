@@ -65,7 +65,7 @@ namespace KindGame
             Assert.AreEqual(0, _game.Slots(0)[0].Tick);
             Assert.AreEqual(-1, _game.Stamina(0));
             Assert.AreEqual(12f, _game.Motion(0).Y);
-            Assert.AreEqual(1, _game.Entries<LiftEntry>(0));
+            Assert.AreEqual(1, _game.Spans(0, "KindGame.Lift"));
             _game.Step();
             Assert.AreEqual(1, _game.Slots(0)[0].Tick);
             Assert.AreEqual(-1, _game.Stamina(0));
@@ -100,7 +100,7 @@ namespace KindGame
             Assert.AreEqual(8f, _game.Motion(0).Y);
             Swap(KindWorld.Jump);
             _game.Step();
-            Assert.AreEqual(2, _game.Entries<LiftEntry>(0));
+            Assert.AreEqual(2, _game.Spans(0, "KindGame.Lift"));
             Assert.AreEqual(16f, _game.Motion(0).Y);
             Assert.AreEqual(-1, _game.Stamina(0));
         }
@@ -117,7 +117,7 @@ namespace KindGame
             Assert.AreEqual(0, _game.Slots(0)[0].Timeline);
             Assert.AreEqual(6f, _game.Motion(0).Y);
             Assert.AreEqual(-1, _game.Stamina(0));
-            Assert.AreEqual(0, _game.Entries<LiftEntry>(0));
+            Assert.AreEqual(0, _game.Spans(0, "KindGame.Lift"));
         }
 
         [Test]
@@ -129,12 +129,12 @@ namespace KindGame
             _game.Start(0, KindWorld.SpeedBoost);
             _game.Step();
             Assert.AreEqual(7f, _game.Motion(0).X);
-            Assert.AreEqual(2, _game.Entries<LocomotionEntry>(0));
+            Assert.AreEqual(2, _game.Spans(0, "KindGame.Locomotion"));
             Steps(19);
             Assert.AreEqual(102f, _game.Motion(0).X);
             _game.Step();
             Assert.AreEqual(104f, _game.Motion(0).X);
-            Assert.AreEqual(1, _game.Entries<LocomotionEntry>(0));
+            Assert.AreEqual(1, _game.Spans(0, "KindGame.Locomotion"));
         }
 
         [Test]
@@ -184,7 +184,7 @@ namespace KindGame
             _game.Entities.SetComponentEnabled<LocomotionEnabled>(_game.Rows[0], false);
             Steps(3);
             Assert.AreEqual(2f, _game.Motion(0).X);
-            Assert.AreEqual(1, _game.Entries<LocomotionEntry>(0));
+            Assert.AreEqual(1, _game.Spans(0, "KindGame.Locomotion"));
             _game.Entities.SetComponentEnabled<LocomotionEnabled>(_game.Rows[0], true);
             _game.Step();
             Assert.AreEqual(4f, _game.Motion(0).X);
@@ -199,7 +199,7 @@ namespace KindGame
             _game.Stop(0, KindWorld.Run);
             _game.Step();
             Assert.AreEqual(6f, _game.Motion(0).X);
-            Assert.AreEqual(0, _game.Entries<LocomotionEntry>(0));
+            Assert.AreEqual(0, _game.Spans(0, "KindGame.Locomotion"));
             Assert.IsFalse(_game.Active<LocomotionActive>(0));
             Assert.AreNotEqual(0, (int)(_game.Slots(0)[0].Flags & global::Tl.PlaybackFlags.Stopping));
             Assert.AreEqual(KindWorld.Run, _game.Slots(0)[0].Timeline);
@@ -237,8 +237,8 @@ namespace KindGame
             var slots = _game.Slots(0);
             Assert.AreNotEqual(0, (int)(slots[0].Flags & global::Tl.PlaybackFlags.Stopping));
             Assert.AreEqual(KindWorld.Jump, slots[1].Timeline);
-            Assert.AreEqual(1, _game.Entries<LocomotionEntry>(0));
-            Assert.AreEqual(1, _game.Entries<LiftEntry>(0));
+            Assert.AreEqual(1, _game.Spans(0, "KindGame.Locomotion"));
+            Assert.AreEqual(1, _game.Spans(0, "KindGame.Lift"));
         }
 
         [Test]
@@ -246,7 +246,7 @@ namespace KindGame
         {
             _game.Start(0, KindWorld.Run);
             Steps(45);
-            Assert.AreEqual(1, _game.Entries<LocomotionEntry>(0));
+            Assert.AreEqual(1, _game.Spans(0, "KindGame.Locomotion"));
             Assert.AreEqual(4, _game.Slots(0)[0].Tick);
             Assert.AreEqual(90f, _game.Motion(0).X);
         }
@@ -257,10 +257,10 @@ namespace KindGame
             _game.Start(0, KindWorld.SpeedBoost);
             Steps(20);
             Assert.AreEqual(100f, _game.Motion(0).X);
-            Assert.AreEqual(1, _game.Entries<LocomotionEntry>(0));
+            Assert.AreEqual(1, _game.Spans(0, "KindGame.Locomotion"));
             _game.Step();
             Assert.AreEqual(100f, _game.Motion(0).X);
-            Assert.AreEqual(0, _game.Entries<LocomotionEntry>(0));
+            Assert.AreEqual(0, _game.Spans(0, "KindGame.Locomotion"));
             Assert.IsFalse(_game.Active<LocomotionActive>(0));
             Assert.AreEqual(0, _game.Slots(0)[0].Timeline);
         }
@@ -370,7 +370,7 @@ namespace KindGame
             Assert.AreEqual(KindWorld.Waltz, slots[0].Timeline);
             Assert.AreEqual(2, slots[0].Tick);
             Assert.AreNotEqual(0, (int)(slots[0].Flags & global::Tl.PlaybackFlags.Ended));
-            Assert.AreEqual(0, _game.Entries<LocomotionEntry>(0));
+            Assert.AreEqual(0, _game.Spans(0, "KindGame.Locomotion"));
             Assert.AreEqual(21f, _game.Motion(0).X);
             _game.Step();
             Assert.AreEqual(2, _game.Slots(0)[0].Tick);

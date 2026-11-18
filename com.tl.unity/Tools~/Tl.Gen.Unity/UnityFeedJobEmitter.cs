@@ -77,6 +77,7 @@ namespace Tl.Gen.Unity
             W(writer, "public bool Forward;");
             W(writer, "[ReadOnly] public BufferTypeHandle<global::Tl.Unity.Playback> PlaybackHandle;");
             W(writer, "[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelineClock> ClockHandle;");
+            W(writer, "[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelinePlaying> PlayingHandle;");
             for (var i = 0; i < shape.Columns.Count; i++)
                 if (shape.UsedColumns[i])
                     W(writer, "[ReadOnly] public ComponentTypeHandle<" + ComponentName(model, shape.Columns[i]) + "> " + shape.Columns[i].Name + "Handle;");
@@ -117,6 +118,7 @@ namespace Tl.Gen.Unity
             var handles = new List<(string field, string type, string getter, bool readOnly)>();
             handles.Add(("PlaybackHandle", "BufferTypeHandle<global::Tl.Unity.Playback>", "GetBufferTypeHandle<global::Tl.Unity.Playback>", true));
             handles.Add(("ClockHandle", "ComponentTypeHandle<global::Tl.Unity.TimelineClock>", "GetComponentTypeHandle<global::Tl.Unity.TimelineClock>", true));
+            handles.Add(("PlayingHandle", "ComponentTypeHandle<global::Tl.Unity.TimelinePlaying>", "GetComponentTypeHandle<global::Tl.Unity.TimelinePlaying>", true));
             for (var i = 0; i < shape.Columns.Count; i++)
                 if (shape.UsedColumns[i])
                     handles.Add((shape.Columns[i].Name + "Handle", "ComponentTypeHandle<" + ComponentName(model, shape.Columns[i]) + ">", "GetComponentTypeHandle<" + ComponentName(model, shape.Columns[i]) + ">", true));
@@ -170,7 +172,11 @@ namespace Tl.Gen.Unity
             W(writer, "{");
             W(writer, "var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;");
             W(writer, "if (" + info.Name + "Owner < 0 || !chunk.Has(ref " + info.Name + "EntryHandle)) return;");
+            W(writer, "var __kid = Index.KindOf(" + KindId(info.Decl.Id) + ");");
+            W(writer, "if (__kid < 0) return;");
             W(writer, "var __owner = (byte)" + info.Name + "Owner;");
+            W(writer, "var __copies = chunk.Has(ref PlayingHandle) ? (global::Tl.Unity.TimelinePlaying*)chunk.GetRequiredComponentDataPtrRO(ref PlayingHandle) : null;");
+            W(writer, "var __epl = chunk.Has(ref PlayingHandle) ? chunk.GetEnableableBits(ref PlayingHandle) : default;");
             W(writer, "var __acc = chunk.GetBufferAccessor(ref " + info.Name + "EntryHandle);");
             W(writer, "var __ema = chunk.GetEnableableBits(ref " + info.Name + "ActiveHandle);");
             W(writer, "var __eme = chunk.GetEnableableBits(ref " + info.Name + "EnabledHandle);");
@@ -179,7 +185,7 @@ namespace Tl.Gen.Unity
             W(writer, "for (var __kw = 0; __kw < 2; __kw++)");
             W(writer, "{");
             W(writer, "if (__kw == 1 && __count <= 64) break;");
-            W(writer, "var __kb = __kw == 0 ? __ema.ULong0 & __eme.ULong0 : __ema.ULong1 & __eme.ULong1;");
+            W(writer, "var __kb = __kw == 0 ? (__ema.ULong0 | __epl.ULong0) & __eme.ULong0 : (__ema.ULong1 | __epl.ULong1) & __eme.ULong1;");
             W(writer, "while (__kb != 0)");
             W(writer, "{");
             W(writer, "var __row = (__kw << 6) + (int)global::Unity.Mathematics.math.tzcnt(__kb);");
@@ -188,15 +194,14 @@ namespace Tl.Gen.Unity
             W(writer, "var __buf = __acc[__row];");
             W(writer, "var __len = __buf.Length;");
             W(writer, "byte* __data = (byte*)__buf.GetUnsafePtr();");
+            EmitRowHead(writer);
             W(writer, "for (var __j = 0; __j < __len; __j++)");
             W(writer, "{");
             W(writer, "var __en = (global::Tl.KindEntry*)(__data + (long)__j * __stride);");
-            W(writer, "if (__en->Timeline == 0 || __en->Owner != __owner) continue;");
-            W(writer, "var __isPulse = (__en->Flags & global::Tl.KindEntryFlags.Pulse) != 0;");
-            W(writer, "var __pb = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr() + __en->Slot;");
-            W(writer, "if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;");
+            W(writer, "if (__en->Timeline == 0 || __en->Owner != __owner || (__en->Flags & global::Tl.KindEntryFlags.Span) != 0) continue;");
+            W(writer, "var __pb = __run + __en->Slot;");
             W(writer, "var __tl = Index.Timelines + (__en->Timeline - 1);");
-            W(writer, "ushort __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);");
+            W(writer, "ushort __tick = __en->Slot < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;");
             W(writer, "var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;");
             W(writer, "var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)");
             W(writer, "| ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)");
@@ -205,49 +210,25 @@ namespace Tl.Gen.Unity
             W(writer, "if (__tick == (ushort)(__tl->Duration - 1)) __kflags |= global::Tl.FrameFlags.TimelineEnd;");
             W(writer, value + " __v = default;");
             W(writer, "var __ok = false;");
-            if (feeders.Count > 0)
-            {
-                W(writer, "switch (__en->Feeder)");
-                W(writer, "{");
-            }
-            for (var i = 0; i < feeders.Count; i++)
-            {
-                var (c, feeder) = feeders[i];
-                var consumer = assignment.Consumers[c];
-                W(writer, "case " + i + ":");
-                W(writer, "{");
-                if (feeder.Trigger == FeederTrigger.Marker)
-                {
-                    W(writer, "byte* __mptr" + c + " = Index.MarkerOf(__en->Timeline, __en->Step);");
-                    W(writer, "if (__mptr" + c + " == null) break;");
-                    W(writer, consumer.MarkerTypeName + " __m" + c + " = *(" + consumer.MarkerTypeName + "*)__mptr" + c + ";");
-                    W(writer, "var __mf" + c + " = new global::Tl.MarkerFrame<" + consumer.MarkerTypeName + ">(in __m" + c + ", __tick, 0, __kflags);");
-                    W(writer, "__v = " + consumer.ConsumerTypeName + "." + feeder.MethodName + "(" + CallArgs(shape, feeder.Method.Params, "__mf" + c, "__row", "") + ");");
-                }
-                else
-                {
-                    W(writer, "var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);");
-                    W(writer, "if (__def == null) break;");
-                    EmitMaterialize(writer, consumer, assignmentIndex, c);
-                    if (FoldOf(consumer) != null)
-                        EmitFeeds(writer, consumer, c);
-                    var frameVar = "__f" + c;
-                    if (UnityKindJobEmitter.IsTlFrame(feeder.Method))
-                    {
-                        frameVar = "__tf" + c;
-                        W(writer, "var " + frameVar + " = new global::Tl.TlFrame<" + consumer.ClipTypeName + ">(in __f" + c + ");");
-                    }
-                    W(writer, "__v = " + consumer.ConsumerTypeName + "." + feeder.MethodName + "(" + CallArgs(shape, feeder.Method.Params, frameVar, "__row", "__fd" + c + "_") + ");");
-                }
-                W(writer, "__ok = true;");
-                W(writer, "break;");
-                W(writer, "}");
-            }
-            if (feeders.Count > 0)
-                W(writer, "}");
-            W(writer, "if (!__ok) continue;");
+            EmitCases(writer, shape, assignment, assignmentIndex, feeders, "__en->Feeder", false);
             W(writer, "*(" + value + "*)((byte*)__en + 8) = __v;");
             W(writer, "__en->Flags |= global::Tl.KindEntryFlags.Ready;");
+            W(writer, "}");
+            EmitSlotWalk(writer, "__kid");
+            W(writer, "if (__i < __cnt && __pb->Rate != 0) continue;");
+            EmitSpanHead(writer);
+            W(writer, "if ((__r >> 8) != __owner) continue;");
+            EmitSpanFrame(writer);
+            W(writer, value + " __v = default;");
+            W(writer, "var __ok = false;");
+            EmitCases(writer, shape, assignment, assignmentIndex, feeders, "__r & 0xff", true);
+            W(writer, "var __at = __buf.Length;");
+            W(writer, "__buf.ResizeUninitialized(__at + 1);");
+            W(writer, "var __add = (global::Tl.KindEntry*)((byte*)__buf.GetUnsafePtr() + (long)__at * __stride);");
+            W(writer, "global::Unity.Collections.LowLevel.Unsafe.UnsafeUtility.MemClear(__add, __stride);");
+            W(writer, "*__add = new global::Tl.KindEntry { Timeline = __pb->Timeline, Step = __sp->Window, Slot = (byte)__i, Feeder = (byte)__r, Owner = __owner, Flags = global::Tl.KindEntryFlags.Span | global::Tl.KindEntryFlags.Pulse | global::Tl.KindEntryFlags.Ready };");
+            W(writer, "*(" + value + "*)((byte*)__add + 8) = __v;");
+            W(writer, "}");
             W(writer, "}");
             W(writer, "}");
             W(writer, "}");
