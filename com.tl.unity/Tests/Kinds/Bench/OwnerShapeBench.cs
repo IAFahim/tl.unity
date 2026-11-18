@@ -258,6 +258,7 @@ namespace KindGame
             {
                 reference.StepPlaybacks();
                 scored.StepPlaybacks();
+                scored.UpdateBegins();
                 reference.Entities.CompleteAllTrackedJobs();
                 scored.Entities.CompleteAllTrackedJobs();
                 census.Compare(reference, scored, tick);
@@ -327,6 +328,7 @@ namespace KindGame
                     Entries(reference.Entities.GetBuffer<DamageEntry>(reference.Rows[row], true).GetUnsafeReadOnlyPtr(), reference.Entities.GetBuffer<DamageEntry>(reference.Rows[row], true).Length, sizeof(DamageEntry), kinds[3], in index, slots, clock, left);
                     var scoredSlots = scored.Slots(row);
                     var scoredClock = Clock(scored, row);
+                    var begins = scored.Entities.GetBuffer<ScoreBegin>(scored.Rows[row], true);
                     for (var s = 0; s < scoredSlots.Length; s++)
                     {
                         var copy = scoredSlots[s];
@@ -336,9 +338,14 @@ namespace KindGame
                         foreach (var kind in kinds)
                         {
                             var key = score.KeyOf(slot->Timeline, at, kind);
+                            var windows = index.Sec.Windows(index.Sec.Timelines + (slot->Timeline - 1));
+                            var begin = s < begins.Length ? begins[s].Value : ScoreBegin.None;
                             if (!ScoreSlots.Paused(slot))
                                 for (var f = score.Spans.First(key); f < score.Spans.End(key); f++)
-                                    right.Add(Item(kind, s, score.Spans.Feeds[f].Window, false, (score.Spans.Feeds[f].Flags & ScoreFeedFlags.Synthetic) != 0, false));
+                                {
+                                    var window = windows[score.Spans.Feeds[f].Window];
+                                    right.Add(Item(kind, s, score.Spans.Feeds[f].Window, false, ScoreBegin.Synthetic(begin, window.Start | (uint)window.End << 16), false));
+                                }
                             var pulses = ScoreSlots.Began(slot) ? score.Begins : score.Arrivals;
                             for (var f = pulses.First(key); f < pulses.End(key); f++)
                                 right.Add(Item(kind, s, pulses.Feeds[f].Window, true, (pulses.Feeds[f].Flags & ScoreFeedFlags.Synthetic) != 0, false));
@@ -475,8 +482,12 @@ namespace KindGame
                 total += Spilled(game.Entities.GetBuffer<StatChangeEntry>(row, true).Capacity, StatChangeKind.InlineCapacity, sizeof(StatChangeEntry));
             }
             foreach (var row in game.Rows)
+            {
                 if (game.Entities.HasComponent<PlaybackDue>(row))
                     total += Spilled(game.Entities.GetBuffer<PlaybackDue>(row, true).Capacity, 4, sizeof(PlaybackDue));
+                if (game.Entities.HasComponent<ScoreBegin>(row))
+                    total += Spilled(game.Entities.GetBuffer<ScoreBegin>(row, true).Capacity, 0, sizeof(ScoreBegin));
+            }
             return total;
         }
 

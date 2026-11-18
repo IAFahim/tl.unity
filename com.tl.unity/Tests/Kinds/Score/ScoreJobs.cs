@@ -8,6 +8,97 @@ using Unity.Entities;
 
 namespace KindGame
 {
+    [InternalBufferCapacity(0)]
+    public struct ScoreBegin : IBufferElementData
+    {
+        public const ushort None = 0xFFFF;
+        public const ushort Reentered = 0x8000;
+        public const ushort TickMask = 0x7FFF;
+
+        public ushort Value;
+
+        public static bool Synthetic(ushort begin, uint window)
+        {
+            if (begin == None) return false;
+            var tick = (uint)(begin & TickMask);
+            var start = window & 0xFFFFu;
+            var end = window >> 16;
+            return tick >= start && tick < end && ((begin & Reentered) != 0 || tick != start);
+        }
+    }
+
+    [BurstCompile]
+    public unsafe struct ScoreBeginJob : IJobChunk
+    {
+        [ReadOnly] public BufferTypeHandle<Playback> PlaybackHandle;
+        [ReadOnly] public ComponentTypeHandle<TimelineClock> ClockHandle;
+        public BufferTypeHandle<ScoreBegin> BeginHandle;
+
+        public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
+        {
+            if (!chunk.Has(ref BeginHandle)) return;
+            var playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
+            var begins = chunk.GetBufferAccessor(ref BeginHandle);
+            var clocks = chunk.Has(ref ClockHandle) ? (ushort*)chunk.GetRequiredComponentDataPtrRO(ref ClockHandle) : null;
+            for (var row = 0; row < chunk.Count; row++)
+            {
+                var slots = (global::Tl.Playback*)playbacks[row].GetUnsafeReadOnlyPtr();
+                var count = playbacks[row].Length;
+                var begin = begins[row];
+                if (begin.Length < count)
+                {
+                    var had = begin.Length;
+                    begin.ResizeUninitialized(count);
+                    for (var s = had; s < count; s++) begin[s] = new ScoreBegin { Value = ScoreBegin.None };
+                }
+                var values = (ushort*)begin.GetUnsafePtr();
+                var clock = clocks == null ? (ushort)0 : clocks[row];
+                for (var s = 0; s < count; s++)
+                {
+                    var slot = slots + s;
+                    if (!ScoreSlots.Live(slot))
+                    {
+                        values[s] = ScoreBegin.None;
+                        continue;
+                    }
+                    var tick = TimelineTicks.Real(slot, clock);
+                    if (ScoreSlots.Began(slot))
+                        values[s] = (ushort)(tick | ((slot->Flags & global::Tl.PlaybackFlags.ReenterPending) != 0 ? ScoreBegin.Reentered : 0));
+                    else if (values[s] != ScoreBegin.None && tick < (values[s] & ScoreBegin.TickMask))
+                        values[s] = ScoreBegin.None;
+                }
+            }
+        }
+    }
+
+    [DisableAutoCreation]
+    [BurstCompile]
+    public partial struct ScoreBeginSystem : ISystem
+    {
+        EntityQuery _query;
+        BufferTypeHandle<Playback> _playbacks;
+        ComponentTypeHandle<TimelineClock> _clocks;
+        BufferTypeHandle<ScoreBegin> _begins;
+
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            _query = new EntityQueryBuilder(Allocator.Temp).WithAll<Playback, TimelineScored>().WithAllRW<ScoreBegin>().WithOptions(EntityQueryOptions.IgnoreComponentEnabledState).Build(ref state);
+            _playbacks = state.GetBufferTypeHandle<Playback>(true);
+            _clocks = state.GetComponentTypeHandle<TimelineClock>(true);
+            _begins = state.GetBufferTypeHandle<ScoreBegin>(false);
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            _playbacks.Update(ref state);
+            _clocks.Update(ref state);
+            _begins.Update(ref state);
+            state.Dependency = new ScoreBeginJob { PlaybackHandle = _playbacks, ClockHandle = _clocks, BeginHandle = _begins }.ScheduleParallel(_query, state.Dependency);
+        }
+    }
+
     public static unsafe class ScoreSlots
     {
         public const global::Tl.PlaybackFlags Asleep = global::Tl.PlaybackFlags.StartPending | global::Tl.PlaybackFlags.Stopping | global::Tl.PlaybackFlags.Ended;
@@ -176,6 +267,7 @@ namespace KindGame
         public int StatChangeKindIndex;
         [ReadOnly] public BufferTypeHandle<Playback> PlaybackHandle;
         [ReadOnly] public ComponentTypeHandle<TimelineClock> ClockHandle;
+        [ReadOnly] public BufferTypeHandle<ScoreBegin> BeginHandle;
         public ComponentTypeHandle<Movement_MotionData> MotionHandle;
         [ReadOnly] public ComponentTypeHandle<Movement_WalkStatData> WalkStatHandle;
         [ReadOnly] public ComponentTypeHandle<Movement_JumpPowerData> JumpPowerHandle;
@@ -203,7 +295,7 @@ namespace KindGame
                     Lift(in chunk, playbacks, clocks, motion, jumpPower, chunk.GetEnableableBits(ref LiftEnabledHandle));
             }
             if (motion != null && walkStat != null && target != null && chunk.Has(ref LocomotionEnabledHandle))
-                Locomotion(in chunk, playbacks, clocks, motion, walkStat, target, chunk.GetEnableableBits(ref LocomotionEnabledHandle));
+                Locomotion(in chunk, playbacks, clocks, chunk.Has(ref BeginHandle) ? chunk.GetBufferAccessor(ref BeginHandle) : default, motion, walkStat, target, chunk.GetEnableableBits(ref LocomotionEnabledHandle));
             if (stamina != null && chunk.Has(ref StatChangeEnabledHandle))
                 StatChange(in chunk, playbacks, clocks, stamina, chunk.GetEnableableBits(ref StatChangeEnabledHandle));
         }
@@ -368,9 +460,10 @@ namespace KindGame
             }
         }
 
-        void Locomotion(in ArchetypeChunk chunk, BufferAccessor<Playback> playbacks, ushort* clocks, Motion* motion, WalkStat* walkStat, Target* target, v128 enabled)
+        void Locomotion(in ArchetypeChunk chunk, BufferAccessor<Playback> playbacks, ushort* clocks, BufferAccessor<ScoreBegin> begins, Motion* motion, WalkStat* walkStat, Target* target, v128 enabled)
         {
             var count = chunk.Count;
+            var hasBegins = begins.Length != 0;
             var framed = Lanes && (Score.FramedKinds & (1ul << LocomotionKindIndex)) != 0;
             for (var word = 0; word < 2; word++)
             {
@@ -383,6 +476,7 @@ namespace KindGame
                     var slots = (global::Tl.Playback*)playbacks[row].GetUnsafeReadOnlyPtr();
                     var slotCount = playbacks[row].Length;
                     var clock = clocks == null ? (ushort)0 : clocks[row];
+                    var beginOf = hasBegins && begins[row].Length >= slotCount ? (ushort*)begins[row].GetUnsafeReadOnlyPtr() : null;
                     Speed total = default;
                     var has = false;
                     for (var s = 0; s < slotCount; s++)
@@ -397,11 +491,13 @@ namespace KindGame
                             var lane = Score.Lanes + LocomotionKindIndex;
                             var at = Score.RowOf(slot->Timeline, tick);
                             var extra = ScoreSlots.FlagsAt(tick, timeline->Duration, backward, 0);
+                            var begin = beginOf == null ? ScoreBegin.None : beginOf[s];
                             var stop = lane->Start[at + 1];
                             for (var i = lane->Start[at]; i < stop; i++)
                             {
                                 var baked = (global::Tl.Frame<WalkTrack, WalkClip>*)(lane->Frames + (long)i * lane->FrameStride);
-                                var frame = new global::Tl.Frame<WalkTrack, WalkClip>(in baked->Track, in baked->Clip, baked->TimelineTick, baked->ClipLength, baked->WithinClip, baked->TrackIndex, baked->Flags | extra);
+                                var synthetic = ScoreBegin.Synthetic(begin, lane->Window[i]) ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None;
+                                var frame = new global::Tl.Frame<WalkTrack, WalkClip>(in baked->Track, in baked->Clip, baked->TimelineTick, baked->ClipLength, baked->WithinClip, baked->TrackIndex, baked->Flags | extra | synthetic);
                                 var value = Walk.Evaluate(in frame, in walkStat[row], in target[row], in Anchors);
                                 if (has) global::KindGame.Locomotion.Combine(ref total, in value);
                                 else
@@ -414,13 +510,17 @@ namespace KindGame
                         }
                         var key = Score.KeyOf(slot->Timeline, tick, LocomotionKindIndex);
                         var end = Score.Spans.End(key);
+                        var windows = Index.Sec.Windows(Index.Sec.Timelines + (slot->Timeline - 1));
+                        var beginTick = beginOf == null ? ScoreBegin.None : beginOf[s];
                         for (var f = Score.Spans.First(key); f < end; f++)
                         {
                             var feed = Score.Spans.Feeds + f;
                             var step = feed->Step;
                             var first = (byte*)step->FrameRow + sizeof(WalkTrack);
                             var second = step->FactorSpan == 0 ? null : first + sizeof(WalkClip);
-                            global::TlUnityGenerated.TlUnityFrames.Frame_0_3((byte*)step->FrameRow, first, second, ScoreSlots.BlendAt(step, tick), tick, (ushort)(step->WindowEnd - step->WindowStart), (ushort)(tick - step->WindowStart), (ushort)step->TrackIndex, (ushort)timeline->Duration, backward ? (sbyte)-1 : (sbyte)1, ScoreSlots.FlagsAt(tick, timeline->Duration, backward, feed->Flags), out _, out _, out var frame);
+                            var window = windows[feed->Window];
+                            var spanFlags = ScoreBegin.Synthetic(beginTick, window.Start | (uint)window.End << 16) ? ScoreFeedFlags.Synthetic : feed->Flags;
+                            global::TlUnityGenerated.TlUnityFrames.Frame_0_3((byte*)step->FrameRow, first, second, ScoreSlots.BlendAt(step, tick), tick, (ushort)(step->WindowEnd - step->WindowStart), (ushort)(tick - step->WindowStart), (ushort)step->TrackIndex, (ushort)timeline->Duration, backward ? (sbyte)-1 : (sbyte)1, ScoreSlots.FlagsAt(tick, timeline->Duration, backward, spanFlags), out _, out _, out var frame);
                             var value = Walk.Evaluate(in frame, in walkStat[row], in target[row], in Anchors);
                             if (has) global::KindGame.Locomotion.Combine(ref total, in value);
                             else
@@ -562,6 +662,7 @@ namespace KindGame
         EntityQuery _query;
         BufferTypeHandle<Playback> _playbacks;
         ComponentTypeHandle<TimelineClock> _clocks;
+        BufferTypeHandle<ScoreBegin> _begins;
         ComponentTypeHandle<Movement_MotionData> _motion;
         ComponentTypeHandle<Movement_WalkStatData> _walkStat;
         ComponentTypeHandle<Movement_JumpPowerData> _jumpPower;
@@ -578,6 +679,7 @@ namespace KindGame
             _query = new EntityQueryBuilder(Allocator.Temp).WithAll<Playback, TimelineScored>().WithOptions(EntityQueryOptions.IgnoreComponentEnabledState).Build(ref state);
             _playbacks = state.GetBufferTypeHandle<Playback>(true);
             _clocks = state.GetComponentTypeHandle<TimelineClock>(true);
+            _begins = state.GetBufferTypeHandle<ScoreBegin>(true);
             _motion = state.GetComponentTypeHandle<Movement_MotionData>(false);
             _walkStat = state.GetComponentTypeHandle<Movement_WalkStatData>(true);
             _jumpPower = state.GetComponentTypeHandle<Movement_JumpPowerData>(true);
@@ -599,6 +701,7 @@ namespace KindGame
             var score = SystemAPI.GetSingleton<ScoreLibrary>().Index;
             _playbacks.Update(ref state);
             _clocks.Update(ref state);
+            _begins.Update(ref state);
             _motion.Update(ref state);
             _walkStat.Update(ref state);
             _jumpPower.Update(ref state);
@@ -620,6 +723,7 @@ namespace KindGame
                 StatChangeKindIndex = library.Kinds.KindOf(StatChangeKind.Id),
                 PlaybackHandle = _playbacks,
                 ClockHandle = _clocks,
+                BeginHandle = _begins,
                 MotionHandle = _motion,
                 WalkStatHandle = _walkStat,
                 JumpPowerHandle = _jumpPower,

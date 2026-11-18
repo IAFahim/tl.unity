@@ -70,6 +70,7 @@ namespace KindGame
         public readonly SystemHandle VitalsHandle;
         public readonly SystemHandle ScoreMovementHandle;
         public readonly SystemHandle ScoreVitalsHandle;
+        public readonly SystemHandle ScoreBeginHandle;
         public readonly bool Scored;
         public readonly Entity[] Rows;
         readonly EntityQuery _step;
@@ -117,6 +118,7 @@ namespace KindGame
                 var table = ScoreIndex.Build(in kinds);
                 ScoreBake.WalkFrames(ref table, in kinds);
                 Entities.SetComponentData(score, new ScoreLibrary { Index = table });
+                ScoreBeginHandle = World.CreateSystem<ScoreBeginSystem>();
                 ScoreMovementHandle = World.CreateSystem<ScoreMovementSystem>();
                 ScoreVitalsHandle = World.CreateSystem<ScoreVitalsSystem>();
             }
@@ -169,6 +171,7 @@ namespace KindGame
                 typeof(TimelineRequest),
                 typeof(TimelinePlaying),
                 typeof(TimelineScored),
+                typeof(ScoreBegin),
                 typeof(Movement_MotionData),
                 typeof(Movement_WalkStatData),
                 typeof(Movement_JumpPowerData),
@@ -199,12 +202,18 @@ namespace KindGame
         {
             if (Scored)
             {
+                ScoreBeginHandle.Update(World.Unmanaged);
                 ScoreMovementHandle.Update(World.Unmanaged);
                 ScoreVitalsHandle.Update(World.Unmanaged);
                 return;
             }
             MovementHandle.Update(World.Unmanaged);
             VitalsHandle.Update(World.Unmanaged);
+        }
+
+        public void UpdateBegins()
+        {
+            if (Scored) ScoreBeginHandle.Update(World.Unmanaged);
         }
 
         public void Start(int row, ushort timeline, ushort at = 0)
