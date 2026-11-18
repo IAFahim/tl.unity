@@ -60,12 +60,20 @@ namespace Tl.Unity
             return (uint)s < (uint)StageCount[g] ? StepTable[start + s] : null;
         }
 
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public global::Tl.LibraryStep* StepInWindow(ushort timeline, int window, ushort tick)
         {
             var t = timeline - 1;
             if ((uint)t >= (uint)TimelineCount) return null;
             var step = WindowStep[WindowBase[t] + window];
-            if (step == null) step = StepOf(timeline, window, tick);
+            if (step == null) return StepAcrossStages(timeline, window, tick);
+            return tick < step->WindowStart || tick >= step->WindowEnd ? null : step;
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        global::Tl.LibraryStep* StepAcrossStages(ushort timeline, int window, ushort tick)
+        {
+            var step = StepOf(timeline, window, tick);
             return step == null || tick < step->WindowStart || tick >= step->WindowEnd ? null : step;
         }
 
