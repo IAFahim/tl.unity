@@ -276,6 +276,8 @@ namespace KindGame
         [ReadOnly] public ComponentTypeHandle<LiftEnabled> LiftEnabledHandle;
         [ReadOnly] public ComponentTypeHandle<LocomotionEnabled> LocomotionEnabledHandle;
         [ReadOnly] public ComponentTypeHandle<StatChangeEnabled> StatChangeEnabledHandle;
+        public BufferTypeHandle<StatChangeEntry> StatChangeEntryHandle;
+        public ComponentTypeHandle<StatChangeActive> StatChangeActiveHandle;
         public AnchorLookup Anchors;
 
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
@@ -298,6 +300,8 @@ namespace KindGame
                 Locomotion(in chunk, playbacks, clocks, chunk.Has(ref BeginHandle) ? chunk.GetBufferAccessor(ref BeginHandle) : default, motion, walkStat, target, chunk.GetEnableableBits(ref LocomotionEnabledHandle));
             if (stamina != null && chunk.Has(ref StatChangeEnabledHandle))
                 StatChange(in chunk, playbacks, clocks, stamina, chunk.GetEnableableBits(ref StatChangeEnabledHandle));
+            if (stamina != null && chunk.Has(ref StatChangeEntryHandle) && chunk.Has(ref StatChangeEnabledHandle))
+                SentStatChanges(in chunk, stamina, chunk.GetEnableableBits(ref StatChangeEnabledHandle));
         }
 
         void Lift(in ArchetypeChunk chunk, BufferAccessor<Playback> playbacks, ushort* clocks, Motion* motion, JumpPower* jumpPower, v128 enabled)
@@ -535,6 +539,28 @@ namespace KindGame
             }
         }
 
+        void SentStatChanges(in ArchetypeChunk chunk, Stamina* stamina, v128 enabled)
+        {
+            var sent = chunk.GetBufferAccessor(ref StatChangeEntryHandle);
+            var active = chunk.GetEnabledMask(ref StatChangeActiveHandle);
+            for (var row = 0; row < chunk.Count; row++)
+            {
+                var queue = sent[row];
+                if (queue.Length == 0) continue;
+                if (((row < 64 ? enabled.ULong0 >> row : enabled.ULong1 >> (row - 64)) & 1ul) == 0) continue;
+                var data = (byte*)queue.GetUnsafeReadOnlyPtr();
+                for (var i = 0; i < queue.Length; i++)
+                {
+                    var entry = (global::Tl.KindEntry*)(data + (long)i * sizeof(StatChangeEntry));
+                    if (entry->Timeline != 0) continue;
+                    var value = *(int*)((byte*)entry + 8);
+                    global::KindGame.StatChange.Apply(in value, ref stamina[row]);
+                }
+                queue.Clear();
+                active[row] = false;
+            }
+        }
+
         void StatChange(in ArchetypeChunk chunk, BufferAccessor<Playback> playbacks, ushort* clocks, Stamina* stamina, v128 enabled)
         {
             var count = chunk.Count;
@@ -600,6 +626,8 @@ namespace KindGame
         [ReadOnly] public ComponentTypeHandle<TimelineClock> ClockHandle;
         public ComponentTypeHandle<Vitals_HealthData> HealthHandle;
         [ReadOnly] public ComponentTypeHandle<DamageEnabled> DamageEnabledHandle;
+        public BufferTypeHandle<DamageEntry> DamageEntryHandle;
+        public ComponentTypeHandle<DamageActive> DamageActiveHandle;
 
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
         {
@@ -609,6 +637,8 @@ namespace KindGame
             var health = (Health*)chunk.GetRequiredComponentDataPtrRW(ref HealthHandle);
             var enabled = chunk.GetEnableableBits(ref DamageEnabledHandle);
             var count = chunk.Count;
+            var sent = chunk.Has(ref DamageEntryHandle) ? chunk.GetBufferAccessor(ref DamageEntryHandle) : default;
+            var active = chunk.Has(ref DamageEntryHandle) ? chunk.GetEnabledMask(ref DamageActiveHandle) : default;
             for (var word = 0; word < 2; word++)
             {
                 var bits = word == 0 ? enabled.ULong0 : enabled.ULong1;
@@ -649,6 +679,25 @@ namespace KindGame
                             }
                         }
                     }
+                    if (sent.Length != 0 && sent[row].Length != 0)
+                    {
+                        var queue = sent[row];
+                        var data = (byte*)queue.GetUnsafeReadOnlyPtr();
+                        for (var i = 0; i < queue.Length; i++)
+                        {
+                            var entry = (global::Tl.KindEntry*)(data + (long)i * sizeof(DamageEntry));
+                            if (entry->Timeline != 0) continue;
+                            var value = *(int*)((byte*)entry + 8);
+                            if (has) global::KindGame.Damage.Combine(ref total, in value);
+                            else
+                            {
+                                total = value;
+                                has = true;
+                            }
+                        }
+                        queue.Clear();
+                        active[row] = false;
+                    }
                     if (has) global::KindGame.Damage.Apply(in total, ref health[row]);
                 }
             }
@@ -671,6 +720,8 @@ namespace KindGame
         ComponentTypeHandle<LiftEnabled> _liftEnabled;
         ComponentTypeHandle<LocomotionEnabled> _locomotionEnabled;
         ComponentTypeHandle<StatChangeEnabled> _statChangeEnabled;
+        BufferTypeHandle<StatChangeEntry> _statChangeEntries;
+        ComponentTypeHandle<StatChangeActive> _statChangeActive;
         ComponentLookup<Anchor> _anchors;
 
         [BurstCompile]
@@ -688,6 +739,8 @@ namespace KindGame
             _liftEnabled = state.GetComponentTypeHandle<LiftEnabled>(true);
             _locomotionEnabled = state.GetComponentTypeHandle<LocomotionEnabled>(true);
             _statChangeEnabled = state.GetComponentTypeHandle<StatChangeEnabled>(true);
+            _statChangeEntries = state.GetBufferTypeHandle<StatChangeEntry>(false);
+            _statChangeActive = state.GetComponentTypeHandle<StatChangeActive>(false);
             _anchors = state.GetComponentLookup<Anchor>(true);
             state.RequireForUpdate<TimelineLibrary>();
             state.RequireForUpdate<ScoreLibrary>();
@@ -710,6 +763,8 @@ namespace KindGame
             _liftEnabled.Update(ref state);
             _locomotionEnabled.Update(ref state);
             _statChangeEnabled.Update(ref state);
+            _statChangeEntries.Update(ref state);
+            _statChangeActive.Update(ref state);
             _anchors.Update(ref state);
             var job = new ScoreMovementJob
             {
@@ -732,6 +787,8 @@ namespace KindGame
                 LiftEnabledHandle = _liftEnabled,
                 LocomotionEnabledHandle = _locomotionEnabled,
                 StatChangeEnabledHandle = _statChangeEnabled,
+                StatChangeEntryHandle = _statChangeEntries,
+                StatChangeActiveHandle = _statChangeActive,
                 Anchors = new AnchorLookup { Anchors = _anchors },
             };
             state.Dependency = job.ScheduleParallel(_query, state.Dependency);
@@ -747,6 +804,8 @@ namespace KindGame
         ComponentTypeHandle<TimelineClock> _clocks;
         ComponentTypeHandle<Vitals_HealthData> _health;
         ComponentTypeHandle<DamageEnabled> _damageEnabled;
+        BufferTypeHandle<DamageEntry> _damageEntries;
+        ComponentTypeHandle<DamageActive> _damageActive;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -756,6 +815,8 @@ namespace KindGame
             _clocks = state.GetComponentTypeHandle<TimelineClock>(true);
             _health = state.GetComponentTypeHandle<Vitals_HealthData>(false);
             _damageEnabled = state.GetComponentTypeHandle<DamageEnabled>(true);
+            _damageEntries = state.GetBufferTypeHandle<DamageEntry>(false);
+            _damageActive = state.GetComponentTypeHandle<DamageActive>(false);
             state.RequireForUpdate<TimelineLibrary>();
             state.RequireForUpdate<ScoreLibrary>();
             state.RequireForUpdate<TimelineStep>();
@@ -769,6 +830,8 @@ namespace KindGame
             _clocks.Update(ref state);
             _health.Update(ref state);
             _damageEnabled.Update(ref state);
+            _damageEntries.Update(ref state);
+            _damageActive.Update(ref state);
             var job = new ScoreVitalsJob
             {
                 Score = SystemAPI.GetSingleton<ScoreLibrary>().Index,
@@ -779,6 +842,8 @@ namespace KindGame
                 ClockHandle = _clocks,
                 HealthHandle = _health,
                 DamageEnabledHandle = _damageEnabled,
+                DamageEntryHandle = _damageEntries,
+                DamageActiveHandle = _damageActive,
             };
             state.Dependency = job.ScheduleParallel(_query, state.Dependency);
         }

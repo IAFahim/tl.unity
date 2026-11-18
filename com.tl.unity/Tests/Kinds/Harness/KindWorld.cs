@@ -181,8 +181,14 @@ namespace KindGame
                 typeof(LiftEnabled),
                 typeof(LocomotionEnabled),
                 typeof(StatChangeEnabled),
-                typeof(DamageEnabled));
+                typeof(DamageEnabled),
+                typeof(StatChangeEntry),
+                typeof(StatChangeActive),
+                typeof(DamageEntry),
+                typeof(DamageActive));
             Entities.SetComponentEnabled<TimelinePlaying>(entity, false);
+            StatChangeKind.Init(Entities, entity);
+            DamageKind.Init(Entities, entity);
             Entities.SetComponentData(entity, new Movement_WalkStatData { Value = new WalkStat { Value = 1f } });
             Entities.SetComponentData(entity, new Movement_JumpPowerData { Value = new JumpPower { Value = 2f } });
             Entities.SetComponentData(entity, new Vitals_HealthData { Value = new Health { Value = 1000 } });

@@ -31,6 +31,7 @@ namespace KindGame
             var measure = 64;
             var verifyTicks = 0;
             var rough = false;
+            var events = false;
             string perfControl = null;
             string perfAck = null;
             for (var i = 0; i + 1 < args.Length; i++)
@@ -43,6 +44,7 @@ namespace KindGame
                 if (args[i] == "-shapeWarmup") warmup = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
                 if (args[i] == "-shapeMeasure") measure = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
                 if (args[i] == "-shapeValues") rough = args[i + 1] == "rough";
+                if (args[i] == "-shapeEvents") events = args[i + 1] == "on";
                 if (args[i] == "-shapeVerify") verifyTicks = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
                 if (args[i] == "-perfControl") perfControl = args[i + 1];
                 if (args[i] == "-perfAck") perfAck = args[i + 1];
@@ -57,7 +59,7 @@ namespace KindGame
             foreach (var liveText in liveList.Split(','))
             {
                 var liveTracks = int.Parse(liveText, CultureInfo.InvariantCulture);
-                var library = Library(liveTracks, rough);
+                var library = Library(liveTracks, rough, events);
                 if (Array.IndexOf(args, "-shapeDump") >= 0)
                 {
                     using var dumped = new KindWorld(1, library, true);
@@ -70,7 +72,7 @@ namespace KindGame
                     foreach (var activeText in activeList.Split(','))
                     foreach (var mode in modes.Split(','))
                         if (mode.IndexOf('-') < 0)
-                            Row(writer, "verify rows=" + rowsText + " active=" + activeText + " live=" + liveTracks + " mode=" + mode + " values=" + (rough ? "rough" : "orderly") + " ticks=" + verifyTicks + ": " + Verify(library, int.Parse(rowsText, CultureInfo.InvariantCulture), int.Parse(activeText, CultureInfo.InvariantCulture), mode, verifyTicks));
+                            Row(writer, "verify rows=" + rowsText + " active=" + activeText + " live=" + liveTracks + " mode=" + mode + " values=" + (rough ? "rough" : "orderly") + " events=" + (events ? "on" : "off") + " ticks=" + verifyTicks + ": " + Verify(library, int.Parse(rowsText, CultureInfo.InvariantCulture), int.Parse(activeText, CultureInfo.InvariantCulture), mode, verifyTicks, events));
                 foreach (var rowsText in rowsList.Split(','))
                 foreach (var activeText in activeList.Split(','))
                 foreach (var mode in modes.Split(','))
@@ -90,7 +92,7 @@ namespace KindGame
 
         public static bool Blends(int track) => track < 4 || track == 8 || track == 9;
 
-        public static byte[] Library(int liveTracks, bool rough)
+        public static byte[] Library(int liveTracks, bool rough, bool events)
         {
             var names = new List<string>();
             for (var i = 0; i < TimelineCount; i++)
@@ -102,7 +104,8 @@ namespace KindGame
             for (var i = 0; i < TimelineCount; i++)
             {
                 var duration = DurationOf(i);
-                var timeline = new TypedTimeline { Name = names[i], Duration = (uint)duration, Loops = true };
+                var hands = events && i % 5 == 0;
+                var timeline = new TypedTimeline { Name = names[i], Duration = (uint)duration, Loops = !hands };
                 for (var track = 0; track < TracksPerTimeline; track++)
                 {
                     var covered = Math.Max(1, duration * liveTracks / TracksPerTimeline);
@@ -139,7 +142,7 @@ namespace KindGame
                     timeline.Tracks.Add(typed);
                 }
                 var tlb = LibraryBake.BakeTyped(timeline, manifest);
-                parts.Add(new global::Tl.LibraryPart { Name = names[i], Tlb = tlb, Kinds = LibraryBake.KindPayload(names[i], tlb, kinds), Next = 0 });
+                parts.Add(new global::Tl.LibraryPart { Name = names[i], Tlb = tlb, Kinds = LibraryBake.KindPayload(names[i], tlb, kinds), Next = hands ? (ushort)(1 + (i + 3) % TimelineCount) : (ushort)0 });
             }
             return global::Tl.LibraryAssembler.Assemble(parts, 60, global::Tl.LibrarySettings.Default);
         }
@@ -240,13 +243,30 @@ namespace KindGame
             return game;
         }
 
-        public static string Verify(byte[] library, int rows, int active, string mode, int ticks)
+        public static string Verify(byte[] library, int rows, int active, string mode, int ticks, bool events)
         {
-            var scalar = Verify(library, rows, active, mode, "score-" + mode, ticks);
-            return "score " + scalar + ", lanes " + Verify(library, rows, active, mode, "lanes-" + mode, ticks);
+            var scalar = Verify(library, rows, active, mode, "score-" + mode, ticks, events);
+            return "score " + scalar + ", lanes " + Verify(library, rows, active, mode, "lanes-" + mode, ticks, events);
         }
 
-        static string Verify(byte[] library, int rows, int active, string mode, string candidate, int ticks)
+        static void Disturb(KindWorld game, int rows, int active, int tick)
+        {
+            for (var row = 0; row < rows; row++)
+            {
+                if (row % 4 == 1)
+                {
+                    game.Damage(row, 1 + tick % 3);
+                    game.Stat(row, 2);
+                }
+                if (tick == 40 && row % 3 == 0)
+                    for (var k = 1; k < active; k += 7)
+                        game.Stop(row, (ushort)(1 + (row * 7 + k * 13) % TimelineCount));
+                if (tick == 70 && row % 3 == 0)
+                    game.Start(row, (ushort)(1 + (row * 7 + 13) % TimelineCount), (ushort)(row % ShortestDuration));
+            }
+        }
+
+        static string Verify(byte[] library, int rows, int active, string mode, string candidate, int ticks, bool events)
         {
             using var reference = World(library, rows, active, mode);
             using var scored = World(library, rows, active, candidate);
@@ -256,6 +276,11 @@ namespace KindGame
             string firstValue = null;
             for (var tick = 0; tick < ticks; tick++)
             {
+                if (events && tick > 0)
+                {
+                    Disturb(reference, rows, active, tick);
+                    Disturb(scored, rows, active, tick);
+                }
                 reference.StepPlaybacks();
                 scored.StepPlaybacks();
                 scored.UpdateBegins();
@@ -329,6 +354,10 @@ namespace KindGame
                     var scoredSlots = scored.Slots(row);
                     var scoredClock = Clock(scored, row);
                     var begins = scored.Entities.GetBuffer<ScoreBegin>(scored.Rows[row], true);
+                    var sentStats = scored.Entities.GetBuffer<StatChangeEntry>(scored.Rows[row], true);
+                    var sentDamage = scored.Entities.GetBuffer<DamageEntry>(scored.Rows[row], true);
+                    Entries(sentStats.GetUnsafeReadOnlyPtr(), sentStats.Length, sizeof(StatChangeEntry), kinds[2], in index, scoredSlots, scoredClock, right);
+                    Entries(sentDamage.GetUnsafeReadOnlyPtr(), sentDamage.Length, sizeof(DamageEntry), kinds[3], in index, scoredSlots, scoredClock, right);
                     for (var s = 0; s < scoredSlots.Length; s++)
                     {
                         var copy = scoredSlots[s];
