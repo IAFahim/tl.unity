@@ -156,6 +156,26 @@ namespace Tl.Unity.Editor
                         GUIUtility.ExitGUI();
                     }
                 }
+                var onlyOnAwake = also == null ? 0 : also.PlayOnAwake.Count;
+                for (var i = 0; i < onlyOnAwake; i++)
+                {
+                    var notListed = also.PlayOnAwake[i];
+                    if (also.Timelines.Contains(notListed))
+                        continue;
+                    EditorGUILayout.BeginHorizontal();
+                    using (new EditorGUI.DisabledScope(true))
+                        EditorGUILayout.ObjectField(notListed, typeof(TimelineAsset), false);
+                    GUILayout.Label(new GUIContent("Play On Awake", "Listed only under Play On Awake; it still starts when the scene loads."), GUILayout.Width(110));
+                    var removeNotListed = GUILayout.Button("-", GUILayout.Width(22));
+                    EditorGUILayout.EndHorizontal();
+                    if (removeNotListed)
+                    {
+                        Undo.RecordObject(also, "Also Plays");
+                        also.PlayOnAwake.RemoveAt(i);
+                        EditorUtility.SetDirty(also);
+                        GUIUtility.ExitGUI();
+                    }
+                }
                 EditorGUI.BeginChangeCheck();
                 var added = (TimelineAsset)EditorGUILayout.ObjectField("Add", null, typeof(TimelineAsset), false);
                 if (EditorGUI.EndChangeCheck() && added != null)

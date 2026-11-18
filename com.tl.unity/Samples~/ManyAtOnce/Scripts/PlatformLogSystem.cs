@@ -1,13 +1,15 @@
-using System.Globalization;
 using Tl;
+using Unity.Burst;
 using Unity.Entities;
 using UnityEngine;
 
 namespace ManyAtOnce
 {
+    [BurstCompile]
     [UpdateInGroup(typeof(TlSimulationGroup), OrderLast = true)]
     public partial struct PlatformLogSystem : ISystem
     {
+        [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             foreach (var (platform, playbacks) in SystemAPI.Query<RefRO<Platform>, DynamicBuffer<Tl.Unity.Playback>>())
@@ -22,7 +24,7 @@ namespace ManyAtOnce
                             rideTick = playback.Tick;
                     }
                 if (rideTick >= 0 && rideTick % 15 == 0)
-                    Debug.Log("Many at once: tick " + rideTick + ", platform height " + platform.ValueRO.Height.ToString(CultureInfo.InvariantCulture) + ", playbacks " + playing);
+                    Debug.Log($"Many at once: tick {rideTick}, platform height {platform.ValueRO.Height}, playbacks {playing}");
             }
         }
     }

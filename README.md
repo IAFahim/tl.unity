@@ -676,7 +676,7 @@ Many at once: tick 0, platform height 0, playbacks 2
 Many at once: tick 15, platform height 0.25, playbacks 1
 ```
 
-On the first tick Ride is still listed while Shake replaces it, but it never applies a clip: the height stays 0 until the bump. When Shake ends at tick 30 nothing plays, so the log stops and the column keeps its last value (chapter 1, "An ability window"). Put timelines that must not overlap (walk and run) on one channel; leave the rest on None. 8.3 has the rest.
+The first line still counts two playbacks, but the height is 0: no clip of Ride was applied. From the bump on only Shake plays, and when it ends at tick 30 nothing plays, so the log stops and the column keeps its last value (chapter 1, "An ability window"). Put timelines that must not overlap (walk and run) on one channel; leave the rest on None. 8.3 has the rest.
 
 ### 7.2 Two clips at once on two tracks
 
@@ -746,7 +746,7 @@ namespace ManyAtOnce
 }
 ```
 
-`Blend` runs only on overlap ticks. It gets the first clip, the second clip and a `factor` that is 0 on the first tick of the overlap and 1 on its last, in equal steps (here 1/29 per tick), and it fills `result` with the clip to use this tick. The output at the top of this chapter is this version: tick 105 is 1 + 4 x 15/29 = 3.0689654, and the platform rides from 1 to 5 between ticks 90 and 119.
+`Blend` runs only on overlap ticks. It gets the first clip, the second clip and a `factor` that is 0 on the first tick of the overlap and 1 on its last, in equal steps (here 1/29 per tick; a one-tick overlap gets 0.5), and it fills `result` with the clip to use this tick. The output at the top of this chapter is this version: tick 105 is 1 + 4 x 15/29 = 3.0689654, and the platform rides from 1 to 5 between ticks 90 and 119.
 
 What to know about overlaps on one track:
 
@@ -1062,7 +1062,7 @@ Things to know:
 Honest list. Some of these are design decisions still to be made.
 
 - **No track data.** `ITlTrack` fixes the track settings to "none". Values live on the clip, and so does blending (`IBlend` on the clip, 7.3). (The older general `ITrack<TTrack, TClip>` still exists in `Tl.Core`; its Unity support is not covered here.)
-- **Blending is linear.** The factor is a straight line across the overlap; Timeline's ease curves are not read. Pulses on one track treat overlapping clips as one long clip (7.3).
+- **Blending is linear.** The factor is a straight line across the overlap (0.5 for a one-tick overlap); Timeline's ease curves are not read. Pulses on one track treat overlapping clips as one long clip (7.3).
 - **No Unity track bindings.** A clip cannot hold a reference to a scene object. Put the reference on your own authoring component and bake it (the Events demo does).
 - **Names are not fully consistent yet.** Examples: both `TlKindAttribute` and `TimelineKindAttribute` exist; `TlClip`, `TlKind` have the `Tl` prefix but `Pulse`, `Feeds`, `ClipEvent`, `KindMode`, `Events<T>` do not; `Playback` exists in both `Tl` and `Tl.Unity`; scene JSON says `"states"` where the code says `[TlState]` and the hash is `TlStateHash`; Unity's Wrap Mode is ignored while Tl's own setting hides in a marker. A naming review is planned; expect renames before 1.0 with no compatibility aliases.
 - **Per-tick sums come back one tick short** on rewind (chapter 10). Pulses are exact.
