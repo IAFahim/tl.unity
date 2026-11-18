@@ -65,7 +65,7 @@ namespace KindGame
                 into.Add(data[i]);
         }
 
-        static int EntryBytes<T>(List<byte> into, EntityManager entities, Entity entity) where T : unmanaged, IBufferElementData
+        static int EntryBytes<T>(List<byte> into, EntityManager entities, Entity entity, in KindIndex index) where T : unmanaged, IBufferElementData
         {
             var buffer = entities.GetBuffer<T>(entity, true);
             var slots = entities.GetBuffer<Playback>(entity, true);
@@ -85,10 +85,13 @@ namespace KindGame
                     KindEntryCache.Write((global::Tl.KindEntry*)expected, (CorePlayback*)&slot);
                     for (var b = 8; b < 12; b++)
                         Assert.AreEqual(expected[b], ((byte*)entry)[b], "stale cache for slot " + entry->Slot);
+                    if (stride >= KindEntryCache.StepStride)
+                        Assert.AreEqual(index.PackedStep(entry->Timeline, entry->Step), *(uint*)((byte*)entry + 12), "stale step for slot " + entry->Slot);
                     valid++;
                 }
+                var cached = stride >= KindEntryCache.StepStride ? 16 : 12;
                 for (var b = 0; b < stride; b++)
-                    into.Add(cacheable && b >= 8 && b < 12 ? (byte)0 : ((byte*)entry)[b]);
+                    into.Add(cacheable && b >= 8 && b < cached ? (byte)0 : ((byte*)entry)[b]);
             }
             return valid;
         }
@@ -106,14 +109,16 @@ namespace KindGame
         {
             var entities = game.Entities;
             entities.CompleteAllTrackedJobs();
+            using var libraryQuery = entities.CreateEntityQuery(typeof(TimelineLibrary));
+            var index = libraryQuery.GetSingleton<TimelineLibrary>().Kinds;
             var bytes = new List<byte>();
             foreach (var row in game.Rows)
             {
                 PlaybackBytes(bytes, entities, row);
-                _cachedEntries += EntryBytes<LocomotionEntry>(bytes, entities, row);
-                _cachedEntries += EntryBytes<LiftEntry>(bytes, entities, row);
-                _cachedEntries += EntryBytes<StatChangeEntry>(bytes, entities, row);
-                _cachedEntries += EntryBytes<DamageEntry>(bytes, entities, row);
+                _cachedEntries += EntryBytes<LocomotionEntry>(bytes, entities, row, in index);
+                _cachedEntries += EntryBytes<LiftEntry>(bytes, entities, row, in index);
+                _cachedEntries += EntryBytes<StatChangeEntry>(bytes, entities, row, in index);
+                _cachedEntries += EntryBytes<DamageEntry>(bytes, entities, row, in index);
                 bytes.Add((byte)((entities.IsComponentEnabled<TimelinePlaying>(row) ? 1 : 0) | (entities.IsComponentEnabled<LocomotionActive>(row) ? 2 : 0) | (entities.IsComponentEnabled<LiftActive>(row) ? 4 : 0) | (entities.IsComponentEnabled<StatChangeActive>(row) ? 8 : 0) | (entities.IsComponentEnabled<DamageActive>(row) ? 16 : 0)));
                 Value(bytes, entities.GetComponentData<Movement_MotionData>(row));
                 Value(bytes, entities.GetComponentData<Movement_StaminaData>(row));
@@ -464,6 +469,42 @@ namespace KindGame
             Assert.AreEqual(cachedBefore, _cachedEntries);
             for (var row = 0; row < 4; row++)
                 Assert.AreEqual(0, candidate.Entities.GetComponentData<TimelineClock>(candidate.Rows[row]).Value);
+        }
+
+        [Test]
+        public void ARepublishedLibraryRewritesEveryCachedStep()
+        {
+            using var other = TlLibrary.FromBytes(KindLibraryBytes.Bytes());
+            using var reference = new KindWorld(8);
+            using var candidate = new KindWorld(8);
+            Lazy(candidate);
+            using var query = candidate.Entities.CreateEntityQuery(typeof(TimelineLibrary));
+            var original = default(TimelineLibrary);
+            _cachedEntries = 0;
+            for (var step = 0; step < 120; step++)
+            {
+                if (step == 0 || step == 60)
+                    for (var row = 0; row < 8; row++)
+                    {
+                        reference.Start(row, KindWorld.Run);
+                        candidate.Start(row, KindWorld.Run);
+                        reference.Start(row, KindWorld.SpeedBoost);
+                        candidate.Start(row, KindWorld.SpeedBoost);
+                    }
+                if (step == 17 || step == 77)
+                {
+                    candidate.Entities.CompleteAllTrackedJobs();
+                    var published = query.GetSingleton<TimelineLibrary>();
+                    if (step == 17) original = published;
+                    var next = step == 17 ? other.Component : original;
+                    next.Generation = published.Generation + 1;
+                    query.SetSingleton(next);
+                }
+                reference.Step();
+                candidate.Step();
+                Assert.AreEqual(Snapshot(reference), Snapshot(candidate), "step " + step);
+            }
+            Assert.Greater(_cachedEntries, 100);
         }
 
         [Test]

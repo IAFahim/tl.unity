@@ -349,7 +349,7 @@ switch (__en->Feeder)
 {
 case 0:
 {
-var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);
+var __def = Index.StepOfEntry(__en, __tick, __hit);
 if (__def == null) break;
 byte* __row3 = (byte*)__def->FrameRow;
 byte* __first3 = __row3 + sizeof(global::KindGame.WalkTrack);

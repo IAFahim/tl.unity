@@ -29,6 +29,8 @@ namespace Tl.Unity
         public ComponentType* ActiveTypes;
         public ulong Bound;
         public uint* TickVersion;
+        public uint StepHigh;
+        public bool StepPacked;
         public int* IdKeys;
         public int* IdKinds;
         public int IdCount;
@@ -68,6 +70,22 @@ namespace Tl.Unity
             var step = WindowStep[WindowBase[t] + window];
             if (step == null) return StepAcrossStages(timeline, window, tick);
             return tick < step->WindowStart || tick >= step->WindowEnd ? null : step;
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public global::Tl.LibraryStep* StepOfEntry(global::Tl.KindEntry* entry, ushort tick, bool cached)
+        {
+            var low = cached ? *(uint*)((byte*)entry + 12) : 0u;
+            if (low == 0) return StepInWindow(entry->Timeline, entry->Step, tick);
+            var step = (global::Tl.LibraryStep*)(((ulong)StepHigh << 32) | low);
+            return tick < step->WindowStart || tick >= step->WindowEnd ? null : step;
+        }
+
+        public uint PackedStep(ushort timeline, int window)
+        {
+            var t = timeline - 1;
+            if (!StepPacked || (uint)t >= (uint)TimelineCount) return 0;
+            return (uint)(ulong)WindowStep[WindowBase[t] + window];
         }
 
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
@@ -323,6 +341,16 @@ namespace Tl.Unity
             for (var i = 0; i < table.Count; i++) index.StepTable[i] = (global::Tl.LibraryStep*)table[i];
             index.WindowStep = (global::Tl.LibraryStep**)Zeroed<IntPtr>(Math.Max(1, total));
             foreach (var (window, start) in single) index.WindowStep[window] = index.StepTable[start];
+            index.StepPacked = true;
+            var seen = false;
+            for (var g = 0; g < total; g++)
+            {
+                var at = (ulong)index.WindowStep[g];
+                if (at == 0) continue;
+                if ((uint)at == 0 || (seen && (uint)(at >> 32) != index.StepHigh)) index.StepPacked = false;
+                index.StepHigh = (uint)(at >> 32);
+                seen = true;
+            }
         }
 
         static bool EndsAscending(global::Tl.LibraryTimeline* tl)

@@ -475,7 +475,7 @@ namespace Tl.Gen.Unity
                     }
                     else
                     {
-                        W(writer, "var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);");
+                        W(writer, !sampled && info.EntryBytes >= 16 ? "var __def = Index.StepOfEntry(__en, __tick, __hit);" : "var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);");
                         W(writer, "if (__def == null) break;");
                         EmitMaterialize(writer, consumer, assignmentIndex, c);
                         if (FoldOf(consumer) != null)

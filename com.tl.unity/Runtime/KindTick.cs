@@ -434,6 +434,7 @@ namespace Tl.Unity
                     if (!KindEntryCache.Cacheable(e)) continue;
                     if (changed != null && (KindEntryCache.Bits(e) & KindEntryCache.Valid) != 0 && (changed[e->Slot >> 6] & (1ul << (e->Slot & 63))) == 0) continue;
                     KindEntryCache.Write(e, slots + e->Slot);
+                    if (stride >= KindEntryCache.StepStride) *(uint*)((byte*)e + 12) = Index.PackedStep(e->Timeline, e->Step);
                 }
             }
         }

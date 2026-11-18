@@ -116,6 +116,7 @@ namespace Tl.Unity
         public const byte Reverse = 4;
         public const byte Paused = 8;
         public const int MinStride = 12;
+        public const int StepStride = 16;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static byte Bits(global::Tl.KindEntry* entry) => *((byte*)entry + 10);
