@@ -134,16 +134,24 @@ namespace Tl.Unity.Editor
                 {
                     EditorGUILayout.BeginHorizontal();
                     EditorGUI.BeginChangeCheck();
-                    var picked = (TimelineAsset)EditorGUILayout.ObjectField(also.Timelines[i], typeof(TimelineAsset), false);
+                    var current = also.Timelines[i];
+                    var picked = (TimelineAsset)EditorGUILayout.ObjectField(current, typeof(TimelineAsset), false);
+                    var onAwake = current != null && also.PlayOnAwake.Contains(current);
+                    var playOnAwake = GUILayout.Toggle(onAwake, new GUIContent("Play On Awake", "Start this timeline by itself when the scene loads, next to the Playable."), GUILayout.Width(110));
                     var remove = GUILayout.Button("-", GUILayout.Width(22));
                     EditorGUILayout.EndHorizontal();
                     if (EditorGUI.EndChangeCheck() || remove)
                     {
                         Undo.RecordObject(also, "Also Plays");
+                        also.PlayOnAwake.Remove(current);
                         if (remove)
                             also.Timelines.RemoveAt(i);
                         else
+                        {
                             also.Timelines[i] = picked;
+                            if (playOnAwake && picked != null)
+                                also.PlayOnAwake.Add(picked);
+                        }
                         EditorUtility.SetDirty(also);
                         GUIUtility.ExitGUI();
                     }

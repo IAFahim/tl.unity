@@ -70,7 +70,12 @@ namespace Tl.Unity.Editor
                 {
                     var set = manager.GetBuffer<TlTimelineSet>(entity, true);
                     var start = manager.GetComponentData<TlPlayOnAwake>(entity);
-                    item.Play.Add(((ushort)(sorted.IndexOf(BlobName(set[0])) + 1), start.At));
+                    if (start.Slot >= 0 && start.Slot < set.Length)
+                        item.Play.Add(((ushort)(sorted.IndexOf(BlobName(set[start.Slot])) + 1), start.At));
+                    if (manager.HasBuffer<TlAlsoPlayOnAwake>(entity))
+                        foreach (var alsoOnAwake in manager.GetBuffer<TlAlsoPlayOnAwake>(entity, true))
+                            if (alsoOnAwake.Slot >= 0 && alsoOnAwake.Slot < set.Length)
+                                item.Play.Add(((ushort)(sorted.IndexOf(BlobName(set[alsoOnAwake.Slot])) + 1), (ushort)0));
                 }
                 scene.Entities.Add(item);
             }

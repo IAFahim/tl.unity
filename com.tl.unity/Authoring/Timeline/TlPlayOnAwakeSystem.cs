@@ -36,6 +36,17 @@ namespace Tl.Unity
                 var id = start.Slot >= 0 && start.Slot < set.Length ? set[start.Slot].Id : (ushort)0;
                 if (id != 0)
                     manager.GetBuffer<TimelineRequest>(entity).Add(TimelineRequest.Start(0, id, start.At));
+                if (manager.HasBuffer<TlAlsoPlayOnAwake>(entity))
+                {
+                    var alsoOnAwake = manager.GetBuffer<TlAlsoPlayOnAwake>(entity, true);
+                    for (var k = 0; k < alsoOnAwake.Length; k++)
+                    {
+                        var slot = alsoOnAwake[k].Slot;
+                        var alsoId = slot >= 0 && slot < set.Length ? set[slot].Id : (ushort)0;
+                        if (alsoId != 0)
+                            manager.GetBuffer<TimelineRequest>(entity).Add(TimelineRequest.Start(0, alsoId));
+                    }
+                }
                 manager.SetComponentEnabled<TlPlayOnAwake>(entity, false);
             }
         }

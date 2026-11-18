@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using Unity.Entities;
 using UnityEngine.Playables;
@@ -17,7 +18,7 @@ namespace Tl.Unity.Editor
             if (director.playableAsset is TimelineAsset first)
                 queue.Enqueue(first);
             if (alsoPlays != null)
-                foreach (var other in alsoPlays.Timelines)
+                foreach (var other in alsoPlays.Timelines.Concat(alsoPlays.PlayOnAwake))
                     if (other != null)
                     {
                         baker.DependsOn(other);

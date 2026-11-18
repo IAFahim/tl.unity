@@ -105,4 +105,72 @@ namespace AutoKinds
         [Feeds(typeof(DoubleJumpWithoutIdleKind))]
         public static bool WhetherDoubleJumpIsAllowedWithoutIdle(in TlFrame<DoubleJumpClip> frame) => frame.Clip.Allowed;
     }
+
+    [TlState]
+    public partial struct Lamp
+    {
+        public float Brightness;
+        public float StayingBrightness;
+        public int Starts;
+        public int Ends;
+    }
+
+    [TlClip("AutoKinds/Fade")]
+    public struct FadeClip : IBlend<FadeClip>
+    {
+        public float Brightness;
+
+        public void Blend(in FadeClip first, in FadeClip second, float factor, out FadeClip result)
+            => result = new FadeClip { Brightness = first.Brightness + (second.Brightness - first.Brightness) * factor };
+    }
+
+    [TlClip("AutoKinds/Stay")]
+    public struct StayClip
+    {
+        public float Brightness;
+    }
+
+    [TlKind]
+    public struct FadeKind
+    {
+        public static void Combine(ref float total, in float next) => total += next;
+        public static void Apply(in float total, ref Lamp lamp) => lamp.Brightness = total;
+    }
+
+    [TlKind]
+    public struct StayKind
+    {
+        public static void Combine(ref float total, in float next) => total += next;
+        public static void Apply(in float total, ref Lamp lamp) => lamp.StayingBrightness = total;
+    }
+
+    [TlKind(Accepts = KindEntries.Pulses, Mode = KindMode.Each)]
+    public struct LampStartKind
+    {
+        public static void Apply(in int one, ref Lamp lamp) => lamp.Starts += one;
+    }
+
+    [TlKind(Accepts = KindEntries.Pulses, Mode = KindMode.Each)]
+    public struct LampEndKind
+    {
+        public static void Apply(in int one, ref Lamp lamp) => lamp.Ends += one;
+    }
+
+    public struct FadeTrack : ITlTrack<FadeClip>
+    {
+        [Feeds(typeof(FadeKind))]
+        public static float BrightnessThisTick(in TlFrame<FadeClip> frame) => frame.Clip.Brightness;
+
+        [Pulse(typeof(LampStartKind), On = ClipEvent.Start)]
+        public static int CountStart(in TlFrame<FadeClip> frame) => frame.Direction;
+
+        [Pulse(typeof(LampEndKind), On = ClipEvent.End)]
+        public static int CountEnd(in TlFrame<FadeClip> frame) => frame.Direction;
+    }
+
+    public struct StayTrack : ITlTrack<StayClip>
+    {
+        [Feeds(typeof(StayKind))]
+        public static float BrightnessThisTick(in TlFrame<StayClip> frame) => frame.Clip.Brightness;
+    }
 }
