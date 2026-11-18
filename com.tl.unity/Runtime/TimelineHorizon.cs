@@ -109,6 +109,12 @@ namespace Tl.Unity
         }
     }
 
+    public struct KindTickStamp
+    {
+        public uint Version;
+        public ulong Index;
+    }
+
     public static unsafe class KindEntryCache
     {
         public const byte Valid = 1;

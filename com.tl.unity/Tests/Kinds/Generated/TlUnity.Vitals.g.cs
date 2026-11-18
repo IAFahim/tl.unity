@@ -35,7 +35,7 @@ if (__l0 && __c0 != null) Kind_0(chunk, __playbacks, __c0);
 void Kind_0(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Health* __c0)
 {
 var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;
-var __cached = __clocks != null && Index.TickVersion != null && chunk.GetChangeVersion(ref PlaybackHandle) == *Index.TickVersion;
+var __cached = __clocks != null && Index.TickStamp != null && Index.TickStamp->Index == (ulong)Index.WindowStep && chunk.GetChangeVersion(ref PlaybackHandle) == Index.TickStamp->Version;
 if (!chunk.Has(ref DamageEntryHandle)) return;
 var __acc = chunk.GetBufferAccessor(ref DamageEntryHandle);
 var __ema = chunk.GetEnableableBits(ref DamageActiveHandle);

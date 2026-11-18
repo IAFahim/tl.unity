@@ -378,7 +378,7 @@ namespace Tl.Gen.Unity
             W(writer, "{");
             W(writer, "var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;");
             if (info.EntryBytes >= 12)
-                W(writer, "var __cached = __clocks != null && Index.TickVersion != null && chunk.GetChangeVersion(ref PlaybackHandle) == *Index.TickVersion;");
+                W(writer, "var __cached = __clocks != null && Index.TickStamp != null && Index.TickStamp->Index == (ulong)Index.WindowStep && chunk.GetChangeVersion(ref PlaybackHandle) == Index.TickStamp->Version;");
             W(writer, "if (!chunk.Has(ref " + info.Name + "EntryHandle)) return;");
             W(writer, "var __acc = chunk.GetBufferAccessor(ref " + info.Name + "EntryHandle);");
             W(writer, "var __ema = chunk.GetEnableableBits(ref " + info.Name + "ActiveHandle);");

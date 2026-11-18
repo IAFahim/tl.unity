@@ -28,9 +28,8 @@ namespace Tl.Unity
         public ComponentType* EntryTypes;
         public ComponentType* ActiveTypes;
         public ulong Bound;
-        public uint* TickVersion;
-        public uint StepHigh;
-        public bool StepPacked;
+        public KindTickStamp* TickStamp;
+        public global::Tl.LibraryStep* WindowSteps;
         public int* IdKeys;
         public int* IdKinds;
         public int IdCount;
@@ -75,17 +74,18 @@ namespace Tl.Unity
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public global::Tl.LibraryStep* StepOfEntry(global::Tl.KindEntry* entry, ushort tick, bool cached)
         {
-            var low = cached ? *(uint*)((byte*)entry + 12) : 0u;
-            if (low == 0) return StepInWindow(entry->Timeline, entry->Step, tick);
-            var step = (global::Tl.LibraryStep*)(((ulong)StepHigh << 32) | low);
+            var window = cached ? *(uint*)((byte*)entry + 12) : 0u;
+            if (window == 0 || window > (uint)WindowTotal) return StepInWindow(entry->Timeline, entry->Step, tick);
+            var step = WindowSteps + (window - 1);
             return tick < step->WindowStart || tick >= step->WindowEnd ? null : step;
         }
 
         public uint PackedStep(ushort timeline, int window)
         {
             var t = timeline - 1;
-            if (!StepPacked || (uint)t >= (uint)TimelineCount) return 0;
-            return (uint)(ulong)WindowStep[WindowBase[t] + window];
+            if ((uint)t >= (uint)TimelineCount) return 0;
+            var g = WindowBase[t] + window;
+            return WindowStep[g] != null ? (uint)g + 1 : 0u;
         }
 
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
@@ -341,16 +341,9 @@ namespace Tl.Unity
             for (var i = 0; i < table.Count; i++) index.StepTable[i] = (global::Tl.LibraryStep*)table[i];
             index.WindowStep = (global::Tl.LibraryStep**)Zeroed<IntPtr>(Math.Max(1, total));
             foreach (var (window, start) in single) index.WindowStep[window] = index.StepTable[start];
-            index.StepPacked = true;
-            var seen = false;
+            index.WindowSteps = Zeroed<global::Tl.LibraryStep>(Math.Max(1, total));
             for (var g = 0; g < total; g++)
-            {
-                var at = (ulong)index.WindowStep[g];
-                if (at == 0) continue;
-                if ((uint)at == 0 || (seen && (uint)(at >> 32) != index.StepHigh)) index.StepPacked = false;
-                index.StepHigh = (uint)(at >> 32);
-                seen = true;
-            }
+                if (index.WindowStep[g] != null) index.WindowSteps[g] = *index.WindowStep[g];
         }
 
         static bool EndsAscending(global::Tl.LibraryTimeline* tl)
@@ -372,6 +365,7 @@ namespace Tl.Unity
             Free(StepTable);
             Free(WindowStep);
             Free(MarkerValues);
+            Free(WindowSteps);
             Free(EntryTypes);
             Free(ActiveTypes);
             Free(IdKeys);

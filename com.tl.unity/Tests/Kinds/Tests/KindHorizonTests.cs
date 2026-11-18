@@ -480,6 +480,7 @@ namespace KindGame
             Lazy(candidate);
             using var query = candidate.Entities.CreateEntityQuery(typeof(TimelineLibrary));
             var original = default(TimelineLibrary);
+            var cachedBeforeSwap = 0;
             _cachedEntries = 0;
             for (var step = 0; step < 120; step++)
             {
@@ -495,16 +496,21 @@ namespace KindGame
                 {
                     candidate.Entities.CompleteAllTrackedJobs();
                     var published = query.GetSingleton<TimelineLibrary>();
-                    if (step == 17) original = published;
+                    if (step == 17)
+                    {
+                        original = published;
+                        cachedBeforeSwap = _cachedEntries;
+                    }
                     var next = step == 17 ? other.Component : original;
-                    next.Generation = published.Generation + 1;
+                    next.Generation = step == 17 ? published.Generation : published.Generation + 1;
                     query.SetSingleton(next);
                 }
                 reference.Step();
                 candidate.Step();
                 Assert.AreEqual(Snapshot(reference), Snapshot(candidate), "step " + step);
             }
-            Assert.Greater(_cachedEntries, 100);
+            Assert.Greater(cachedBeforeSwap, 50);
+            Assert.Greater(_cachedEntries - cachedBeforeSwap, 100);
         }
 
         [Test]

@@ -73,7 +73,7 @@ if (__l2 && __c4 != null) Kind_2(chunk, __playbacks, __c0, __c1, __c2, __c3, __c
 void Kind_0(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Motion* __c0, global::KindGame.WalkStat* __c1, global::KindGame.JumpPower* __c2, global::KindGame.Target* __c3, global::KindGame.Stamina* __c4)
 {
 var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;
-var __cached = __clocks != null && Index.TickVersion != null && chunk.GetChangeVersion(ref PlaybackHandle) == *Index.TickVersion;
+var __cached = __clocks != null && Index.TickStamp != null && Index.TickStamp->Index == (ulong)Index.WindowStep && chunk.GetChangeVersion(ref PlaybackHandle) == Index.TickStamp->Version;
 if (!chunk.Has(ref LiftEntryHandle)) return;
 var __acc = chunk.GetBufferAccessor(ref LiftEntryHandle);
 var __ema = chunk.GetEnableableBits(ref LiftActiveHandle);
@@ -282,7 +282,7 @@ if (__buf.Capacity > global::KindGame.KindCapacity.Lift && __buf.Length <= globa
 void Kind_1(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Motion* __c0, global::KindGame.WalkStat* __c1, global::KindGame.JumpPower* __c2, global::KindGame.Target* __c3, global::KindGame.Stamina* __c4)
 {
 var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;
-var __cached = __clocks != null && Index.TickVersion != null && chunk.GetChangeVersion(ref PlaybackHandle) == *Index.TickVersion;
+var __cached = __clocks != null && Index.TickStamp != null && Index.TickStamp->Index == (ulong)Index.WindowStep && chunk.GetChangeVersion(ref PlaybackHandle) == Index.TickStamp->Version;
 if (!chunk.Has(ref LocomotionEntryHandle)) return;
 var __acc = chunk.GetBufferAccessor(ref LocomotionEntryHandle);
 var __ema = chunk.GetEnableableBits(ref LocomotionActiveHandle);
@@ -471,7 +471,7 @@ if (__buf.Capacity > global::KindGame.KindCapacity.Locomotion && __buf.Length <=
 void Kind_2(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Motion* __c0, global::KindGame.WalkStat* __c1, global::KindGame.JumpPower* __c2, global::KindGame.Target* __c3, global::KindGame.Stamina* __c4)
 {
 var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;
-var __cached = __clocks != null && Index.TickVersion != null && chunk.GetChangeVersion(ref PlaybackHandle) == *Index.TickVersion;
+var __cached = __clocks != null && Index.TickStamp != null && Index.TickStamp->Index == (ulong)Index.WindowStep && chunk.GetChangeVersion(ref PlaybackHandle) == Index.TickStamp->Version;
 if (!chunk.Has(ref StatChangeEntryHandle)) return;
 var __acc = chunk.GetBufferAccessor(ref StatChangeEntryHandle);
 var __ema = chunk.GetEnableableBits(ref StatChangeActiveHandle);
