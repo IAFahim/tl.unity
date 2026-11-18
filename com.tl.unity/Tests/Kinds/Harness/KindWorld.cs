@@ -113,7 +113,10 @@ namespace KindGame
             {
                 using var published = Entities.CreateEntityQuery(typeof(TimelineLibrary));
                 var score = Entities.CreateEntity(typeof(ScoreLibrary));
-                Entities.SetComponentData(score, new ScoreLibrary { Index = ScoreIndex.Build(published.GetSingleton<TimelineLibrary>().Kinds) });
+                var kinds = published.GetSingleton<TimelineLibrary>().Kinds;
+                var table = ScoreIndex.Build(in kinds);
+                ScoreBake.WalkFrames(ref table, in kinds);
+                Entities.SetComponentData(score, new ScoreLibrary { Index = table });
                 ScoreMovementHandle = World.CreateSystem<ScoreMovementSystem>();
                 ScoreVitalsHandle = World.CreateSystem<ScoreVitalsSystem>();
             }
@@ -226,13 +229,18 @@ namespace KindGame
 
         public void Step(bool forward = true)
         {
+            StepPlaybacks(forward);
+            UpdateKinds();
+        }
+
+        public void StepPlaybacks(bool forward = true)
+        {
             if (forward != _forward)
             {
                 _step.SetSingleton(new TimelineStep { Forward = forward });
                 _forward = forward;
             }
             TickHandle.Update(World.Unmanaged);
-            UpdateKinds();
         }
 
         public void Damage(int target, int amount)

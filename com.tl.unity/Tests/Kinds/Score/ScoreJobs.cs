@@ -1,3 +1,4 @@
+using System;
 using Tl.Unity;
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
@@ -29,6 +30,137 @@ namespace KindGame
         }
 
         public static float BlendAt(global::Tl.LibraryStep* step, ushort tick) => step->FactorSpan == 0 ? 0f : (step->FactorSpan <= 1 ? 0.5f : (tick - step->FactorStart) / (float)(step->FactorSpan - 1));
+    }
+
+    public static unsafe class ScoreBake
+    {
+        public static void WalkFrames(ref ScoreIndex score, in KindIndex index)
+        {
+            var kind = index.KindOf(LocomotionKind.Id);
+            if (kind < 0) return;
+            var lane = score.Lanes + kind;
+            lane->FrameStride = sizeof(global::Tl.Frame<WalkTrack, WalkClip>);
+            var bytes = (long)Math.Max(1, lane->Count) * lane->FrameStride;
+            lane->Frames = (byte*)UnsafeUtility.Malloc(bytes, 16, Allocator.Persistent);
+            UnsafeUtility.MemClear(lane->Frames, bytes);
+            for (var t = 0; t < index.TimelineCount; t++)
+            {
+                var duration = (ushort)index.Timelines[t].Duration;
+                for (var tick = 0; tick < duration; tick++)
+                {
+                    var row = score.RowBase[t] + tick;
+                    var key = row * score.KindCount + kind;
+                    for (var f = score.Spans.First(key); f < score.Spans.End(key); f++)
+                    {
+                        if (score.Spans.Feeds[f].Case != 0) return;
+                        var step = score.Spans.Feeds[f].Step;
+                        var at = (ushort)tick;
+                        var first = (byte*)step->FrameRow + sizeof(WalkTrack);
+                        var second = step->FactorSpan == 0 ? null : first + sizeof(WalkClip);
+                        global::TlUnityGenerated.TlUnityFrames.Frame_0_3((byte*)step->FrameRow, first, second, ScoreSlots.BlendAt(step, at), at, (ushort)(step->WindowEnd - step->WindowStart), (ushort)(at - step->WindowStart), (ushort)step->TrackIndex, duration, 1, global::Tl.FrameFlags.None, out _, out _, out var frame);
+                        *(global::Tl.Frame<WalkTrack, WalkClip>*)(lane->Frames + (long)(lane->Start[row] + f - score.Spans.First(key)) * lane->FrameStride) = frame;
+                    }
+                }
+            }
+            score.FramedKinds |= 1ul << kind;
+        }
+    }
+
+    public unsafe struct ScoreLanes
+    {
+        public const int Width = 8;
+        const int Sleeping = (int)(ScoreSlots.Asleep | global::Tl.PlaybackFlags.Paused);
+
+        public uint* Words;
+        public int* WordOf;
+        public int* LengthOf;
+        public uint* ClockOf;
+        public int* FirstOf;
+        public int* FeedsOf;
+        public int* BackwardOf;
+        public int* RowBase;
+        public int* Starts;
+        public int Kinds;
+        public int Kind;
+        public bool Forward;
+
+        public int DecodeScalar(int slot)
+        {
+            var most = 0;
+            for (var l = 0; l < Width; l++)
+            {
+                var inRange = slot < LengthOf[l];
+                var at = WordOf[l] + 2 * slot;
+                var low = inRange ? Words[at] : 0u;
+                var high = inRange ? Words[at + 1] : 0u;
+                var timeline = (int)(low & 0xFFFFu);
+                var stored = low >> 16;
+                var flags = (int)(high >> 8) & 0xFF;
+                var live = timeline != 0 && (flags & Sleeping) == 0;
+                var reverse = (flags & 1) != 0;
+                var plain = (high & 0x00FFFE00u) == 0;
+                var tick = plain ? (reverse ? stored - ClockOf[l] : stored + ClockOf[l]) & 0xFFFFu : stored;
+                var key = ((live ? RowBase[timeline - 1] : 0) + (int)tick) * Kinds + Kind;
+                FirstOf[l] = live ? Starts[key] : 0;
+                FeedsOf[l] = live ? Starts[key + 1] - FirstOf[l] : 0;
+                BackwardOf[l] = reverse == Forward ? 1 : 0;
+                if (FeedsOf[l] > most) most = FeedsOf[l];
+            }
+            return most;
+        }
+
+        public int DecodeAvx2(int slot)
+        {
+            var zero = global::Unity.Burst.Intrinsics.X86.Avx.mm256_set1_epi32(0);
+            var one = global::Unity.Burst.Intrinsics.X86.Avx.mm256_set1_epi32(1);
+            var inRange = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_cmpgt_epi32(global::Unity.Burst.Intrinsics.X86.Avx.mm256_loadu_si256(LengthOf), global::Unity.Burst.Intrinsics.X86.Avx.mm256_set1_epi32(slot));
+            var at = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_add_epi32(global::Unity.Burst.Intrinsics.X86.Avx.mm256_loadu_si256(WordOf), global::Unity.Burst.Intrinsics.X86.Avx.mm256_set1_epi32(2 * slot));
+            var low = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_mask_i32gather_epi32(zero, Words, at, inRange, 4);
+            var high = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_mask_i32gather_epi32(zero, Words + 1, at, inRange, 4);
+            var timeline = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_and_si256(low, global::Unity.Burst.Intrinsics.X86.Avx.mm256_set1_epi32(0xFFFF));
+            var stored = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_srli_epi32(low, 16);
+            var flags = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_and_si256(global::Unity.Burst.Intrinsics.X86.Avx2.mm256_srli_epi32(high, 8), global::Unity.Burst.Intrinsics.X86.Avx.mm256_set1_epi32(0xFF));
+            var awake = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_cmpeq_epi32(global::Unity.Burst.Intrinsics.X86.Avx2.mm256_and_si256(flags, global::Unity.Burst.Intrinsics.X86.Avx.mm256_set1_epi32(Sleeping)), zero);
+            var live = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_andnot_si256(global::Unity.Burst.Intrinsics.X86.Avx2.mm256_cmpeq_epi32(timeline, zero), awake);
+            var reverse = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_cmpeq_epi32(global::Unity.Burst.Intrinsics.X86.Avx2.mm256_and_si256(flags, one), one);
+            var plain = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_cmpeq_epi32(global::Unity.Burst.Intrinsics.X86.Avx2.mm256_and_si256(high, global::Unity.Burst.Intrinsics.X86.Avx.mm256_set1_epi32(0x00FFFE00)), zero);
+            var clock = global::Unity.Burst.Intrinsics.X86.Avx.mm256_loadu_si256(ClockOf);
+            var moved = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_and_si256(global::Unity.Burst.Intrinsics.X86.Avx2.mm256_blendv_epi8(global::Unity.Burst.Intrinsics.X86.Avx2.mm256_add_epi32(stored, clock), global::Unity.Burst.Intrinsics.X86.Avx2.mm256_sub_epi32(stored, clock), reverse), global::Unity.Burst.Intrinsics.X86.Avx.mm256_set1_epi32(0xFFFF));
+            var tick = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_blendv_epi8(stored, moved, plain);
+            var origin = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_mask_i32gather_epi32(zero, RowBase - 1, timeline, live, 4);
+            var key = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_add_epi32(global::Unity.Burst.Intrinsics.X86.Avx2.mm256_mullo_epi32(global::Unity.Burst.Intrinsics.X86.Avx2.mm256_add_epi32(origin, tick), global::Unity.Burst.Intrinsics.X86.Avx.mm256_set1_epi32(Kinds)), global::Unity.Burst.Intrinsics.X86.Avx.mm256_set1_epi32(Kind));
+            var first = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_mask_i32gather_epi32(zero, Starts, key, live, 4);
+            var end = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_mask_i32gather_epi32(zero, Starts + 1, key, live, 4);
+            var feeds = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_sub_epi32(end, first);
+            var backward = Forward ? reverse : global::Unity.Burst.Intrinsics.X86.Avx2.mm256_cmpeq_epi32(reverse, zero);
+            global::Unity.Burst.Intrinsics.X86.Avx.mm256_storeu_si256(FirstOf, first);
+            global::Unity.Burst.Intrinsics.X86.Avx.mm256_storeu_si256(FeedsOf, feeds);
+            global::Unity.Burst.Intrinsics.X86.Avx.mm256_storeu_si256(BackwardOf, global::Unity.Burst.Intrinsics.X86.Avx2.mm256_and_si256(backward, one));
+            var most = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_max_epi32(feeds, global::Unity.Burst.Intrinsics.X86.Avx2.mm256_permute2x128_si256(feeds, feeds, 1));
+            most = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_max_epi32(most, global::Unity.Burst.Intrinsics.X86.Avx2.mm256_shuffle_epi32(most, 0x4E));
+            most = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_max_epi32(most, global::Unity.Burst.Intrinsics.X86.Avx2.mm256_shuffle_epi32(most, 0xB1));
+            return most.SInt0;
+        }
+
+        public static void GatherScalar(int feed, float* folds, int* firstOf, int* feedsOf, int* backwardOf, float* foldOf, int* takeOf)
+        {
+            for (var l = 0; l < Width; l++)
+            {
+                var take = feed < feedsOf[l];
+                takeOf[l] = take ? -1 : 0;
+                foldOf[l] = take ? folds[2 * (firstOf[l] + feed) + backwardOf[l]] : 0f;
+            }
+        }
+
+        public static void GatherAvx2(int feed, float* folds, int* firstOf, int* feedsOf, int* backwardOf, float* foldOf, int* takeOf)
+        {
+            var at = global::Unity.Burst.Intrinsics.X86.Avx.mm256_set1_epi32(feed);
+            var take = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_cmpgt_epi32(global::Unity.Burst.Intrinsics.X86.Avx.mm256_loadu_si256(feedsOf), at);
+            var index = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_add_epi32(global::Unity.Burst.Intrinsics.X86.Avx2.mm256_slli_epi32(global::Unity.Burst.Intrinsics.X86.Avx2.mm256_add_epi32(global::Unity.Burst.Intrinsics.X86.Avx.mm256_loadu_si256(firstOf), at), 1), global::Unity.Burst.Intrinsics.X86.Avx.mm256_loadu_si256(backwardOf));
+            var fold = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_mask_i32gather_ps(global::Unity.Burst.Intrinsics.X86.Avx.mm256_set1_epi32(0), folds, index, take, 4);
+            global::Unity.Burst.Intrinsics.X86.Avx.mm256_storeu_ps(foldOf, fold);
+            global::Unity.Burst.Intrinsics.X86.Avx.mm256_storeu_si256(takeOf, take);
+        }
     }
 
     [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
@@ -79,6 +211,8 @@ namespace KindGame
         void Lift(in ArchetypeChunk chunk, BufferAccessor<Playback> playbacks, ushort* clocks, Motion* motion, JumpPower* jumpPower, v128 enabled)
         {
             var count = chunk.Count;
+            var rows = stackalloc int[128];
+            var rowCount = 0;
             for (var word = 0; word < 2; word++)
             {
                 var bits = word == 0 ? enabled.ULong0 : enabled.ULong1;
@@ -86,46 +220,55 @@ namespace KindGame
                 {
                     var row = (word << 6) + (int)global::Unity.Mathematics.math.tzcnt(bits);
                     bits &= bits - 1;
-                    if (row >= count) break;
-                    var slots = (global::Tl.Playback*)playbacks[row].GetUnsafeReadOnlyPtr();
-                    var slotCount = playbacks[row].Length;
-                    var clock = clocks == null ? (ushort)0 : clocks[row];
-                    float total = default;
-                    var has = false;
-                    for (var s = 0; s < slotCount; s++)
+                    if (row < count) rows[rowCount++] = row;
+                }
+            }
+            LiftRows(playbacks, clocks, motion, jumpPower, rows, rowCount);
+        }
+
+        void LiftRows(BufferAccessor<Playback> playbacks, ushort* clocks, Motion* motion, JumpPower* jumpPower, int* rows, int rowCount)
+        {
+            for (var r = 0; r < rowCount; r++)
+            {
+                var row = rows[r];
+                var slots = (global::Tl.Playback*)playbacks[row].GetUnsafeReadOnlyPtr();
+                var slotCount = playbacks[row].Length;
+                var clock = clocks == null ? (ushort)0 : clocks[row];
+                float total = default;
+                var has = false;
+                for (var s = 0; s < slotCount; s++)
+                {
+                    var slot = slots + s;
+                    if (!ScoreSlots.Live(slot) || ScoreSlots.Paused(slot)) continue;
+                    var tick = TimelineTicks.Real(slot, clock);
+                    var backward = ScoreSlots.Backward(slot, Forward);
+                    var key = Score.KeyOf(slot->Timeline, tick, LiftKindIndex);
+                    var end = Score.Spans.End(key);
+                    for (var f = Score.Spans.First(key); f < end; f++)
                     {
-                        var slot = slots + s;
-                        if (!ScoreSlots.Live(slot) || ScoreSlots.Paused(slot)) continue;
-                        var tick = TimelineTicks.Real(slot, clock);
-                        var backward = ScoreSlots.Backward(slot, Forward);
-                        var key = Score.KeyOf(slot->Timeline, tick, LiftKindIndex);
-                        var end = Score.Spans.End(key);
-                        for (var f = Score.Spans.First(key); f < end; f++)
+                        var feed = Score.Spans.Feeds + f;
+                        var step = feed->Step;
+                        float lift;
+                        if (step->FoldLane == null)
                         {
-                            var feed = Score.Spans.Feeds + f;
-                            var step = feed->Step;
-                            float lift;
-                            if (step->FoldLane == null)
-                            {
-                                var timeline = Index.Timelines + (slot->Timeline - 1);
-                                var first = (byte*)step->FrameRow + sizeof(ArcTrack);
-                                var second = step->FactorSpan == 0 ? null : first + sizeof(ArcClip);
-                                global::TlUnityGenerated.TlUnityFrames.Frame_0_1((byte*)step->FrameRow, first, second, ScoreSlots.BlendAt(step, tick), tick, (ushort)(step->WindowEnd - step->WindowStart), (ushort)(tick - step->WindowStart), (ushort)step->TrackIndex, (ushort)timeline->Duration, backward ? (sbyte)-1 : (sbyte)1, ScoreSlots.FlagsAt(tick, timeline->Duration, backward, feed->Flags), out _, out _, out var frame);
-                                Jump.Fold(in frame, out lift);
-                            }
-                            else
-                                lift = *(float*)((byte*)step->FoldLane + (((uint)tick - step->WindowStart) * 2u + (backward ? 1u : 0u)) * 4u);
-                            var value = Jump.Evaluate(in lift, in jumpPower[row]);
-                            if (has) global::KindGame.Lift.Combine(ref total, in value);
-                            else
-                            {
-                                total = value;
-                                has = true;
-                            }
+                            var timeline = Index.Timelines + (slot->Timeline - 1);
+                            var first = (byte*)step->FrameRow + sizeof(ArcTrack);
+                            var second = step->FactorSpan == 0 ? null : first + sizeof(ArcClip);
+                            global::TlUnityGenerated.TlUnityFrames.Frame_0_1((byte*)step->FrameRow, first, second, ScoreSlots.BlendAt(step, tick), tick, (ushort)(step->WindowEnd - step->WindowStart), (ushort)(tick - step->WindowStart), (ushort)step->TrackIndex, (ushort)timeline->Duration, backward ? (sbyte)-1 : (sbyte)1, ScoreSlots.FlagsAt(tick, timeline->Duration, backward, feed->Flags), out _, out _, out var frame);
+                            Jump.Fold(in frame, out lift);
+                        }
+                        else
+                            lift = *(float*)((byte*)step->FoldLane + (((uint)tick - step->WindowStart) * 2u + (backward ? 1u : 0u)) * 4u);
+                        var value = Jump.Evaluate(in lift, in jumpPower[row]);
+                        if (has) global::KindGame.Lift.Combine(ref total, in value);
+                        else
+                        {
+                            total = value;
+                            has = true;
                         }
                     }
-                    if (has) global::KindGame.Lift.Apply(in total, ref motion[row]);
                 }
+                if (has) global::KindGame.Lift.Apply(in total, ref motion[row]);
             }
         }
 
@@ -146,7 +289,7 @@ namespace KindGame
                     if (row < count) rows[rowCount++] = row;
                 }
             }
-            var slotsOf = stackalloc ulong*[width];
+            var wordOf = stackalloc int[width];
             var lengthOf = stackalloc int[width];
             var clockOf = stackalloc uint[width];
             var powerOf = stackalloc JumpPower[width];
@@ -157,28 +300,40 @@ namespace KindGame
             var backwardOf = stackalloc int[width];
             var foldOf = stackalloc float[width];
             var takeOf = stackalloc int[width];
-            var folds = (float*)Score.FoldBits;
-            var starts = Score.Spans.Start;
+            var folds = (float*)Score.Lanes[LiftKindIndex].Fold;
+            var starts = Score.Lanes[LiftKindIndex].Start;
             var rowBase = Score.RowBase;
-            var kinds = Score.KindCount;
-            var kind = LiftKindIndex;
+            const int kinds = 1;
+            const int kind = 0;
             for (var group = 0; group < rowCount; group += width)
             {
                 var lanes = rowCount - group < width ? rowCount - group : width;
                 var longest = 0;
+                var words = (uint*)playbacks[rows[group]].GetUnsafeReadOnlyPtr();
+                var near = true;
+                for (var l = 0; l < lanes; l++)
+                {
+                    var distance = ((long)(byte*)playbacks[rows[group + l]].GetUnsafeReadOnlyPtr() - (long)(byte*)words) / 4;
+                    near &= distance > int.MinValue / 2 && distance < int.MaxValue / 2;
+                }
+                if (!near)
+                {
+                    LiftRows(playbacks, clocks, motion, jumpPower, rows + group, lanes);
+                    continue;
+                }
                 for (var l = 0; l < width; l++)
                 {
                     if (l < lanes)
                     {
                         var row = rows[group + l];
-                        slotsOf[l] = (ulong*)playbacks[row].GetUnsafeReadOnlyPtr();
+                        wordOf[l] = (int)(((long)(byte*)playbacks[row].GetUnsafeReadOnlyPtr() - (long)(byte*)words) / 4);
                         lengthOf[l] = playbacks[row].Length;
                         clockOf[l] = clocks == null ? 0u : clocks[row];
                         powerOf[l] = jumpPower[row];
                     }
                     else
                     {
-                        slotsOf[l] = null;
+                        wordOf[l] = 0;
                         lengthOf[l] = 0;
                         clockOf[l] = 0;
                         powerOf[l] = default;
@@ -189,40 +344,22 @@ namespace KindGame
                 }
                 for (var s = 0; s < longest; s++)
                 {
-                    var most = 0;
-                    for (var l = 0; l < width; l++)
-                    {
-                        feedsOf[l] = 0;
-                        if (s >= lengthOf[l]) continue;
-                        var word = slotsOf[l][s];
-                        var timeline = (int)(word & global::Tl.SlotWord.TimelineMask);
-                        var flags = (global::Tl.PlaybackFlags)(byte)(word >> 40);
-                        if (timeline == 0 || (flags & (ScoreSlots.Asleep | global::Tl.PlaybackFlags.Paused)) != 0) continue;
-                        var stored = (uint)(word >> 16) & 0xFFFFu;
-                        var reverse = (flags & global::Tl.PlaybackFlags.Reverse) != 0;
-                        var tick = (word & global::Tl.SlotWord.NotPlainMask) == 0 ? (reverse ? stored - clockOf[l] : stored + clockOf[l]) & 0xFFFFu : stored;
-                        var key = (rowBase[timeline - 1] + (int)tick) * kinds + kind;
-                        firstOf[l] = starts[key];
-                        feedsOf[l] = starts[key + 1] - firstOf[l];
-                        backwardOf[l] = (Forward ? reverse : !reverse) ? 1 : 0;
-                        if (feedsOf[l] > most) most = feedsOf[l];
-                    }
+                    var lanesOfSlot = new ScoreLanes { Words = words, WordOf = wordOf, LengthOf = lengthOf, ClockOf = clockOf, FirstOf = firstOf, FeedsOf = feedsOf, BackwardOf = backwardOf, RowBase = rowBase, Starts = starts, Kinds = kinds, Kind = kind, Forward = Forward };
+                    var most = global::Unity.Burst.Intrinsics.X86.Avx2.IsAvx2Supported ? lanesOfSlot.DecodeAvx2(s) : lanesOfSlot.DecodeScalar(s);
                     for (var j = 0; j < most; j++)
                     {
-                        for (var l = 0; l < width; l++)
-                        {
-                            takeOf[l] = j < feedsOf[l] ? 1 : 0;
-                            foldOf[l] = takeOf[l] != 0 ? folds[2 * (firstOf[l] + j) + backwardOf[l]] : 0f;
-                        }
+                        if (global::Unity.Burst.Intrinsics.X86.Avx2.IsAvx2Supported) ScoreLanes.GatherAvx2(j, folds, firstOf, feedsOf, backwardOf, foldOf, takeOf);
+                        else ScoreLanes.GatherScalar(j, folds, firstOf, feedsOf, backwardOf, foldOf, takeOf);
                         for (var l = 0; l < LaneWidth; l++)
                         {
                             global::Unity.Burst.CompilerServices.Loop.ExpectVectorized();
+                            var take = takeOf[l] != 0;
                             var value = Jump.Evaluate(in foldOf[l], in powerOf[l]);
                             var combined = totalOf[l];
                             global::KindGame.Lift.Combine(ref combined, in value);
                             var next = hasOf[l] != 0 ? combined : value;
-                            totalOf[l] = takeOf[l] != 0 ? next : totalOf[l];
-                            hasOf[l] |= takeOf[l];
+                            totalOf[l] = take ? next : totalOf[l];
+                            hasOf[l] |= take ? 1 : 0;
                         }
                     }
                 }
@@ -234,6 +371,7 @@ namespace KindGame
         void Locomotion(in ArchetypeChunk chunk, BufferAccessor<Playback> playbacks, ushort* clocks, Motion* motion, WalkStat* walkStat, Target* target, v128 enabled)
         {
             var count = chunk.Count;
+            var framed = Lanes && (Score.FramedKinds & (1ul << LocomotionKindIndex)) != 0;
             for (var word = 0; word < 2; word++)
             {
                 var bits = word == 0 ? enabled.ULong0 : enabled.ULong1;
@@ -254,6 +392,26 @@ namespace KindGame
                         var tick = TimelineTicks.Real(slot, clock);
                         var backward = ScoreSlots.Backward(slot, Forward);
                         var timeline = Index.Timelines + (slot->Timeline - 1);
+                        if (framed)
+                        {
+                            var lane = Score.Lanes + LocomotionKindIndex;
+                            var at = Score.RowOf(slot->Timeline, tick);
+                            var extra = ScoreSlots.FlagsAt(tick, timeline->Duration, backward, 0);
+                            var stop = lane->Start[at + 1];
+                            for (var i = lane->Start[at]; i < stop; i++)
+                            {
+                                var baked = (global::Tl.Frame<WalkTrack, WalkClip>*)(lane->Frames + (long)i * lane->FrameStride);
+                                var frame = new global::Tl.Frame<WalkTrack, WalkClip>(in baked->Track, in baked->Clip, baked->TimelineTick, baked->ClipLength, baked->WithinClip, baked->TrackIndex, baked->Flags | extra);
+                                var value = Walk.Evaluate(in frame, in walkStat[row], in target[row], in Anchors);
+                                if (has) global::KindGame.Locomotion.Combine(ref total, in value);
+                                else
+                                {
+                                    total = value;
+                                    has = true;
+                                }
+                            }
+                            continue;
+                        }
                         var key = Score.KeyOf(slot->Timeline, tick, LocomotionKindIndex);
                         var end = Score.Spans.End(key);
                         for (var f = Score.Spans.First(key); f < end; f++)

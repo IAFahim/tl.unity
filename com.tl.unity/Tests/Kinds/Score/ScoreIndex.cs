@@ -33,6 +33,15 @@ namespace KindGame
         public int End(int key) => Start[key + 1];
     }
 
+    public unsafe struct ScoreLane
+    {
+        public int* Start;
+        public uint* Fold;
+        public byte* Frames;
+        public int FrameStride;
+        public int Count;
+    }
+
     public unsafe struct ScoreIndex
     {
         public int TimelineCount;
@@ -42,12 +51,26 @@ namespace KindGame
         public ScoreTable Spans;
         public ScoreTable Arrivals;
         public ScoreTable Begins;
-        public uint* FoldBits;
+        public ScoreLane* Lanes;
         public ulong FoldedKinds;
+        public ulong FramedKinds;
 
         public int KeyOf(ushort timeline, int tick, int kind) => (RowBase[timeline - 1] + tick) * KindCount + kind;
 
-        public long Bytes => (long)(TimelineCount + 1) * sizeof(int) + 3L * ((long)Rows * KindCount + 1) * sizeof(int) + (long)(Spans.Count + Arrivals.Count + Begins.Count) * sizeof(ScoreFeed) + 2L * Spans.Count * sizeof(uint);
+        public int RowOf(ushort timeline, int tick) => RowBase[timeline - 1] + tick;
+
+        public long Bytes => (long)(TimelineCount + 1) * sizeof(int) + 3L * ((long)Rows * KindCount + 1) * sizeof(int) + (long)(Spans.Count + Arrivals.Count + Begins.Count) * sizeof(ScoreFeed) + LaneBytes;
+
+        public long LaneBytes
+        {
+            get
+            {
+                long bytes = 0;
+                for (var kind = 0; kind < KindCount; kind++)
+                    bytes += (long)(Rows + 1) * sizeof(int) + (Lanes[kind].Fold == null ? 0 : 2L * Lanes[kind].Count * sizeof(uint)) + (long)Lanes[kind].Count * Lanes[kind].FrameStride;
+                return bytes;
+            }
+        }
 
         public static ScoreIndex Build(in KindIndex index)
         {
@@ -123,24 +146,41 @@ namespace KindGame
             score.Spans = Table(spans, keys);
             score.Arrivals = Table(arrivals, keys);
             score.Begins = Table(begins, keys);
-            score.FoldBits = Allocate<uint>(2 * Math.Max(1, score.Spans.Count));
+            score.Lanes = Allocate<ScoreLane>(Math.Max(1, index.KindCount));
             var unfolded = 0ul;
-            for (var t = 0; t < index.TimelineCount; t++)
-            for (var tick = 0; tick < (int)index.Timelines[t].Duration; tick++)
             for (var kind = 0; kind < index.KindCount; kind++)
             {
-                var key = (score.RowBase[t] + tick) * index.KindCount + kind;
-                for (var f = score.Spans.First(key); f < score.Spans.End(key); f++)
+                var lane = score.Lanes + kind;
+                lane->Start = Allocate<int>(rows + 1);
+                for (var row = 0; row < rows; row++)
+                    lane->Start[row + 1] = lane->Start[row] + score.Spans.End(row * index.KindCount + kind) - score.Spans.First(row * index.KindCount + kind);
+                lane->Count = lane->Start[rows];
+                var fold = Allocate<uint>(2 * Math.Max(1, lane->Count));
+                var folded = true;
+                for (var t = 0; t < index.TimelineCount && folded; t++)
+                for (var tick = 0; tick < (int)index.Timelines[t].Duration && folded; tick++)
                 {
-                    var step = score.Spans.Feeds[f].Step;
-                    if (step->FoldLane == null)
+                    var row = score.RowBase[t] + tick;
+                    var key = row * index.KindCount + kind;
+                    for (var f = score.Spans.First(key); f < score.Spans.End(key); f++)
                     {
-                        unfolded |= 1ul << kind;
-                        continue;
+                        var step = score.Spans.Feeds[f].Step;
+                        if (step->FoldLane == null)
+                        {
+                            folded = false;
+                            break;
+                        }
+                        var at = lane->Start[row] + f - score.Spans.First(key);
+                        var bits = (byte*)step->FoldLane + ((uint)tick - step->WindowStart) * 2u * 4u;
+                        fold[2 * at] = *(uint*)bits;
+                        fold[2 * at + 1] = *(uint*)(bits + 4);
                     }
-                    var lane = (byte*)step->FoldLane + ((uint)tick - step->WindowStart) * 2u * 4u;
-                    score.FoldBits[2 * f] = *(uint*)lane;
-                    score.FoldBits[2 * f + 1] = *(uint*)(lane + 4);
+                }
+                if (folded && lane->Count != 0) lane->Fold = fold;
+                else
+                {
+                    Free(fold);
+                    unfolded |= 1ul << kind;
                 }
             }
             score.FoldedKinds = ~unfolded;
@@ -211,7 +251,13 @@ namespace KindGame
             Free(Arrivals.Feeds);
             Free(Begins.Start);
             Free(Begins.Feeds);
-            Free(FoldBits);
+            for (var kind = 0; kind < KindCount && Lanes != null; kind++)
+            {
+                Free(Lanes[kind].Start);
+                Free(Lanes[kind].Fold);
+                Free(Lanes[kind].Frames);
+            }
+            Free(Lanes);
             this = default;
         }
 
