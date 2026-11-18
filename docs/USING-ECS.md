@@ -137,8 +137,8 @@ code.
 Optional, all in the Inspector:
 
 - Timeline asset > **Tl** section: Channel (only one timeline plays per channel), When it ends (Stop, Loop, Hold, Play next).
-- Playable Director > **Tl** foldout: **Also Plays** (more timelines this object can play), what it plays, and plain messages when
-  something is missing.
+- Playable Director > **Tl** foldout: **Also Plays** (more timelines this object can play; tick **Play On Awake** on a row to start it
+  when the scene loads), what it plays, and plain messages when something is missing.
 - While Play runs, change a clip: the object follows within a second and keeps its time. Adding or removing a type of track needs a
   restart of Play (one console message says so).
 - Without Play, drag the Timeline window playhead: the object moves in the Scene view exactly as Play would move it at that time.

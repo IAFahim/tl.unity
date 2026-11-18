@@ -16,6 +16,8 @@
 
 **Playback**: one running copy of a timeline on one entity. It remembers which timeline, which tick it is on, which channel it uses, and whether it is paused, reversed, held or running at a different speed. It is eight bytes.
 
+**Blend**: what happens where two clips overlap on one track. A clip struct that implements `IBlend<TClip>` mixes the two clips with a factor that goes from 0 on the first tick of the overlap to 1 on its last (a crossfade). A clip without it keeps the first clip until that clip ends. Clips on different tracks never blend; their values meet in the kind's `Combine`.
+
 **Channel**: a lane for timelines on one entity. Only one timeline plays per channel: starting another one on the same channel replaces the first. "None" means the timeline is on no channel and several can play at once. Names come from Project Settings > Tl.
 
 **Tick**: one step of Tl's clock. The default is 60 ticks per second (Project Settings > Tl). Clips are rounded to whole ticks when they bake.
