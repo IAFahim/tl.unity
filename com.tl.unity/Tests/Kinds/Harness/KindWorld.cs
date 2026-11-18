@@ -68,6 +68,9 @@ namespace KindGame
         public readonly SystemHandle TickHandle;
         public readonly SystemHandle MovementHandle;
         public readonly SystemHandle VitalsHandle;
+        public readonly SystemHandle ScoreMovementHandle;
+        public readonly SystemHandle ScoreVitalsHandle;
+        public readonly bool Scored;
         public readonly Entity[] Rows;
         readonly EntityQuery _step;
         readonly bool _events;
@@ -82,13 +85,18 @@ namespace KindGame
         {
         }
 
+        public KindWorld(int count, byte[] library, bool scored) : this(count, false, null, library, scored)
+        {
+        }
+
         public KindWorld(int count, bool events, Func<World, SystemHandle> library) : this(count, events, library, null)
         {
         }
 
-        KindWorld(int count, bool events, Func<World, SystemHandle> library, byte[] bytes)
+        KindWorld(int count, bool events, Func<World, SystemHandle> library, byte[] bytes, bool scored = false)
         {
             _events = events;
+            Scored = scored;
             World = new World("TlKinds");
             Entities = World.EntityManager;
             if (library == null)
@@ -101,6 +109,14 @@ namespace KindGame
             TickHandle = World.CreateSystem<TimelineKindTickSystem>();
             MovementHandle = World.CreateSystem<MovementSystem>();
             VitalsHandle = World.CreateSystem<VitalsSystem>();
+            if (scored)
+            {
+                using var published = Entities.CreateEntityQuery(typeof(TimelineLibrary));
+                var score = Entities.CreateEntity(typeof(ScoreLibrary));
+                Entities.SetComponentData(score, new ScoreLibrary { Index = ScoreIndex.Build(published.GetSingleton<TimelineLibrary>().Kinds) });
+                ScoreMovementHandle = World.CreateSystem<ScoreMovementSystem>();
+                ScoreVitalsHandle = World.CreateSystem<ScoreVitalsSystem>();
+            }
             _step = Entities.CreateEntityQuery(typeof(TimelineStep));
             Rows = new Entity[count];
             for (var i = 0; i < count; i++)
@@ -111,6 +127,8 @@ namespace KindGame
 
         Entity Spawn()
         {
+            if (Scored)
+                return SpawnScored();
             var types = new System.Collections.Generic.List<ComponentType>
             {
                 typeof(Playback),
@@ -141,6 +159,51 @@ namespace KindGame
             return entity;
         }
 
+        Entity SpawnScored()
+        {
+            var entity = Entities.CreateEntity(
+                typeof(Playback),
+                typeof(TimelineRequest),
+                typeof(TimelinePlaying),
+                typeof(TimelineScored),
+                typeof(Movement_MotionData),
+                typeof(Movement_WalkStatData),
+                typeof(Movement_JumpPowerData),
+                typeof(Movement_TargetData),
+                typeof(Movement_StaminaData),
+                typeof(Vitals_HealthData),
+                typeof(LiftEnabled),
+                typeof(LocomotionEnabled),
+                typeof(StatChangeEnabled),
+                typeof(DamageEnabled));
+            Entities.SetComponentEnabled<TimelinePlaying>(entity, false);
+            Entities.SetComponentData(entity, new Movement_WalkStatData { Value = new WalkStat { Value = 1f } });
+            Entities.SetComponentData(entity, new Movement_JumpPowerData { Value = new JumpPower { Value = 2f } });
+            Entities.SetComponentData(entity, new Vitals_HealthData { Value = new Health { Value = 1000 } });
+            return entity;
+        }
+
+        public ScoreIndex Score
+        {
+            get
+            {
+                using var query = Entities.CreateEntityQuery(typeof(ScoreLibrary));
+                return query.GetSingleton<ScoreLibrary>().Index;
+            }
+        }
+
+        public void UpdateKinds()
+        {
+            if (Scored)
+            {
+                ScoreMovementHandle.Update(World.Unmanaged);
+                ScoreVitalsHandle.Update(World.Unmanaged);
+                return;
+            }
+            MovementHandle.Update(World.Unmanaged);
+            VitalsHandle.Update(World.Unmanaged);
+        }
+
         public void Start(int row, ushort timeline, ushort at = 0)
         {
             Entities.GetBuffer<TimelineRequest>(Rows[row]).Add(TimelineRequest.Start(0, timeline, at));
@@ -169,8 +232,7 @@ namespace KindGame
                 _forward = forward;
             }
             TickHandle.Update(World.Unmanaged);
-            MovementHandle.Update(World.Unmanaged);
-            VitalsHandle.Update(World.Unmanaged);
+            UpdateKinds();
         }
 
         public void Damage(int target, int amount)
@@ -231,6 +293,8 @@ namespace KindGame
         public void Dispose()
         {
             Entities.CompleteAllTrackedJobs();
+            if (Scored)
+                Score.Dispose();
             if (World.IsCreated)
                 World.Dispose();
             _library?.Dispose();

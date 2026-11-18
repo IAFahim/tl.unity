@@ -83,6 +83,7 @@ namespace Tl.Unity
         ComponentTypeHandle<TimelineHorizon> _horizonHandle;
         ComponentTypeHandle<TimelineClock> _clockHandle;
         BufferTypeHandle<PlaybackDue> _dueHandle;
+        ComponentTypeHandle<TimelineScored> _scoredHandle;
         ushort _now;
         EntityStorageInfoLookup _storage;
         KindHandleSet _handles;
@@ -112,6 +113,7 @@ namespace Tl.Unity
             _horizonHandle = state.GetComponentTypeHandle<TimelineHorizon>(false);
             _clockHandle = state.GetComponentTypeHandle<TimelineClock>(false);
             _dueHandle = state.GetBufferTypeHandle<PlaybackDue>(false);
+            _scoredHandle = state.GetComponentTypeHandle<TimelineScored>(true);
             _storage = state.GetEntityStorageInfoLookup();
             state.RequireForUpdate<TimelineLibrary>();
             state.RequireForUpdate<TimelineStep>();
@@ -167,7 +169,8 @@ namespace Tl.Unity
             _horizonHandle.Update(ref state);
             _clockHandle.Update(ref state);
             _dueHandle.Update(ref state);
-            _now = (ushort)((_now + 1) & TimelineTicks.Mask);
+            _scoredHandle.Update(ref state);
+            _now =(ushort)((_now + 1) & TimelineTicks.Mask);
             var stepDir = SystemAPI.GetSingleton<TimelineStep>().Forward ? 1 : -1;
             var limit = (int)state.EntityManager.GetComponentData<TimelineGlide>(state.SystemHandle).Limit;
             var forget = published || _glideIndex != identity || _glideGeneration != library.Generation || _glideStepDir != stepDir || _glideLimit != limit;
@@ -191,6 +194,7 @@ namespace Tl.Unity
                 HorizonHandle = _horizonHandle,
                 ClockHandle = _clockHandle,
                 DueHandle = _dueHandle,
+                ScoredHandle = _scoredHandle,
                 Now = _now,
                 Handles = handles,
                 Counters = counters,

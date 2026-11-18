@@ -26,6 +26,10 @@ namespace Tl.Unity
         public ushort Tick;
     }
 
+    public struct TimelineScored : IComponentData
+    {
+    }
+
     static unsafe class DueScan
     {
         public static int Collect(ushort* dues, int count, ushort now, byte* hits, ref int near, ref bool live)

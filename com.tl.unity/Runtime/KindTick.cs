@@ -26,6 +26,7 @@ namespace Tl.Unity
         public ComponentTypeHandle<TimelineHorizon> HorizonHandle;
         public ComponentTypeHandle<TimelineClock> ClockHandle;
         public BufferTypeHandle<PlaybackDue> DueHandle;
+        [ReadOnly] public ComponentTypeHandle<TimelineScored> ScoredHandle;
         [NativeDisableContainerSafetyRestriction] public KindHandleSet Handles;
         [NativeDisableUnsafePtrRestriction] public int* Counters;
         public int StepDir;
@@ -55,6 +56,11 @@ namespace Tl.Unity
             var masks = stackalloc EnabledMask[Index.KindCount];
             var ctx = new KindCursor { Index = Index, Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers, Masks = masks, Counters = Counters };
             ctx.Bind(in chunk);
+            if (chunk.Has(ref ScoredHandle))
+            {
+                ctx.Tables.KindCount = 0;
+                ctx.Calm = default;
+            }
             if (chunk.Has(ref ClockHandle))
             {
                 if (chunk.Has(ref DueHandle))
@@ -168,7 +174,7 @@ namespace Tl.Unity
                             continue;
                         }
                         if (global::Tl.KindRules.TickEntity(in tables, (global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, ref ctx, row, StepDir))
-                            horizons[row] = global::Tl.Horizon.OfKindRun((global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, in tables, in Index.Calm, reverse, HorizonLimit);
+                            horizons[row] = global::Tl.Horizon.OfKindRun((global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, in tables, in ctx.Calm, reverse, HorizonLimit);
                         else
                             ctx.SetPlaying(ref PlayingHandle, row, false);
                     }
@@ -232,7 +238,7 @@ namespace Tl.Unity
                 pb = (global::Tl.Playback*)buffer.GetUnsafePtr();
                 for (var i = 0; i < n; i++)
                 {
-                    d[i] = TimelineTicks.Due(pb + i, in tables, in Index.Calm, reverse, now);
+                    d[i] = TimelineTicks.Due(pb + i, in tables, in ctx.Calm, reverse, now);
                     TimelineTicks.Encode(pb + i, after);
                 }
                 ctx.Refresh(row, pb, null, ulong.MaxValue);
@@ -253,7 +259,7 @@ namespace Tl.Unity
                 var word = *(ulong*)s;
                 TimelineTicks.Decode(s, before);
                 live |= global::Tl.KindRules.TickSlot(in tables, ref ctx, row, i, s, StepDir);
-                var due = TimelineTicks.Due(s, in tables, in Index.Calm, reverse, now);
+                var due = TimelineTicks.Due(s, in tables, in ctx.Calm, reverse, now);
                 TimelineTicks.Encode(s, after);
                 d[i] = due;
                 if (*(ulong*)s != word)
@@ -333,6 +339,7 @@ namespace Tl.Unity
     {
         public KindIndex Index;
         public global::Tl.KindTables Tables;
+        public global::Tl.KindCalm Calm;
         public ArchetypeChunk Chunk;
         public KindHandleSet* Handles;
         public UnsafeUntypedBufferAccessor* Buffers;
@@ -350,6 +357,7 @@ namespace Tl.Unity
         {
             Chunk = chunk;
             Tables = Index.Tables;
+            Calm = Index.Calm;
             Reach = 0;
             Taken = 0;
             Masked = 0;

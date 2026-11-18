@@ -29,6 +29,7 @@ namespace KindGame
             var modes = "eager,lazy";
             var warmup = 32;
             var measure = 64;
+            var verifyTicks = 0;
             string perfControl = null;
             string perfAck = null;
             for (var i = 0; i + 1 < args.Length; i++)
@@ -40,6 +41,7 @@ namespace KindGame
                 if (args[i] == "-shapeModes") modes = args[i + 1];
                 if (args[i] == "-shapeWarmup") warmup = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
                 if (args[i] == "-shapeMeasure") measure = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
+                if (args[i] == "-shapeVerify") verifyTicks = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
                 if (args[i] == "-perfControl") perfControl = args[i + 1];
                 if (args[i] == "-perfAck") perfAck = args[i + 1];
             }
@@ -56,9 +58,17 @@ namespace KindGame
                 var library = Library(liveTracks);
                 if (Array.IndexOf(args, "-shapeDump") >= 0)
                 {
-                    using var dumped = new KindWorld(1, library);
+                    using var dumped = new KindWorld(1, library, true);
                     Row(writer, Dump(dumped, 1));
+                    using var query = dumped.Entities.CreateEntityQuery(typeof(TimelineLibrary));
+                    Row(writer, dumped.Score.Dump(query.GetSingleton<TimelineLibrary>().Kinds, 1));
                 }
+                if (verifyTicks > 0)
+                    foreach (var rowsText in rowsList.Split(','))
+                    foreach (var activeText in activeList.Split(','))
+                    foreach (var mode in modes.Split(','))
+                        if (mode.IndexOf('-') < 0)
+                            Row(writer, "verify rows=" + rowsText + " active=" + activeText + " live=" + liveTracks + " mode=" + mode + " ticks=" + verifyTicks + ": " + Verify(library, int.Parse(rowsText, CultureInfo.InvariantCulture), int.Parse(activeText, CultureInfo.InvariantCulture), mode, verifyTicks));
                 foreach (var rowsText in rowsList.Split(','))
                 foreach (var activeText in activeList.Split(','))
                 foreach (var mode in modes.Split(','))
@@ -157,28 +167,8 @@ namespace KindGame
 
         static void Cell(StreamWriter writer, byte[] library, int liveTracks, int rows, int active, string mode, int warmup, int measure, PerfSwitch perf)
         {
-            using var game = new KindWorld(rows, library);
-            if (mode != "eager")
-            {
-                using var all = game.Entities.CreateEntityQuery(typeof(Playback));
-                game.Entities.AddComponent<TimelineHorizon>(all);
-                if (mode == "lazy")
-                {
-                    game.Entities.AddComponent<TimelineClock>(all);
-                    game.Entities.AddComponent<PlaybackDue>(all);
-                }
-            }
-            game.Entities.SetComponentData(game.TickHandle, new TimelineGlide { Limit = mode == "eager" ? (byte)0 : (byte)global::Tl.Horizon.Max });
             var setup = Stopwatch.StartNew();
-            for (var e = 0; e < rows; e++)
-            {
-                var requests = game.Entities.GetBuffer<TimelineRequest>(game.Rows[e]);
-                for (var k = 0; k < active; k++)
-                {
-                    var timeline = (ushort)(1 + (e * 7 + k * 13) % TimelineCount);
-                    requests.Add(TimelineRequest.Start(0, timeline, (ushort)((e * 31 + k * 17) % ShortestDuration)));
-                }
-            }
+            using var game = World(library, rows, active, mode);
             game.Step();
             game.Entities.CompleteAllTrackedJobs();
             setup.Stop();
@@ -196,21 +186,105 @@ namespace KindGame
                 game.TickHandle.Update(game.World.Unmanaged);
                 game.Entities.CompleteAllTrackedJobs();
                 var ticked = Stopwatch.GetTimestamp();
-                game.MovementHandle.Update(game.World.Unmanaged);
-                game.VitalsHandle.Update(game.World.Unmanaged);
+                game.UpdateKinds();
                 game.Entities.CompleteAllTrackedJobs();
                 tick[i] = (ticked - start) * toMs;
                 kinds[i] = (Stopwatch.GetTimestamp() - ticked) * toMs;
             }
             perf.Disable();
             var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            var spans = LiveSpans(game);
+            var entries = LiveEntries(game);
+            var clips = LiveClips(game);
             var kindMs = Median(kinds);
             var tickMs = Median(tick);
             Row(writer, string.Format(CultureInfo.InvariantCulture,
-                "cell rows={0} active={1} live={2} mode={3} tickMs={4:F3} kindMs={5:F3} totalMs={6:F3} spans={7} wallNsPerSpan={8:F2} heapBytesPerRow={9} chunkBytesPerRow={10} setupMs={11:F1} alloc={12} blendSteps={13}/{14} hash={15:X16}",
-                rows, active, liveTracks, mode, tickMs, kindMs, tickMs + kindMs, spans, spans == 0 ? 0 : (tickMs + kindMs) * 1e6 / spans, HeapBytes(game) / rows, ChunkBytes(game), setup.Elapsed.TotalMilliseconds, allocated, BlendSteps(game, out var steps), steps, Hash(game)));
+                "cell rows={0} active={1} live={2} mode={3} tickMs={4:F3} kindMs={5:F3} totalMs={6:F3} entries={7} clips={8} wallNsPerClip={9:F2} heapBytesPerRow={10} chunkBytesPerRow={11} tableBytes={12} folded={16:X} setupMs={13:F1} alloc={14} hash={15:X16}",
+                rows, active, liveTracks, mode, tickMs, kindMs, tickMs + kindMs, entries, clips, clips == 0 ? 0 : (tickMs + kindMs) * 1e6 / clips, HeapBytes(game) / rows, ChunkBytes(game), game.Scored ? game.Score.Bytes : 0, setup.Elapsed.TotalMilliseconds, allocated, Hash(game), game.Scored ? game.Score.FoldedKinds : 0ul));
         }
+
+        static KindWorld World(byte[] library, int rows, int active, string mode)
+        {
+            var lanes = mode.StartsWith("lanes-", StringComparison.Ordinal);
+            var scored = lanes || mode.StartsWith("score-", StringComparison.Ordinal);
+            var stepping = scored ? mode.Substring(6) : mode;
+            var game = new KindWorld(rows, library, scored);
+            if (lanes)
+            {
+                using var query = game.Entities.CreateEntityQuery(typeof(ScoreLibrary));
+                var score = query.GetSingleton<ScoreLibrary>();
+                score.Lanes = true;
+                query.SetSingleton(score);
+            }
+            if (stepping != "eager")
+            {
+                using var all = game.Entities.CreateEntityQuery(typeof(Playback));
+                game.Entities.AddComponent<TimelineHorizon>(all);
+                if (stepping == "lazy")
+                {
+                    game.Entities.AddComponent<TimelineClock>(all);
+                    game.Entities.AddComponent<PlaybackDue>(all);
+                }
+            }
+            game.Entities.SetComponentData(game.TickHandle, new TimelineGlide { Limit = stepping == "eager" ? (byte)0 : (byte)global::Tl.Horizon.Max });
+            for (var e = 0; e < rows; e++)
+            {
+                var requests = game.Entities.GetBuffer<TimelineRequest>(game.Rows[e]);
+                for (var k = 0; k < active; k++)
+                {
+                    var timeline = (ushort)(1 + (e * 7 + k * 13) % TimelineCount);
+                    requests.Add(TimelineRequest.Start(0, timeline, (ushort)((e * 31 + k * 17) % ShortestDuration)));
+                }
+            }
+            return game;
+        }
+
+        public static string Verify(byte[] library, int rows, int active, string mode, int ticks)
+        {
+            var scalar = Verify(library, rows, active, mode, "score-" + mode, ticks);
+            return "score " + scalar + ", lanes " + Verify(library, rows, active, mode, "lanes-" + mode, ticks);
+        }
+
+        static string Verify(byte[] library, int rows, int active, string mode, string candidate, int ticks)
+        {
+            using var reference = World(library, rows, active, mode);
+            using var scored = World(library, rows, active, candidate);
+            for (var tick = 0; tick < ticks; tick++)
+            {
+                reference.Step();
+                scored.Step();
+                reference.Entities.CompleteAllTrackedJobs();
+                scored.Entities.CompleteAllTrackedJobs();
+                for (var row = 0; row < rows; row++)
+                {
+                    var a = reference.Motion(row);
+                    var b = scored.Motion(row);
+                    if (BitConverter.SingleToInt32Bits(a.X) != BitConverter.SingleToInt32Bits(b.X) || BitConverter.SingleToInt32Bits(a.Y) != BitConverter.SingleToInt32Bits(b.Y))
+                        return string.Format(CultureInfo.InvariantCulture, "motion differs at step {0} row {1}: {2},{3} vs {4},{5}", tick, row, a.X, a.Y, b.X, b.Y);
+                    if (reference.Health(row) != scored.Health(row))
+                        return string.Format(CultureInfo.InvariantCulture, "health differs at step {0} row {1}: {2} vs {3}", tick, row, reference.Health(row), scored.Health(row));
+                    if (reference.Stamina(row) != scored.Stamina(row))
+                        return string.Format(CultureInfo.InvariantCulture, "stamina differs at step {0} row {1}: {2} vs {3}", tick, row, reference.Stamina(row), scored.Stamina(row));
+                    var left = reference.Slots(row);
+                    var right = scored.Slots(row);
+                    if (left.Length != right.Length)
+                        return string.Format(CultureInfo.InvariantCulture, "slot count differs at step {0} row {1}: {2} vs {3}", tick, row, left.Length, right.Length);
+                    var clockA = Clock(reference, row);
+                    var clockB = Clock(scored, row);
+                    for (var s = 0; s < left.Length; s++)
+                    {
+                        var x = left[s];
+                        var y = right[s];
+                        x.Tick = TimelineTicks.Real(in x, clockA);
+                        y.Tick = TimelineTicks.Real(in y, clockB);
+                        if (*(ulong*)&x != *(ulong*)&y)
+                            return string.Format(CultureInfo.InvariantCulture, "slot {0} differs at step {1} row {2}: {3:X16} vs {4:X16}", s, tick, row, *(ulong*)&x, *(ulong*)&y);
+                    }
+                }
+            }
+            return "equal";
+        }
+
+        static ushort Clock(KindWorld game, int row) => game.Entities.HasComponent<TimelineClock>(game.Rows[row]) ? game.Entities.GetComponentData<TimelineClock>(game.Rows[row]).Value : (ushort)0;
 
         static double Median(double[] values)
         {
@@ -219,12 +293,39 @@ namespace KindGame
             return copy[copy.Length / 2];
         }
 
-        static long LiveSpans(KindWorld game)
+        static long LiveEntries(KindWorld game)
         {
             game.Entities.CompleteAllTrackedJobs();
+            if (game.Scored) return 0;
             long total = 0;
             foreach (var row in game.Rows)
                 total += game.Entities.GetBuffer<LiftEntry>(row, true).Length + game.Entities.GetBuffer<LocomotionEntry>(row, true).Length;
+            return total;
+        }
+
+        static long LiveClips(KindWorld game)
+        {
+            game.Entities.CompleteAllTrackedJobs();
+            using var query = game.Entities.CreateEntityQuery(typeof(TimelineLibrary));
+            var index = query.GetSingleton<TimelineLibrary>().Kinds;
+            var score = game.Scored ? game.Score : ScoreIndex.Build(in index);
+            var lift = index.KindOf(LiftKind.Id);
+            var locomotion = index.KindOf(LocomotionKind.Id);
+            long total = 0;
+            for (var row = 0; row < game.Rows.Length; row++)
+            {
+                var clock = Clock(game, row);
+                foreach (var slot in game.Slots(row))
+                {
+                    var copy = slot;
+                    if (!ScoreSlots.Live((global::Tl.Playback*)&copy)) continue;
+                    var tick = TimelineTicks.Real(in copy, clock);
+                    var a = score.KeyOf(copy.Timeline, tick, lift);
+                    var b = score.KeyOf(copy.Timeline, tick, locomotion);
+                    total += score.Spans.End(a) - score.Spans.First(a) + score.Spans.End(b) - score.Spans.First(b);
+                }
+            }
+            if (!game.Scored) score.Dispose();
             return total;
         }
 
@@ -234,35 +335,21 @@ namespace KindGame
             foreach (var row in game.Rows)
             {
                 total += Spilled(game.Entities.GetBuffer<Playback>(row, true).Capacity, 4, sizeof(Playback));
+                if (game.Scored) continue;
                 total += Spilled(game.Entities.GetBuffer<LiftEntry>(row, true).Capacity, LiftKind.InlineCapacity, sizeof(LiftEntry));
                 total += Spilled(game.Entities.GetBuffer<LocomotionEntry>(row, true).Capacity, LocomotionKind.InlineCapacity, sizeof(LocomotionEntry));
                 total += Spilled(game.Entities.GetBuffer<DamageEntry>(row, true).Capacity, DamageKind.InlineCapacity, sizeof(DamageEntry));
                 total += Spilled(game.Entities.GetBuffer<StatChangeEntry>(row, true).Capacity, StatChangeKind.InlineCapacity, sizeof(StatChangeEntry));
+            }
+            foreach (var row in game.Rows)
                 if (game.Entities.HasComponent<PlaybackDue>(row))
                     total += Spilled(game.Entities.GetBuffer<PlaybackDue>(row, true).Capacity, 4, sizeof(PlaybackDue));
-            }
             return total;
         }
 
         static long Spilled(int capacity, int inline, int size) => capacity > inline ? (long)capacity * size : 0;
 
         static int ChunkBytes(KindWorld game) => 16384 / game.Entities.GetChunk(game.Rows[0]).Capacity;
-
-        static int BlendSteps(KindWorld game, out int steps)
-        {
-            using var query = game.Entities.CreateEntityQuery(typeof(TimelineLibrary));
-            var index = query.GetSingleton<TimelineLibrary>().Kinds;
-            var blended = 0;
-            steps = 0;
-            for (var i = 0; i < index.StepTableLength; i++)
-            {
-                var step = index.StepTable[i];
-                if (step == null) continue;
-                steps++;
-                if (step->FactorSpan != 0) blended++;
-            }
-            return blended;
-        }
 
         static string Dump(KindWorld game, ushort timeline)
         {
