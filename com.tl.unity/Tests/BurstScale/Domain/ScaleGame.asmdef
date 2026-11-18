@@ -1,0 +1,8 @@
+{
+  "name": "ScaleGame",
+  "references": ["Tl.Core", "Tl.Unity", "Unity.Burst", "Unity.Collections", "Unity.Entities"],
+  "includePlatforms": ["Editor"],
+  "allowUnsafeCode": true,
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}
