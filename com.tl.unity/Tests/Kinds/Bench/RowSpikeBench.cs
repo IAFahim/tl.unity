@@ -25,6 +25,7 @@ namespace KindGame
             var warmup = 16;
             var measure = 32;
             var verifyTicks = 0;
+            var verifyCells = "100";
             var modes = "unfused,fused";
             for (var i = 0; i + 1 < args.Length; i++)
             {
@@ -33,6 +34,7 @@ namespace KindGame
                 if (args[i] == "-rowWarmup") warmup = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
                 if (args[i] == "-rowMeasure") measure = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
                 if (args[i] == "-rowModes") modes = args[i + 1];
+                if (args[i] == "-rowVerifyCells") verifyCells = args[i + 1];
                 if (args[i] == "-rowVerify") verifyTicks = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
             }
             Unity.Burst.BurstCompiler.Options.EnableBurstCompileSynchronously = true;
@@ -44,9 +46,10 @@ namespace KindGame
             try
             {
                 Row(writer, "env unity=" + UnityEngine.Application.unityVersion + " burst=" + Unity.Burst.BurstCompiler.IsEnabled + " safety=" + Unity.Burst.BurstCompiler.Options.EnableBurstSafetyChecks + " workers=" + Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerCount + " timelines=" + TimelineCount + " addressableRows=" + rowCount + " touchedRows=" + TouchedRows() + " rowBytes=" + sizeof(ScoreRow) + " warmup=" + warmup + " measure=" + measure);
+                foreach (var cellsText in verifyCells.Split(','))
                 foreach (var mode in modes.Split(','))
                     if (verifyTicks > 0)
-                        Row(writer, "verify mode=" + mode + " entities=2000 cells=100 ticks=" + verifyTicks + ": " + Verify(library, rowCount, 2000, 100, verifyTicks, mode == "fused"));
+                        Row(writer, "verify mode=" + mode + " entities=2000 cells=" + cellsText + " ticks=" + verifyTicks + ": " + Verify(library, rowCount, 2000, int.Parse(cellsText, CultureInfo.InvariantCulture), verifyTicks, mode == "fused"));
                 foreach (var shape in shapes.Split(','))
                 foreach (var mode in modes.Split(','))
                 {
@@ -136,6 +139,7 @@ namespace KindGame
 
             public Game(ScoreRow* library, int rowCount, int count, int cells, bool fused)
             {
+                if (cells > RowMath.MaxActive) throw new ArgumentOutOfRangeException(nameof(cells), cells, "at most " + RowMath.MaxActive + " active timelines per character");
                 IsFused = fused;
                 World = new World("RowSpike");
                 Entities = World.EntityManager;
@@ -251,9 +255,9 @@ namespace KindGame
             var visits = (double)count * cells;
             var chunkCapacity = game.Entities.GetChunk(game.Rows[0]).Capacity;
             Row(writer, string.Format(CultureInfo.InvariantCulture,
-                "cell mode={16} entities={0} cells={1} accumulateMs={2:F3} handOverMs={3:F3} applyMs={4:F3} totalMs={5:F3} nsPerVisit={6:F4} nsPerEntity={7:F2} nsPerEntityKind={8:F3} nsPerClipAtLive8={9:F4} chunkCapacity={10} chunkBytesPerEntity={11} heapBytesPerEntity=0 scoreBytes={12} setupMs={13:F0} alloc={14} hash={15:X16}",
+                "cell mode={16} entities={0} cells={1} accumulateMs={2:F3} handOverMs={3:F3} applyMs={4:F3} totalMs={5:F3} nsPerVisit={6:F4} nsPerEntity={7:F2} nsPerEntityKind={8:F3} nsPerClipAtLive8={9:F4} chunkCapacity={10} chunkBytesPerEntity={11} heapBytesPerEntity={17} scoreBytes={12} setupMs={13:F0} alloc={14} hash={15:X16}",
                 count, cells, accumulate, handOver, apply, total, total * 1e6 / visits, total * 1e6 / count, total * 1e6 / (count * KindsPerRow), total * 1e6 / (visits * ClipsPerVisitAtLiveEight),
-                chunkCapacity, 16384 / chunkCapacity, (long)TouchedRows() * sizeof(ScoreRow), setup.Elapsed.TotalMilliseconds, allocated, game.Hash(), fused ? "fused" : "unfused"));
+                chunkCapacity, 16384 / chunkCapacity, (long)TouchedRows() * sizeof(ScoreRow), setup.Elapsed.TotalMilliseconds, allocated, game.Hash(), fused ? "fused" : "unfused", cells > 100 ? cells * 2 : 0));
         }
 
         static double Median(double[] values, int offset, int count, int stride = 3)

@@ -19,7 +19,7 @@ public struct ScoreRow
     public float Walk;
 }
 
-public struct RowTotals
+public unsafe struct RowTotals
 {
     public int LiftFixed;
     public int Damage;
@@ -27,8 +27,7 @@ public struct RowTotals
     public int WalkKey;
     public float Walk;
     public int Spare;
-    public ulong EndedLow;
-    public ulong EndedHigh;
+    public fixed ulong Ended[4];
 }
 
 public static unsafe class RowNet
@@ -95,7 +94,7 @@ public static unsafe class RowNet
         var lastOfBlock = Vector256.Create((short)(BlockRows - 1));
         var now = Vector256.Create((short)frame);
         var tail = stackalloc short[16];
-        ulong endedLow = 0, endedHigh = 0;
+        for (var w = 0; w < 4; w++) totals->Ended[w] = 0;
         for (var first = 0; first < count; first += 16)
         {
             Vector256<short> group;
@@ -109,8 +108,7 @@ public static unsafe class RowNet
             var packed = (uint)Avx2.MoveMask(Avx2.PackSignedSaturate(ends, Vector256<short>.Zero).AsByte());
             var bits = (ulong)((packed & 0xFFu) | ((packed >> 8) & 0xFF00u));
             if (first + 16 > count) bits &= (1ul << (count - first)) - 1;
-            if (first < 64) endedLow |= bits << first;
-            else endedHigh |= bits << (first - 64);
+            totals->Ended[first >> 6] |= bits << (first & 63);
         }
         var walkKey = best.GetElement(4);
         totals->LiftFixed = sums.GetElement(0);
@@ -118,8 +116,6 @@ public static unsafe class RowNet
         totals->Stat = sums.GetElement(2);
         totals->WalkKey = walkKey;
         totals->Walk = walkKey >= 0 ? rows[walkKey & 0xFFFF].Walk : 0f;
-        totals->EndedLow = endedLow;
-        totals->EndedHigh = endedHigh;
     }
 
     static void HandOver(ushort* origins, ulong ended, int firstCell, ScoreRow* rows, uint frame)
@@ -194,8 +190,7 @@ public static unsafe class RowNet
                 var origins = Origins + (long)e * Cells;
                 var total = Totals + e;
                 Accumulate(origins, Cells, Rows, Frame, total);
-                HandOver(origins, total->EndedLow, 0, Rows, Frame);
-                HandOver(origins, total->EndedHigh, 64, Rows, Frame);
+                for (var w = 0; w < 4; w++) HandOver(origins, total->Ended[w], w * 64, Rows, Frame);
                 MotionY[e] += total->LiftFixed * FixedToFloat * Power[e];
                 if (total->WalkKey >= 0) MotionX[e] += total->Walk * Walk[e] * Boost[Target[e]];
                 Health[e] -= total->Damage;

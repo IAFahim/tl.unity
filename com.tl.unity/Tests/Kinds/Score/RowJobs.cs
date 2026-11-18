@@ -27,7 +27,7 @@ namespace KindGame
         public ushort Origin;
     }
 
-    public struct RowTotals : IComponentData
+    public unsafe struct RowTotals : IComponentData
     {
         public int LiftFixed;
         public int Damage;
@@ -35,8 +35,7 @@ namespace KindGame
         public int WalkKey;
         public float Walk;
         public int Spare;
-        public ulong EndedLow;
-        public ulong EndedHigh;
+        public fixed ulong Ended[RowMath.EndedWords];
     }
 
     public struct RowMotion : IComponentData
@@ -75,6 +74,8 @@ namespace KindGame
         public const int EndBit = unchecked((int)0x80000000);
         public const int NoWalk = int.MinValue;
         public const float FixedToFloat = 1f / 65536f;
+        public const int EndedWords = 4;
+        public const int MaxActive = EndedWords * 64;
 
         public static ScoreRow* RowAt(ScoreRow* rows, ushort origin, uint frame) => rows + (ushort)(origin + frame);
 
@@ -86,7 +87,7 @@ namespace KindGame
             var damage = 0;
             var stat = 0;
             var walkKey = NoWalk;
-            ulong endedLow = 0, endedHigh = 0;
+            ClearEnded(totals);
             for (var c = 0; c < count; c++)
             {
                 var index = (ushort)(origins[c] + frame);
@@ -95,11 +96,9 @@ namespace KindGame
                 damage += row->Damage;
                 stat += row->Stat;
                 walkKey = math.max(walkKey, row->WalkKey);
-                if ((index & (BlockRows - 1)) != BlockRows - 1) continue;
-                if (c < 64) endedLow |= 1ul << c;
-                else endedHigh |= 1ul << (c - 64);
+                if ((index & (BlockRows - 1)) == BlockRows - 1) totals->Ended[c >> 6] |= 1ul << (c & 63);
             }
-            Finish(rows, liftFixed, damage, stat, walkKey, endedLow, endedHigh, totals);
+            Finish(rows, liftFixed, damage, stat, walkKey, totals);
         }
 
         public static void AccumulateAvx2(ushort* origins, int count, ScoreRow* rows, uint frame, RowTotals* totals)
@@ -117,7 +116,7 @@ namespace KindGame
             var zero = mm256_setzero_si256();
             v256 tailGroup = default;
             var tail = (ushort*)&tailGroup;
-            ulong endedLow = 0, endedHigh = 0;
+            ClearEnded(totals);
             for (var first = 0; first < count; first += 16)
             {
                 v256 group;
@@ -131,24 +130,39 @@ namespace KindGame
                 var packed = (uint)mm256_movemask_epi8(mm256_packs_epi16(ends, zero));
                 var bits = (ulong)((packed & 0xFFu) | ((packed >> 8) & 0xFF00u));
                 if (first + 16 > count) bits &= (1ul << (count - first)) - 1;
-                if (first < 64) endedLow |= bits << first;
-                else endedHigh |= bits << (first - 64);
+                totals->Ended[first >> 6] |= bits << (first & 63);
             }
-            Finish(rows, sums.SInt0, sums.SInt1, sums.SInt2, best.SInt4, endedLow, endedHigh, totals);
+            Finish(rows, sums.SInt0, sums.SInt1, sums.SInt2, best.SInt4, totals);
         }
 
-        static void Finish(ScoreRow* rows, int liftFixed, int damage, int stat, int walkKey, ulong endedLow, ulong endedHigh, RowTotals* totals)
+        static void ClearEnded(RowTotals* totals)
+        {
+            for (var w = 0; w < EndedWords; w++) totals->Ended[w] = 0;
+        }
+
+        public static bool AnyEnded(RowTotals* totals)
+        {
+            var any = 0ul;
+            for (var w = 0; w < EndedWords; w++) any |= totals->Ended[w];
+            return any != 0;
+        }
+
+        static void Finish(ScoreRow* rows, int liftFixed, int damage, int stat, int walkKey, RowTotals* totals)
         {
             totals->LiftFixed = liftFixed;
             totals->Damage = damage;
             totals->Stat = stat;
             totals->WalkKey = walkKey;
             totals->Walk = walkKey >= 0 ? rows[walkKey & 0xFFFF].Walk : 0f;
-            totals->EndedLow = endedLow;
-            totals->EndedHigh = endedHigh;
         }
 
-        public static void HandOver(ushort* origins, ulong ended, int firstCell, ScoreRow* rows, uint frame)
+        public static void HandOver(ushort* origins, RowTotals* totals, ScoreRow* rows, uint frame)
+        {
+            for (var w = 0; w < EndedWords; w++)
+                HandOverWord(origins, totals->Ended[w], w * 64, rows, frame);
+        }
+
+        static void HandOverWord(ushort* origins, ulong ended, int firstCell, ScoreRow* rows, uint frame)
         {
             while (ended != 0)
             {
@@ -204,10 +218,8 @@ namespace KindGame
             var totals = (RowTotals*)chunk.GetRequiredComponentDataPtrRO(ref TotalsHandle);
             for (var e = 0; e < chunk.Count; e++)
             {
-                if ((totals[e].EndedLow | totals[e].EndedHigh) == 0) continue;
-                var origins = (ushort*)cells[e].GetUnsafePtr();
-                RowMath.HandOver(origins, totals[e].EndedLow, 0, Rows, Frame);
-                RowMath.HandOver(origins, totals[e].EndedHigh, 64, Rows, Frame);
+                if (!RowMath.AnyEnded(totals + e)) continue;
+                RowMath.HandOver((ushort*)cells[e].GetUnsafePtr(), totals + e, Rows, Frame);
             }
         }
     }
@@ -256,8 +268,7 @@ namespace KindGame
                 var origins = (ushort*)buffer.GetUnsafePtr();
                 if (IsAvx2Supported) RowMath.AccumulateAvx2(origins, buffer.Length, Rows, Frame, &total);
                 else RowMath.AccumulateScalar(origins, buffer.Length, Rows, Frame, &total);
-                RowMath.HandOver(origins, total.EndedLow, 0, Rows, Frame);
-                RowMath.HandOver(origins, total.EndedHigh, 64, Rows, Frame);
+                RowMath.HandOver(origins, &total, Rows, Frame);
                 RowMath.Apply(in total, in stats[e], total.WalkKey >= 0 ? Anchors[stats[e].Target].Boost : 0f, ref motion[e], ref vitals[e]);
             }
         }
