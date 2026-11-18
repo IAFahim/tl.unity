@@ -1,0 +1,14 @@
+{
+  "name": "Tl.Demo.ManyAtOnce",
+  "rootNamespace": "ManyAtOnce",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Mathematics",
+    "Unity.Transforms"
+  ],
+  "autoReferenced": false
+}

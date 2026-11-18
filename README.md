@@ -17,7 +17,7 @@ This file is the whole course. Read it top to bottom, type the code, and by the 
 4. [Pattern A: an instant event (pulse)](#4-pattern-a-an-instant-event-pulse)
 5. [Pattern B: a value over time (feeds)](#5-pattern-b-a-value-over-time-feeds)
 6. [Pattern C: both in one rule (health)](#6-pattern-c-both-in-one-rule-health)
-7. [Stacking and ordering](#7-stacking-and-ordering)
+7. [Many at once: timelines, tracks, blending, order](#7-many-at-once-timelines-tracks-blending-order)
 8. [Designing the timeline side: end, channels, starting, curves](#8-designing-the-timeline-side-end-channels-starting-curves)
 9. [Baking: how your data gets into the entity (the Unity way)](#9-baking-how-your-data-gets-into-the-entity-the-unity-way)
 10. [Time: rewind, reverse, speed](#10-time-rewind-reverse-speed)
@@ -392,7 +392,7 @@ Tl wires track, kind and column **by types**, not by names or registration: the 
 | `Combine` (default) | merge everything into one value, then `Apply` once | "the total wind right now" |
 | `Each` | `Apply` once **per pulse**, never merged | three hits on one tick must each count |
 
-**`Order`: which kind runs first** (chapter 7). The attribute also has `Group`, `FoldsPulses`, `Inline` and `GamePulses`; they are tuning options not needed to start.
+**`Order`: which kind runs first** (7.4). The attribute also has `Group`, `FoldsPulses`, `Inline` and `GamePulses`; they are tuning options not needed to start.
 
 ### 3.4 Column (`[TlState]`): "where is the result stored?"
 
@@ -552,15 +552,204 @@ Note the heal is a **negative damage**. One rule for all damage and healing keep
 
 ---
 
-## 7. Stacking and ordering
+## 7. Many at once: timelines, tracks, blending, order
 
-### 7.1 Stacking: one track keeps only the first clip
+So far one timeline played, and each track had one clip at a time. A real object has more going on: a platform rides up while something shakes it. Values from many clips can meet in three ways, and this chapter adds them to one platform one at a time: two **timelines** at once (7.1), two **tracks** at once (7.2), and two **clips** at once on one track (7.3). The finished scene is the **Many At Once** sample: Package Manager > **Tl Unity Playback** > **Samples** > **Many At Once** > **Import**, menu **Tl Many At Once > Build Scene**, press **Play**. The sample ships the end of the chapter; to start where this chapter starts, untick **Play On Awake** on Shake's row (7.1) and use the `Platform.cs` below.
 
-Clips that overlap **on the same track** do not add: only the first one counts. Clips on **different tracks** are merged by `Combine`.
+The Tl part is one file, `Platform.cs`. It is chapter 5's wind with a height instead of a push: each clip says how high it lifts the platform this tick, `Combine` adds what arrives on the same tick, and `Apply` writes the total.
 
-Measured: two Shove clips overlapping on one track gave X = 30 (only the first); the same two clips on two tracks gave X = 60. **If two effects must stack, put them on separate tracks.** Tell your designers.
+```csharp
+using Tl;
 
-### 7.2 Which kind runs first: `Order`
+namespace ManyAtOnce
+{
+    [TlClip("Many At Once/Height")]
+    public struct HeightClip
+    {
+        public float Height;
+    }
+
+    public struct HeightTrack : ITlTrack<HeightClip>
+    {
+        [Feeds(typeof(HeightKind))]
+        public static float HeightClipToHeightThisTick(in TlFrame<HeightClip> frame)
+            => frame.Clip.Height;
+    }
+
+    [TlKind]
+    public struct HeightKind
+    {
+        public static void Combine(ref float heightFromClipsSoFar, in float heightFromAnotherClip)
+            => heightFromClipsSoFar += heightFromAnotherClip;
+
+        public static void Apply(in float totalHeightThisTick, ref Platform platform)
+            => platform.Height = totalHeightThisTick;
+    }
+
+    [TlState]
+    public partial struct Platform
+    {
+        public float Height;
+    }
+}
+```
+
+Your game code puts the platform at that height, the same as chapter 1's system:
+
+```csharp
+using Tl;
+using Unity.Burst;
+using Unity.Entities;
+using Unity.Transforms;
+
+namespace ManyAtOnce
+{
+    [BurstCompile]
+    [UpdateInGroup(typeof(TlSimulationGroup), OrderLast = true)]
+    public partial struct PlatformLiftSystem : ISystem
+    {
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            foreach (var (platformTransform, platform) in SystemAPI.Query<RefRW<LocalTransform>, RefRO<Platform>>())
+                platformTransform.ValueRW.Position.y = platform.ValueRO.Height;
+        }
+    }
+}
+```
+
+The sample also has `PlatformLogSystem.cs`, which prints a line every 15 ticks of Ride: Ride's tick, the height, and how many timelines play. It is a system in `TlSimulationGroup`, not a `MonoBehaviour`: Tl ticks in `FixedStepSimulationSystemGroup`, so one frame can run two ticks or none, and a `MonoBehaviour` would miss some.
+
+The platform's Playable Director plays **Ride** (the builder makes it; a designer edits it in the Timeline window):
+
+| Track | Clip | Ticks | Height |
+|---|---|---|---|
+| Floor | Ground | 0 to 120 | 1 |
+| Floor | Top | 90 to 180 | 5 |
+| Wave | Wave | 30 to 60 | 0.5 |
+
+Press **Play**. The Console prints:
+
+```
+Many at once: Ride tick 0, platform height 1, playbacks 1
+Many at once: Ride tick 15, platform height 1, playbacks 1
+Many at once: Ride tick 30, platform height 1.5, playbacks 1
+Many at once: Ride tick 45, platform height 1.5, playbacks 1
+Many at once: Ride tick 60, platform height 1, playbacks 1
+Many at once: Ride tick 75, platform height 1, playbacks 1
+Many at once: Ride tick 90, platform height 1, playbacks 1
+Many at once: Ride tick 105, platform height 1, playbacks 1
+Many at once: Ride tick 120, platform height 5, playbacks 1
+Many at once: Ride tick 135, platform height 5, playbacks 1
+Many at once: Ride tick 150, platform height 5, playbacks 1
+Many at once: Ride tick 165, platform height 5, playbacks 1
+```
+
+One thing in it is not what the timeline seems to say: the platform waits at 1 while Top already plays (ticks 90 to 119), then jumps to 5. Section 7.3 turns that into a ride. First, a second timeline.
+
+### 7.1 Two timelines on one platform
+
+**Shake** is a second timeline with one track, **Bump**: one clip, ticks 15 to 30, height 0.25. The platform should play it at the same time as Ride.
+
+**Starting it.** **Play On Awake** on the Playable Director starts only its Playable. In the director's **Tl** foldout, put Shake in **Also Plays** and tick **Play On Awake** on its row. Now the Console prints:
+
+```
+Many at once: Ride tick 0, platform height 1, playbacks 2
+Many at once: Ride tick 15, platform height 1.25, playbacks 2
+Many at once: Ride tick 30, platform height 1.5, playbacks 1
+Many at once: Ride tick 45, platform height 1.5, playbacks 1
+Many at once: Ride tick 60, platform height 1, playbacks 1
+Many at once: Ride tick 75, platform height 1, playbacks 1
+Many at once: Ride tick 90, platform height 1, playbacks 1
+Many at once: Ride tick 105, platform height 1, playbacks 1
+Many at once: Ride tick 120, platform height 5, playbacks 1
+Many at once: Ride tick 135, platform height 5, playbacks 1
+Many at once: Ride tick 150, platform height 5, playbacks 1
+Many at once: Ride tick 165, platform height 5, playbacks 1
+```
+
+Each timeline that plays is one **playback** on the entity (`playbacks 2`), and every playback feeds the same kind. On the ticks where both have a clip, `Combine` adds them: tick 15 is Ground (1) plus Bump (0.25) = 1.25. When Shake ends at tick 30 its playback is removed and Ride goes on alone (`playbacks 1`).
+
+The rules of **Play On Awake** in **Also Plays**: the ticked timelines start when the scene loads, right after the Playable, at tick 0, in the order of the **Also Plays** list. They also start when the director's own **Play On Awake** is off. The Playable always starts at the director's **Initial Time**, whether it is started by the director or ticked in **Also Plays**. To start or stop a timeline from your own code instead, use `requests.Start(shake)` and `requests.Stop(shake)` with a `TlTimeline` from your baker (8.4, 9.3).
+
+**Channels.** Ride and Shake are on channel **None**, so they play side by side. Only one timeline plays per channel: give both the same **Channel** (Timeline asset > **Tl** section) and Shake, which starts after Ride, replaces it. The package test `ATimelineTickedPlayOnAwakeOnThePlayablesChannelReplacesIt` checks this: one playback, and only the later timeline's values reach the kind. Put timelines that must not overlap (walk and run) on one channel; leave the rest on None. 8.3 has the rest.
+
+### 7.2 Two clips at once on two tracks
+
+Ride has two tracks. **Wave** carries one clip, ticks 30 to 60, height 0.5. From tick 30 Floor and Wave both have a clip, so `Combine` adds them: 1 + 0.5 = 1.5 (ticks 30 and 45 in both runs above). It is the same rule as two timelines: whatever reaches a kind on one tick is combined, whichever track or timeline it came from. Chapter 5's two winds were this case.
+
+### 7.3 Two clips at once on one track: blend, or the first counts
+
+On the Floor track, Top (ticks 90 to 180, height 5) overlaps Ground (ticks 0 to 120, height 1) for ticks 90 to 119. Clips on **one** track are never combined. A clip type that does not implement `IBlend`, like `HeightClip` so far, keeps the **first** clip (the one that starts earlier) until it ends. That is the wait at 1 and the jump to 5 at tick 120 in both runs above.
+
+A clip that implements `IBlend<HeightClip>` **crossfades** instead. This is the whole change, and it is the sample's `Platform.cs`:
+
+```csharp
+using Tl;
+
+namespace ManyAtOnce
+{
+    [TlClip("Many At Once/Height")]
+    public struct HeightClip : IBlend<HeightClip>
+    {
+        public float Height;
+
+        public void Blend(in HeightClip first, in HeightClip second, float factor, out HeightClip result)
+            => result = new HeightClip { Height = first.Height + (second.Height - first.Height) * factor };
+    }
+
+    public struct HeightTrack : ITlTrack<HeightClip>
+    {
+        [Feeds(typeof(HeightKind))]
+        public static float HeightClipToHeightThisTick(in TlFrame<HeightClip> frame)
+            => frame.Clip.Height;
+    }
+
+    [TlKind]
+    public struct HeightKind
+    {
+        public static void Combine(ref float heightFromClipsSoFar, in float heightFromAnotherClip)
+            => heightFromClipsSoFar += heightFromAnotherClip;
+
+        public static void Apply(in float totalHeightThisTick, ref Platform platform)
+            => platform.Height = totalHeightThisTick;
+    }
+
+    [TlState]
+    public partial struct Platform
+    {
+        public float Height;
+    }
+}
+```
+
+Press **Play** again (Shake still ticked):
+
+```
+Many at once: Ride tick 0, platform height 1, playbacks 2
+Many at once: Ride tick 15, platform height 1.25, playbacks 2
+Many at once: Ride tick 30, platform height 1.5, playbacks 1
+Many at once: Ride tick 45, platform height 1.5, playbacks 1
+Many at once: Ride tick 60, platform height 1, playbacks 1
+Many at once: Ride tick 75, platform height 1, playbacks 1
+Many at once: Ride tick 90, platform height 1, playbacks 1
+Many at once: Ride tick 105, platform height 3.0689654, playbacks 1
+Many at once: Ride tick 120, platform height 5, playbacks 1
+Many at once: Ride tick 135, platform height 5, playbacks 1
+Many at once: Ride tick 150, platform height 5, playbacks 1
+Many at once: Ride tick 165, platform height 5, playbacks 1
+```
+
+`Blend` runs only on overlap ticks. It gets the first clip, the second clip and a `factor` that is 0 on the first tick of the overlap and 1 on its last, in equal steps (here 1/29 per tick; a one-tick overlap gets 0.5), and it fills `result` with the clip to use this tick. Tick 105 is 1 + 4 x 15/29 = 3.0689654: the platform rides from 1 to 5 between ticks 90 and 119.
+
+What to know about overlaps on one track:
+
+- **Different tracks add, one track blends or keeps the first.** To stack two effects, put them on separate tracks. To hand one over to the next smoothly, overlap them on one track and give the clip `IBlend`. Tell your designers.
+- The factor is a straight line across the overlap. The ease-in and ease-out curves the Timeline window draws for overlapping clips are not read.
+- **Pulses on one track see the overlap as one long clip:** the first clip's `Start` and the last clip's `End` fire; the second clip's `Start` and the first clip's `End` do not. `IBlend` does not change this (the same pulses fired on .NET before blending existed). Measured in Unity (`TlTimelineTests`) and on .NET (`ClipBlendTests`). If every clip's pulses must fire, put the clips on separate tracks.
+- Blending is the clip's job here because a Timeline-window track carries no data of its own (13).
+
+### 7.4 Which kind runs first: `Order`
 
 `[TlKind(Order = n)]`: lower `n` runs first; ties are sorted by name. This matters when one kind **reads what another wrote**. A track can read any column by listing it as a parameter:
 
@@ -579,7 +768,7 @@ Measured, a wind kind writes `PlayerPush` and a hazard kind reads it (both clips
 
 With the hazard first it always sees last tick's push. Tracks have no order of their own: they only feed their kind.
 
-### 7.3 Your own systems
+### 7.5 Your own systems
 
 Use the usual `[UpdateAfter]`, `[UpdateBefore]`, or `OrderLast` in `TlSimulationGroup` (as in chapter 2).
 
@@ -589,7 +778,7 @@ Use the usual `[UpdateAfter]`, `[UpdateBefore]`, or `OrderLast` in `TlSimulation
 
 ### 8.1 Where the settings live
 
-Select the Timeline **asset**: the Inspector has a **Tl** section with **Channel**, **When it ends** and **Play next**. On the object's **Playable Director** the **Tl** foldout has **Also Plays** (extra timelines this object can start) and lists **Plays**.
+Select the Timeline **asset**: the Inspector has a **Tl** section with **Channel**, **When it ends** and **Play next**. On the object's **Playable Director** the **Tl** foldout has **Also Plays** (extra timelines this object can start; tick **Play On Awake** on a row to start it with the scene, 7.1) and lists **Plays**.
 
 **Unity's own Wrap Mode on the Playable Director is ignored by Tl.** Only Tl's **When it ends** counts. (Stored in a hidden marker named **Tl Settings** at time 0 on the timeline.)
 
@@ -660,7 +849,7 @@ Who bakes what for a Tl object:
 
 | Baker | Runs on | Does |
 |---|---|---|
-| **Tl's director baker** | every Playable Director that has Tl tracks | packs its timelines (and the ones reached by **Play next**, **Also Plays** and `TlTimeline` fields) into the entity, adds the playback and request buffers, and Play On Awake |
+| **Tl's director baker** | every Playable Director that has Tl tracks | packs its timelines (and the ones reached by **Play next**, **Also Plays** and `TlTimeline` fields) into the entity, adds the playback and request buffers, and Play On Awake (the Playable's, then the **Also Plays** rows ticked **Play On Awake**) |
 | **Tl's kind baking system** | after all bakers | adds the column of every kind the entity's timelines reach, **but only if the entity does not already have it** |
 | **Your bakers** | your authoring components | add your own components, starting values, references |
 
@@ -839,7 +1028,9 @@ Things to know:
 
 | You see | Cause | Do this |
 |---|---|---|
-| Two overlapping effects do not add | clips overlap on **one track**; only the first counts | put them on separate tracks (7.1) |
+| Two overlapping effects do not add | clips overlap on **one track**: they blend if the clip implements `IBlend`, else the first counts | put them on separate tracks to add (7.3) |
+| A second timeline does not start on Play | Play On Awake starts only the Playable | tick **Play On Awake** on its **Also Plays** row, or start it from code (7.1) |
+| A clip's Start or End pulse is missing | it overlaps another clip on the same track; the overlap fires only the first Start and the last End | put the clips on separate tracks (7.3) |
 | Rewind keeps adding / drifts | the track's value is not signed | multiply by `frame.Direction` (chapter 10) |
 | Value starts at 0 though you wanted 100 | a `[TlState]` is added with `default` | add your own baker that sets it |
 | Unity's Wrap Mode does nothing | Tl ignores it | use **When it ends** on the Timeline asset (8.1) |
@@ -849,7 +1040,7 @@ Things to know:
 | Object invisible | project is Built-in render pipeline; SubScene objects need URP/HDRP | create the project from **Universal 3D** |
 | Nothing plays | the object with the Playable Director is not inside a **SubScene** | put it in a SubScene |
 | Pulse at clip end fires "early" | `ClipEvent.End` fires on the clip's **last tick** (119 for a clip ending at 120) | account for it |
-| A kind sees last tick's value from another kind | it ran first | set `Order` (7.2) |
+| A kind sees last tick's value from another kind | it ran first | set `Order` (7.4) |
 | Codegen errors in your `IJobEntity` | your namespace starts with `Tl` | name your namespace something else |
 | `OnClipStart` events missed at 2x | Unity event methods run once per step | use `[Pulse]` |
 | .NET: wrong timeline plays | ids follow name order and a timeline was added | keep ids in one place |
@@ -864,7 +1055,8 @@ Things to know:
 
 Honest list. Some of these are design decisions still to be made.
 
-- **No track data.** `ITlTrack` fixes the track settings to "none". Values live on the clip. (The older general `ITrack<TTrack, TClip>` still exists in `Tl.Core`; its Unity support is not covered here.)
+- **No track data.** `ITlTrack` fixes the track settings to "none". Values live on the clip, and so does blending (`IBlend` on the clip, 7.3). (The older general `ITrack<TTrack, TClip>` still exists in `Tl.Core`; its Unity support is not covered here.)
+- **Blending is linear.** The factor is a straight line across the overlap (0.5 for a one-tick overlap); Timeline's ease curves are not read. Pulses on one track treat overlapping clips as one long clip (7.3).
 - **No Unity track bindings.** A clip cannot hold a reference to a scene object. Put the reference on your own authoring component and bake it (the Events demo does).
 - **Names are not fully consistent yet.** Examples: both `TlKindAttribute` and `TimelineKindAttribute` exist; `TlClip`, `TlKind` have the `Tl` prefix but `Pulse`, `Feeds`, `ClipEvent`, `KindMode`, `Events<T>` do not; `Playback` exists in both `Tl` and `Tl.Unity`; scene JSON says `"states"` where the code says `[TlState]` and the hash is `TlStateHash`; Unity's Wrap Mode is ignored while Tl's own setting hides in a marker. A naming review is planned; expect renames before 1.0 with no compatibility aliases.
 - **Per-tick sums come back one tick short** on rewind (chapter 10). Pulses are exact.
@@ -973,7 +1165,9 @@ Kind    [TlKind(Accepts = Spans|Pulses|Both, Mode = Combine|Each, Order = n)]
 Column  [TlState] partial struct in a namespace, starts at 0, added only where a kind reaches it
 Order   per tick: tracks, then kinds (by Order), then your systems (OrderLast)
 Rewind  multiply signed values by frame.Direction; pulses come back exactly
-Stack   overlapping clips on ONE track: first wins; use separate tracks to add
+Stack   clips on different tracks or timelines: Combine adds them
+Blend   clips overlapping on ONE track: MyClip : IBlend<MyClip> crossfades, else the first counts
+Start   Play On Awake starts the Playable; Also Plays rows ticked Play On Awake start with it
 Bake    own starting values: Baker<YourAuthoring> + AddComponent(...); Tl keeps what you added
 ```
 
@@ -981,9 +1175,9 @@ Bake    own starting values: Baker<YourAuthoring> + AddComponent(...); Tl keeps 
 
 1. **Predict.** In Hello Tl, set the second clip's `ComeBack` off. What is x after tick 120? (13.)
 2. **Add a clip.** Write `FadeClip { float Amount }` that feeds a kind `Brightness` writing a `Light` column, so a light fades in over the clip. (Pattern B.)
-3. **Stack it.** Put two Fade clips on two tracks overlapping. What is the brightness during the overlap? (The sum.) Put them on one track. What now? (Only the first.)
+3. **Stack it.** Put two Fade clips on two tracks overlapping. What is the brightness during the overlap? (The sum.) Put them on one track. What now? (Only the first, until it ends.) Now give `FadeClip` an `IBlend<FadeClip>` that lerps `Amount`. What now? (A crossfade from the first to the second, 7.3.)
 4. **Health.** Build chapter 6. Predict the health at tick 100 before you run it.
-5. **Order.** Make a second kind that reads the first kind's column, then swap `Order` and watch it change by one tick (7.2).
+5. **Order.** Make a second kind that reads the first kind's column, then swap `Order` and watch it change by one tick (7.4).
 6. **Rewind.** Press **World rewind** in the Panel on the Inventory demo, then on your own timeline. Then remove `frame.Direction` from your track and watch what changes.
 7. **Take it out of Unity.** Export the library and run the same timeline in a console program with the code from chapter 11. Check the numbers match.
 8. **Prove it.** Write a test that runs 600 steps and asserts the state hash. Run it on both hosts.
@@ -1013,6 +1207,7 @@ curl -sSL https://raw.githubusercontent.com/IAFahim/tl/main/install/unity.sh | b
 | Demo | Shows |
 |---|---|
 | **Hello Tl** | this course's first example. Start here |
+| Many At Once | chapter 7: two timelines and two tracks on one platform, and a crossfade on one track |
 | Force | a push, "there and back", live edit, a follow camera |
 | Events | strikes raising events into gameplay, a dummy that is hurt |
 | Crowd | 10,000 and 100,000 entities, 0 bytes per frame |

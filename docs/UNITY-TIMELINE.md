@@ -30,7 +30,8 @@ the clip Inspector says so.
    object.
 3. The timeline is packed in process (no tool, no file) into one blob: TLB bytes, the per-timeline kind data, the asset id, a content hash,
    the tick rate, the timelines it names and where its `TimelineId` values sit. The same timeline on many objects is one blob.
-4. The entity gets `TlTimelineSet` (the blobs), `Playback`, `TimelineRequest`, `TimelinePlaying`, Play On Awake, the entry buffers of every
+4. The entity gets `TlTimelineSet` (the blobs), `Playback`, `TimelineRequest`, `TimelinePlaying`, Play On Awake (the Playable's, plus the
+   Also Plays timelines ticked **Play On Awake**, started after it in list order), the entry buffers of every
    kind its timelines reach, and every component those kinds write.
 
 At run time `TlTimelineRegisterSystem` assembles one library from all loaded blobs (sorted, so ids never move when a SubScene streams in

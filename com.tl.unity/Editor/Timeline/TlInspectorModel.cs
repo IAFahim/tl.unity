@@ -61,7 +61,10 @@ namespace Tl.Unity.Editor
             if (director.playableAsset is TimelineAsset first)
                 roots.Add(first);
             if (alsoPlays != null)
+            {
                 roots.AddRange(alsoPlays.Timelines);
+                roots.AddRange(alsoPlays.PlayOnAwake);
+            }
             return Closure(roots);
         }
 

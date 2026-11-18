@@ -23,6 +23,11 @@
       "path": "Samples~/HelloTl"
     },
     {
+      "displayName": "Many At Once",
+      "description": "Chapter 7 of the course: a platform plays two timelines at once (Ride, and Shake from Also Plays with Play On Awake), two tracks add their heights, and two overlapping clips on one track crossfade because the clip implements IBlend. Menu Tl Many At Once > Build Scene, then Play. Builder and a PlayMode test.",
+      "path": "Samples~/ManyAtOnce"
+    },
+    {
       "displayName": "Force demo",
       "description": "The Force track from five small files: a cube on a grid floor is pushed 4.03 m along X, pauses, and a Return timeline (Play next) pushes it back, forever, with a follow camera and a readout. Tl > Samples > Build Control Demo adds a cube whose Burst job starts a Dash timeline from a clip field. Includes the scene builders and Play and Edit mode tests.",
       "path": "Samples~/ForceDemo"

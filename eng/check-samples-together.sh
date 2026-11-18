@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # usage: [TL_UNITY_PACKS=1] eng/check-samples-together.sh <URP project that lists com.tl.unity and com.unity.test-framework, without testables>
 # Imports every com.tl.unity sample into the project, builds every demo scene and the hub, runs the PlayMode tests and checks the
-# demo numbers (Force 4.0333 m, Events 15 strikes and health 10, Crowd two rows at 0 B) and that no second timeline library appears.
+# demo numbers (Force 4.0333 m, Events 15 strikes and health 10, Crowd two rows at 0 B, Many At Once height on every tick it saw)
+# and that no second timeline library appears.
 # TL_UNITY_PACKS=1 first adds every pack under external/tl-kinds/packs to the project (the Force pack next to the Force demo's own
 # ForceClip) and also checks the Motion (0 mismatches), Stats and Inventory (final bag, pickups at ticks 420 and 480) demos.
 set -uo pipefail
@@ -46,7 +47,7 @@ public static class TlCheckSamples
 
     public static void Build()
     {
-        var builders = "ForceDemoBuilder|Build;ForceDemoBuilder|BuildControl;EventsDemoBuilder|Build;CrowdDemoBuilder|Build";
+        var builders = "ForceDemoBuilder|Build;ForceDemoBuilder|BuildControl;EventsDemoBuilder|Build;CrowdDemoBuilder|Build;ManyAtOnceBuilder|Build";
         if (Environment.GetEnvironmentVariable("TL_UNITY_PACKS") == "1")
             builders += ";MotionDemoBuilder|Build;StatsDemoBuilder|Build;InventoryDemoBuilder|Build";
         foreach (var name in (builders + ";DemoHubBuilder|Build").Split(';'))
@@ -71,6 +72,7 @@ line="$(grep -o 'TL-DEMO force .*' "$out/play.log" | tail -n 1)"
 moved="$(printf '%s' "$line" | sed -n 's/.* x=\([^ ]*\).*/\1/p')"
 events="$(grep -o 'TL-DEMO events strikes=[0-9]* health=[0-9-]*' "$out/play.log" | tail -n 1)"
 crowd="$(grep -c 'TL-BENCH crowd .*warmB=0 ' "$out/play.log" || true)"
+many="$(grep -o 'TL-DEMO many-at-once .*mismatches=[0-9]*' "$out/play.log" | tail -n 1)"
 clash="$(grep -c 'already has a timeline library' "$out/play.log" || true)"
 run="$(grep -o '<test-run [^>]*>' "$out/play.xml" | head -n 1)"
 failed="$(printf '%s' "$run" | sed -n 's/.* failed="\([0-9]*\)".*/\1/p')"
@@ -83,6 +85,6 @@ if [ "$packs" = 1 ]; then
   extra=" ${motion:-motion=none} ${stats:-stats=none} ${inventory:-inventory=none}"
   printf '%s' "$motion" | grep -q ' mismatches=0$' && [ -n "$stats" ] && [ -n "$inventory" ] || status=1
 fi
-echo "samples packs=$packs imported=$imported built=$built errorCS=$errors forceX=${moved:-none} ${events:-events=none} crowdRowsAt0B=$crowd libraryClash=$clash$extra playmode passed=${passed:-0} failed=${failed:-?}"
-[ "$imported" -ge 6 ] && [ "$built" = 1 ] && [ "$errors" -eq 0 ] && [ "$moved" = 4.0333 ] && [ "$events" = "TL-DEMO events strikes=15 health=10" ] && [ "$crowd" -eq 2 ] && [ "$clash" -eq 0 ] && [ "${failed:-1}" = 0 ] || status=1
+echo "samples packs=$packs imported=$imported built=$built errorCS=$errors forceX=${moved:-none} ${events:-events=none} crowdRowsAt0B=$crowd ${many:-many-at-once=none} libraryClash=$clash$extra playmode passed=${passed:-0} failed=${failed:-?}"
+[ "$imported" -ge 6 ] && [ "$built" = 1 ] && [ "$errors" -eq 0 ] && [ "$moved" = 4.0333 ] && [ "$events" = "TL-DEMO events strikes=15 health=10" ] && [ "$crowd" -eq 2 ] && printf '%s' "$many" | grep -q 'mostPlaying=2 final=5 mismatches=0$' && [ "$clash" -eq 0 ] && [ "${failed:-1}" = 0 ] || status=1
 exit $status

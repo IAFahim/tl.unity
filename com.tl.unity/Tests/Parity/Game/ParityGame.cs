@@ -16,9 +16,12 @@ namespace ParityGame
     }
 
     [TlClip("Parity/Reel")]
-    public struct ReelClip
+    public struct ReelClip : IBlend<ReelClip>
     {
         public int Reel;
+
+        public void Blend(in ReelClip first, in ReelClip second, float factor, out ReelClip result)
+            => result = new ReelClip { Reel = first.Reel + (int)((second.Reel - first.Reel) * factor) };
     }
 
     public struct LineTrack : ITlTrack<LineClip>

@@ -283,7 +283,12 @@ namespace Tl.Gen.Unity
                     W(writer, "if (secondPtr != null)");
                     W(writer, "{");
                     W(writer, consumer.ClipTypeName + " __second = *(" + consumer.ClipTypeName + "*)secondPtr;");
-                    if (consumer.TrackBlendable)
+                    if (consumer.ClipBlendable)
+                    {
+                        W(writer, "static T __Blend<T>(T first, in T second, float factor) where T : unmanaged, global::Tl.IBlend<T> { first.Blend(in first, in second, factor, out var result); return result; }");
+                        W(writer, "clip = __Blend(clip, in __second, blend);");
+                    }
+                    else if (consumer.TrackBlendable)
                         W(writer, "track.Blend(in clip, in __second, blend, out clip);");
                     else
                         W(writer, "throw new global::System.InvalidOperationException(\"" + consumer.ConsumerTypeName.Replace("global::", "") + ": blended window without IBlend.\");");

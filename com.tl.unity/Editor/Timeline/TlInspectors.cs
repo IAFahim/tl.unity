@@ -134,16 +134,52 @@ namespace Tl.Unity.Editor
                 {
                     EditorGUILayout.BeginHorizontal();
                     EditorGUI.BeginChangeCheck();
-                    var picked = (TimelineAsset)EditorGUILayout.ObjectField(also.Timelines[i], typeof(TimelineAsset), false);
+                    var current = also.Timelines[i];
+                    var picked = (TimelineAsset)EditorGUILayout.ObjectField(current, typeof(TimelineAsset), false);
+                    var onAwake = current != null && also.PlayOnAwake.Contains(current);
+                    var playOnAwake = GUILayout.Toggle(onAwake, new GUIContent("Play On Awake", "Start this timeline by itself when the scene loads, next to the Playable."), GUILayout.Width(110));
                     var remove = GUILayout.Button("-", GUILayout.Width(22));
                     EditorGUILayout.EndHorizontal();
                     if (EditorGUI.EndChangeCheck() || remove)
                     {
                         Undo.RecordObject(also, "Also Plays");
+                        var ticked = also.PlayOnAwake.IndexOf(current);
                         if (remove)
+                        {
                             also.Timelines.RemoveAt(i);
+                            if (ticked >= 0)
+                                also.PlayOnAwake.RemoveAt(ticked);
+                        }
                         else
+                        {
                             also.Timelines[i] = picked;
+                            if (playOnAwake && picked != null && ticked >= 0)
+                                also.PlayOnAwake[ticked] = picked;
+                            else if (playOnAwake && picked != null)
+                                also.PlayOnAwake.Add(picked);
+                            else if (ticked >= 0)
+                                also.PlayOnAwake.RemoveAt(ticked);
+                        }
+                        EditorUtility.SetDirty(also);
+                        GUIUtility.ExitGUI();
+                    }
+                }
+                var onlyOnAwake = also == null ? 0 : also.PlayOnAwake.Count;
+                for (var i = 0; i < onlyOnAwake; i++)
+                {
+                    var notListed = also.PlayOnAwake[i];
+                    if (also.Timelines.Contains(notListed))
+                        continue;
+                    EditorGUILayout.BeginHorizontal();
+                    using (new EditorGUI.DisabledScope(true))
+                        EditorGUILayout.ObjectField(notListed, typeof(TimelineAsset), false);
+                    GUILayout.Label(new GUIContent("Play On Awake", "Listed only under Play On Awake; it still starts when the scene loads."), GUILayout.Width(110));
+                    var removeNotListed = GUILayout.Button("-", GUILayout.Width(22));
+                    EditorGUILayout.EndHorizontal();
+                    if (removeNotListed)
+                    {
+                        Undo.RecordObject(also, "Also Plays");
+                        also.PlayOnAwake.RemoveAt(i);
                         EditorUtility.SetDirty(also);
                         GUIUtility.ExitGUI();
                     }

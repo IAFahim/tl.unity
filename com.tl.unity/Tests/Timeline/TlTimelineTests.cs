@@ -249,6 +249,204 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
+        public void TwoOverlappingClipsOfABlendingClipCrossfadeAndAClipWithoutBlendKeepsTheFirst()
+        {
+            var timeline = Timeline("Crossfade");
+            var fade = timeline.CreateTrack<TlTrack>(null, "Fade");
+            fade.Template = new AutoKinds_FadeClip_TlData();
+            var stay = timeline.CreateTrack<TlTrack>(null, "Stay");
+            stay.Template = new AutoKinds_StayClip_TlData();
+            foreach (var (clipStart, clipBrightness) in new[] { (0.5, 10f), (0.75, 100f) })
+            {
+                var fadeClip = fade.CreateClip<TlClip>();
+                fadeClip.start = clipStart;
+                fadeClip.duration = 0.5;
+                ((AutoKinds_FadeClip_TlData)((TlClip)fadeClip.asset).Data).Brightness = clipBrightness;
+                var stayClip = stay.CreateClip<TlClip>();
+                stayClip.start = clipStart;
+                stayClip.duration = 0.5;
+                ((AutoKinds_StayClip_TlData)((TlClip)stayClip.asset).Data).Brightness = clipBrightness;
+            }
+            using var baked = new Baked(Director("Lamp", timeline).gameObject);
+            var entities = baked.World.EntityManager;
+            var lampEntity = baked.Single<TlTimelineSet>();
+            var live = new LiveWorld(baked.World, false, typeof(TlKindSystem<>).MakeGenericType(Type.GetType("Tl.Generated.TlAuto_Tl_Unity_AutoKinds_Jobs, Tl.Unity.AutoKinds", true)));
+            const int ticks = 90;
+            var lamp = new AutoKinds.Lamp[ticks];
+            for (var tick = 0; tick < ticks; tick++)
+            {
+                live.Step(1);
+                lamp[tick] = entities.GetComponentData<AutoKinds.Lamp>(lampEntity);
+            }
+            for (var tick = 30; tick < 45; tick++)
+            {
+                Assert.AreEqual(10f, lamp[tick].Brightness, "tick " + tick + ": only the first clip plays");
+                Assert.AreEqual(10f, lamp[tick].StayingBrightness, "tick " + tick + ": only the first clip plays");
+            }
+            for (var tick = 45; tick < 60; tick++)
+            {
+                Assert.AreEqual(10f + (100f - 10f) * ((tick - 45) / 14f), lamp[tick].Brightness, "tick " + tick + ": the overlap crossfades from the first clip to the second");
+                Assert.AreEqual(10f, lamp[tick].StayingBrightness, "tick " + tick + ": a clip without Blend keeps the first clip in the overlap");
+            }
+            for (var tick = 60; tick < 75; tick++)
+            {
+                Assert.AreEqual(100f, lamp[tick].Brightness, "tick " + tick + ": only the second clip plays");
+                Assert.AreEqual(100f, lamp[tick].StayingBrightness, "tick " + tick + ": only the second clip plays");
+            }
+            for (var tick = 0; tick < ticks; tick++)
+            {
+                Assert.AreEqual(tick >= 30 ? 1 : 0, lamp[tick].Starts, "tick " + tick + ": the overlapping clips fire one Start, the first clip's");
+                Assert.AreEqual(tick >= 74 ? 1 : 0, lamp[tick].Ends, "tick " + tick + ": the overlapping clips fire one End, the second clip's");
+            }
+        }
+
+        TimelineAsset GlowTimeline(string name, float amount)
+        {
+            var timeline = Timeline(name);
+            var track = timeline.CreateTrack<TlTrack>(null, "Glow");
+            track.Template = new AutoKinds_GlowClip_TlData();
+            var clip = track.CreateClip<TlClip>();
+            clip.start = 0;
+            clip.duration = 1;
+            ((AutoKinds_GlowClip_TlData)((TlClip)clip.asset).Data).Amount = amount;
+            return timeline;
+        }
+
+        (float Glow, int Playing) PlayTenTicks(PlayableDirector director)
+        {
+            using var baked = new Baked(director.gameObject);
+            var entities = baked.World.EntityManager;
+            var entity = baked.Single<TlTimelineSet>();
+            var live = new LiveWorld(baked.World, false, typeof(TlKindSystem<>).MakeGenericType(Type.GetType("Tl.Generated.TlAuto_Tl_Unity_AutoKinds_Jobs, Tl.Unity.AutoKinds", true)));
+            live.Step(10);
+            var playing = 0;
+            foreach (var playback in entities.GetBuffer<Playback>(entity))
+                if (playback.Timeline != 0)
+                    playing++;
+            return (entities.GetComponentData<AutoKinds.Glow>(entity).Value, playing);
+        }
+
+        [Test]
+        public void TimelinesTickedPlayOnAwakeInAlsoPlaysStartWithThePlayableAndTheOthersWaitForCode()
+        {
+            var director = Director("Sky", GlowTimeline("Sky", 1f));
+            var also = director.gameObject.AddComponent<TlAlsoPlays>();
+            var flash = GlowTimeline("Flash", 2f);
+            also.Timelines.Add(flash);
+            also.Timelines.Add(GlowTimeline("Thunder", 4f));
+            also.PlayOnAwake.Add(flash);
+            var (glow, playing) = PlayTenTicks(director);
+            Assert.AreEqual(2, playing, "the Playable and Flash play; Thunder waits for code");
+            Assert.AreEqual(10f * (1f + 2f), glow, "both playing timelines feed the kind every tick and Combine adds them");
+        }
+
+        [Test]
+        public void ATimelineTickedPlayOnAwakeOnThePlayablesChannelReplacesIt()
+        {
+            var sky = GlowTimeline("Sky", 1f);
+            var flash = GlowTimeline("Flash", 2f);
+            TlInspectorModel.SetSettings(sky, TlEnd.Stop, null, 1);
+            TlInspectorModel.SetSettings(flash, TlEnd.Stop, null, 1);
+            var director = Director("Sky", sky);
+            var also = director.gameObject.AddComponent<TlAlsoPlays>();
+            also.Timelines.Add(flash);
+            also.PlayOnAwake.Add(flash);
+            var (glow, playing) = PlayTenTicks(director);
+            Assert.AreEqual(1, playing, "one timeline per channel: Flash starts after the Playable and replaces it");
+            Assert.AreEqual(10f * 2f, glow);
+        }
+
+        [Test]
+        public void ADirectorWithoutPlayOnAwakeStillStartsTheTimelinesTickedPlayOnAwakeInAlsoPlays()
+        {
+            var director = Director("Sky", GlowTimeline("Sky", 1f));
+            director.playOnAwake = false;
+            var also = director.gameObject.AddComponent<TlAlsoPlays>();
+            var flash = GlowTimeline("Flash", 2f);
+            also.PlayOnAwake.Add(flash);
+            var (glow, playing) = PlayTenTicks(director);
+            Assert.AreEqual(1, playing);
+            Assert.AreEqual(10f * 2f, glow);
+        }
+
+        (List<(ushort Timeline, ushort At)> Starts, ushort[] SetIds) StartsQueuedAtLoad(PlayableDirector director)
+        {
+            using var baked = new Baked(director.gameObject);
+            var world = baked.World;
+            world.CreateSystem<TlLibrarySystem>().Update(world.Unmanaged);
+            world.CreateSystem<TlTimelineRegisterSystem>().Update(world.Unmanaged);
+            world.CreateSystem<TlPlayOnAwakeSystem>().Update(world.Unmanaged);
+            var entities = world.EntityManager;
+            var entity = baked.Single<TlTimelineSet>();
+            var starts = new List<(ushort Timeline, ushort At)>();
+            foreach (var request in entities.GetBuffer<TimelineRequest>(entity))
+            {
+                Assert.AreEqual(RequestOp.Start, request.Op);
+                starts.Add((request.Timeline, request.At));
+            }
+            var set = entities.GetBuffer<TlTimelineSet>(entity);
+            var ids = new ushort[set.Length];
+            for (var i = 0; i < ids.Length; i++)
+                ids[i] = set[i].Id;
+            return (starts, ids);
+        }
+
+        [Test]
+        public void AlsoPlaysTimelinesTickedPlayOnAwakeStartInAlsoPlaysOrderWhateverOrderTheyWereTicked()
+        {
+            var director = Director("Sky", GlowTimeline("Sky", 1f));
+            var also = director.gameObject.AddComponent<TlAlsoPlays>();
+            var flash = GlowTimeline("Flash", 2f);
+            var thunder = GlowTimeline("Thunder", 4f);
+            also.Timelines.Add(flash);
+            also.Timelines.Add(thunder);
+            also.PlayOnAwake.Add(thunder);
+            also.PlayOnAwake.Add(flash);
+            var (starts, ids) = StartsQueuedAtLoad(director);
+            CollectionAssert.AreEqual(new[] { ids[0], ids[1], ids[2] }, starts.ConvertAll(start => start.Timeline), "the Playable, then Flash and Thunder in Also Plays order");
+            CollectionAssert.AreEqual(new ushort[] { 0, 0, 0 }, starts.ConvertAll(start => start.At));
+        }
+
+        [Test]
+        public void ThePlayableTickedPlayOnAwakeInAlsoPlaysStartsAtTheDirectorsInitialTimeLikeTheDirectorsOwnPlayOnAwake()
+        {
+            var sky = GlowTimeline("Sky", 1f);
+            var byDirector = Director("ByDirector", sky);
+            byDirector.initialTime = 0.5;
+            var byAlsoPlays = Director("ByAlsoPlays", sky);
+            byAlsoPlays.initialTime = 0.5;
+            byAlsoPlays.playOnAwake = false;
+            var also = byAlsoPlays.gameObject.AddComponent<TlAlsoPlays>();
+            also.Timelines.Add(sky);
+            also.PlayOnAwake.Add(sky);
+            var (directorStarts, _) = StartsQueuedAtLoad(byDirector);
+            var (alsoStarts, _) = StartsQueuedAtLoad(byAlsoPlays);
+            CollectionAssert.AreEqual(new ushort[] { 30 }, directorStarts.ConvertAll(start => start.At));
+            CollectionAssert.AreEqual(directorStarts, alsoStarts, "one start of the Playable at Initial Time, not a second start at tick 0");
+        }
+
+        [Test]
+        public void ThePreviewFollowsOnlyTheDirectorsOwnTimeline()
+        {
+            var sky = GlowTimeline("Sky", 1f);
+            sky.GetOutputTracks().OfType<TlTrack>().Single().GetClips().Single().duration = 2;
+            var flash = GlowTimeline("Flash", 2f);
+            flash.GetOutputTracks().OfType<TlTrack>().Single().GetClips().Single().duration = 0.25;
+            var stacked = Director("Stacked", sky);
+            var stackedAlso = stacked.gameObject.AddComponent<TlAlsoPlays>();
+            stackedAlso.Timelines.Add(flash);
+            stackedAlso.PlayOnAwake.Add(flash);
+            Assert.AreEqual(60u, TlPreview.Evaluate(stacked, 1.0).Tick, "the preview keeps following the Playable after Flash ends");
+            var notPlaying = Director("NotPlaying", sky);
+            notPlaying.playOnAwake = false;
+            var notPlayingAlso = notPlaying.gameObject.AddComponent<TlAlsoPlays>();
+            notPlayingAlso.Timelines.Add(flash);
+            notPlayingAlso.PlayOnAwake.Add(flash);
+            Assert.AreEqual(0u, TlPreview.Evaluate(notPlaying, 1.0).Tick, "the Playable never starts, so there is nothing to follow; Flash is not followed");
+            TlPreview.Clear();
+        }
+
+        [Test]
         public void ADirectorWithoutTlTracksBakesNothingOfTl()
         {
             var timeline = Timeline("Plain");
