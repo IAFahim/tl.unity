@@ -109,47 +109,6 @@ namespace Tl.Unity
         }
     }
 
-    public struct KindTickStamp
-    {
-        public uint Version;
-        public ulong Index;
-    }
-
-    public static unsafe class KindEntryCache
-    {
-        public const byte Valid = 1;
-        public const byte Plain = 2;
-        public const byte Reverse = 4;
-        public const byte Paused = 8;
-        public const int MinStride = 12;
-        public const int StepStride = 16;
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static byte Bits(global::Tl.KindEntry* entry) => *((byte*)entry + 10);
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ushort Tick(global::Tl.KindEntry* entry, ushort clock, byte bits)
-        {
-            var stored = *(ushort*)((byte*)entry + 8);
-            if ((bits & Plain) == 0) return stored;
-            return (bits & Reverse) != 0 ? (ushort)(stored - clock) : (ushort)(stored + clock);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Write(global::Tl.KindEntry* entry, global::Tl.Playback* slot)
-        {
-            var bits = Valid;
-            if (global::Tl.SlotWord.PlainMask(*(ulong*)slot) != 0) bits |= Plain;
-            if ((slot->Flags & global::Tl.PlaybackFlags.Reverse) != 0) bits |= Reverse;
-            if ((slot->Flags & global::Tl.PlaybackFlags.Paused) != 0) bits |= Paused;
-            *(ushort*)((byte*)entry + 8) = slot->Tick;
-            *((byte*)entry + 10) = bits;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool Cacheable(global::Tl.KindEntry* entry) => entry->Timeline != 0 && entry->Owner == 0 && (entry->Flags & global::Tl.KindEntryFlags.Sample) == 0;
-    }
-
     public static unsafe class TimelineTicks
     {
         public const ushort Inert = 0x8000;

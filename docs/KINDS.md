@@ -33,13 +33,19 @@ A kind is named by its type name (`Damage`). New code writes `[TlKind]`; the tes
 Each step runs `TimelineKindTickSystem` first, then the kind loops inside each
 system (`Movement` runs Locomotion, Lift, StatChange; `Vitals` runs Damage):
 
-1. `Tick`: apply start/stop requests, advance playback ticks, maintain span
-   entries (span start/end from boundaries, marker pulses), merge queued game
-   pulses in a deterministic order, handle end/next/hold/finish, maintain the
-   `Active`/`Enabled` row state.
-2. Kind loops: one loop per kind per chunk over that kind's entry buffer.
-   Rows whose kind row is disabled (`Enabled` off, or `Active` off) contribute
-   nothing but keep their entries.
+1. `Tick`: apply start/stop requests, advance playback ticks, append pulse
+   entries (clip start, clip end, marker, synthetic and interrupted pulses),
+   merge queued game pulses in a deterministic order, handle
+   end/next/hold/finish, write each row's rated copy count
+   (`TimelinePlaying.Copies`), maintain the `Active`/`Enabled` row state.
+2. Kind loops: one loop per kind per chunk. A row's live spans are not stored
+   on the row: the loop walks its playback slots (a rated playback's
+   per-crossing copies by substep) and evaluates the spans that
+   `KindIndex.Score` lists for each slot's (timeline, tick), then the pulses and
+   ready values in that kind's entry buffer. A kind's `Active` bit means "lists
+   spans or holds entries"; rows are visited when `Active` or playing and
+   `Enabled`. Rows whose kind row is disabled contribute nothing but keep their
+   entries.
 3. `Apply`: each kind writes its owner's data (`Motion`, `Health`, `Stamina`).
 
 Every Tl system on the step path (`TimelineRequestSystem`,
@@ -139,12 +145,12 @@ built once per library bind). Results are byte-identical to the full rules on ev
 A row with `TimelineHorizon`, `TimelineClock` and a `PlaybackDue` buffer in its archetype is stepped lazily: the kind tick only touches the slots that change this tick. Opt in per entity; rows without the two extra types are unchanged.
 
 - Each ordinary slot (a timeline, Rate 0, no flag but Reverse) stores `tick - clock` (`tick + clock` when Reverse is set), where `clock` is the row's `TimelineClock.Value`. The tick job moves the clock by the world direction every tick, so a calm slot's bytes never change. The stored bytes do not depend on the world direction, so reversing time needs no re-encoding. Every other slot stores its real tick.
-- `PlaybackDue` holds, per slot, the tick on which it must really be stepped: the next kind event or timeline boundary from `KindIndex.Calm`, every tick for a slot that is not ordinary, never for a paused or ended one. `TimelineHorizon.Steps` is the number of ticks until the row's next due slot; a row with nothing due only moves its clock. A due row finds its due slots with a SIMD scan of `PlaybackDue` (AVX2 or SSE2, scalar elsewhere) and steps them with `KindRules.TickSlot` in slot order, so kind entries are appended in the same order as the full rules. A row with a rated slot runs the full rules for the whole row.
-- Kind entry cache: a span entry of a lazy row keeps a copy of its slot in the 4 value bytes spans never use (bytes 8 to 11: the stored tick and Valid, Plain, Reverse and Paused bits, `KindEntryCache`). The tick job rewrites it whenever a due slot's bytes change, an entry is added, a request is applied or the chunk was written from outside, and clears it when the row leaves lazy mode. A generated kind job uses it only when the chunk's `Playback` change version equals the version of this frame's tick job (`KindIndex.TickStamp`, per world: the tick's system version and the identity of the index it ran with); then it computes the tick without touching the slot, otherwise it reads the slot. An entry of at least 16 B also keeps, in bytes 12 to 15, the position (plus one) of its clip's library step in `KindIndex.WindowSteps`, a contiguous copy of every single-stage step, resolved once when the cache is written (`KindIndex.StepOfEntry`, `PackedStep`); a multi-stage window stores 0 and keeps the per-frame lookup, and publishing a library (any new `TimelineLibrary` value) or a library change makes every lazy row rewrite its caches on the next tick, and kind jobs ignore caches until then. A system that writes `Playback` after the tick system is therefore seen at once. One case is not: an `EntityManager` write made between two hand-driven system updates with no system update in between gets the tick system's version, so the kind jobs read the old cache until the next tick.
+- `PlaybackDue` holds, per slot, the tick on which it must really be stepped: the next kind event or timeline boundary from `KindIndex.Calm`, every tick for a slot that is not ordinary, never for a paused or ended one. `TimelineHorizon.Steps` is the number of ticks until the row's next due slot; a row with nothing due only moves its clock. A due row finds its due slots with a SIMD scan of `PlaybackDue` (AVX2 or SSE2, scalar elsewhere) and steps them with `KindRules.TickSlot` in slot order, so pulse entries are appended in the same order as the full rules. A row with a rated slot runs the full rules for the whole row.
+- Span reads: a generated kind or feed job reads each slot's real tick with `TimelineTicks.Real(slot, clock)` and looks its live spans up in `KindIndex.Score`. No per-entry copy of the slot is kept (the earlier `KindEntryCache`, `KindIndex.TickStamp` and `WindowSteps` were removed with IAFahim/tl#652, when spans left the entry buffers), so a decoded `Playback` write by any system is seen by the next kind job. A rated row keeps its per-crossing copies past the `Playback` buffer's length (`TimelinePlaying.Copies` counts them), so change a rated row's playbacks only through `TimelineRequest`: adding or removing elements between the tick and the kind systems shifts those copies (generated jobs skip copies that would lie past the buffer's capacity).
 - Reading a tick: `TimelineTicks.Real(in playback, clock)` (or the pointer overload) returns the real tick for any slot; generated kind and feed jobs, `TlPanel` and the library swap do this already. Code that reads `Playback.Tick` of a lazy row directly sees the stored value.
 - Writing: change playbacks through `TimelineRequest`/`TlRequests`. A system that writes `Playback` of a lazy row itself must decode with `TimelineTicks.Decode` and encode again with `TimelineTicks.Encode` using the row clock; the write marks the chunk changed, which makes every slot of the chunk due on the next tick.
 - `TimelineGlide { Limit = 0 }` or removing `TimelineHorizon` turns a row eager again: the tick job decodes its slots and sets its clock to 0, which makes the stored and real ticks equal.
-- Memory: 2 B per slot (`PlaybackDue`, 4 inline in the chunk) and 2 B per row. The entry cache uses bytes every kind entry already has (an entry is at least 12 B).
+- Memory: 2 B per slot (`PlaybackDue`, 4 inline in the chunk) and 2 B per row.
 - Measured (Unity 7000.0.0a16, Burst, 11 workers, safety checks off, `OwnerScaleBench`: 1,000 looping kind timelines with one clip each, median of 128 steps), tick job in ms, eager against lazy: 10,000 x 40 rows x playbacks 0.31 -> 0.16 (duration 120), 0.27 -> 0.06 (600), 0.27 -> 0.04 (3000); 20,000 x 100 1.28 -> 0.94, 1.17 -> 0.35, 1.27 -> 0.13; 20,000 x 200 2.46 -> 1.71, 2.42 -> 0.72, 2.60 -> 0.26. The whole timeline frame (tick plus generated kind jobs) gains 1.1x to 2.4x: the generated kind jobs are unchanged, and at duration 120 most of the tick's remaining time is the kind events themselves (span begins and ends, pulses), which both paths must do.
 
 ## Kind Report

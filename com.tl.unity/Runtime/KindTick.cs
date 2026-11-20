@@ -33,8 +33,6 @@ namespace Tl.Unity
         public int HorizonLimit;
         public bool ForgetHorizons;
         public ushort Now;
-        public uint TickVersion;
-        public ulong TickIndex;
 
         [BurstDiscard]
         static void CountManagedRun(int* counters) => System.Threading.Interlocked.Increment(ref counters[KindCounter.ManagedRuns]);
@@ -42,11 +40,6 @@ namespace Tl.Unity
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
         {
             CountManagedRun(Counters);
-            if (Index.TickStamp != null && (Index.TickStamp->Version != TickVersion || Index.TickStamp->Index != TickIndex))
-            {
-                Index.TickStamp->Version = TickVersion;
-                Index.TickStamp->Index = TickIndex;
-            }
             var count = chunk.Count;
             byte* horizons = null;
             ushort* clocks = null;
@@ -75,10 +68,7 @@ namespace Tl.Unity
                     {
                         var all = chunk.GetBufferAccessor(ref PlaybackHandle);
                         for (var row = 0; row < count; row++)
-                        {
                             DueNow(dues[row], all[row].Length);
-                            ctx.Refresh(row, (global::Tl.Playback*)all[row].GetUnsafePtr(), null, ulong.MaxValue);
-                        }
                     }
                 }
             }
@@ -87,11 +77,7 @@ namespace Tl.Unity
                 var all = chunk.GetBufferAccessor(ref PlaybackHandle);
                 for (var row = 0; row < count; row++)
                 {
-                    if (dues[row].Length != 0)
-                    {
-                        ctx.Forget(row);
-                        dues[row].Clear();
-                    }
+                    if (dues[row].Length != 0) dues[row].Clear();
                     if (clocks[row] == 0) continue;
                     TimelineTicks.Decode((global::Tl.Playback*)all[row].GetUnsafePtr(), all[row].Length, clocks[row]);
                     clocks[row] = 0;
@@ -106,6 +92,7 @@ namespace Tl.Unity
             }
             var playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
             ctx.Playbacks = playbacks;
+            ctx.Copies = (TimelinePlaying*)chunk.GetRequiredComponentDataPtrRW(ref PlayingHandle);
             if (requested)
             {
                 var requests = chunk.GetBufferAccessor(ref RequestHandle);
@@ -123,7 +110,6 @@ namespace Tl.Unity
                     {
                         TimelineTicks.Encode((global::Tl.Playback*)playbacks[row].GetUnsafePtr(), playbacks[row].Length, clocks[row]);
                         DueNow(dues[row], playbacks[row].Length);
-                        ctx.Refresh(row, (global::Tl.Playback*)playbacks[row].GetUnsafePtr(), null, ulong.MaxValue);
                     }
                     ctx.SetPlaying(ref PlayingHandle, row, true);
                 }
@@ -142,6 +128,7 @@ namespace Tl.Unity
                         var row = (kw << 6) + (int)global::Unity.Mathematics.math.tzcnt(kb);
                         kb &= kb - 1;
                         if (row >= count) break;
+                        ctx.Sampled(row, 0);
                         if (clocks != null)
                         {
                             if (horizons[row] != 0)
@@ -196,8 +183,6 @@ namespace Tl.Unity
                     clocks[row] = 0;
                 }
             }
-            for (var row = 0; row < count; row++)
-                ctx.Forget(row);
         }
 
         void DueNow(DynamicBuffer<PlaybackDue> dues, int length)
@@ -235,39 +220,23 @@ namespace Tl.Unity
                     d[i] = TimelineTicks.Due(pb + i, in tables, in Index.Calm, reverse, now);
                     TimelineTicks.Encode(pb + i, after);
                 }
-                ctx.Refresh(row, pb, null, ulong.MaxValue);
                 horizon = 0;
                 return live;
             }
-            var changed = stackalloc ulong[4];
-            changed[0] = 0;
-            changed[1] = 0;
-            changed[2] = 0;
-            changed[3] = 0;
-            var touched = false;
-            ctx.AppendedKinds = 0;
             for (var k = 0; k < held; k++)
             {
                 var i = hits[k];
                 var s = pb + i;
-                var word = *(ulong*)s;
                 TimelineTicks.Decode(s, before);
                 live |= global::Tl.KindRules.TickSlot(in tables, ref ctx, row, i, s, StepDir);
                 var due = TimelineTicks.Due(s, in tables, in Index.Calm, reverse, now);
                 TimelineTicks.Encode(s, after);
                 d[i] = due;
-                if (*(ulong*)s != word)
-                {
-                    changed[i >> 6] |= 1ul << (i & 63);
-                    touched = true;
-                }
                 if ((due & TimelineTicks.Inert) != 0) continue;
                 live = true;
                 var distance = (due - now) & TimelineTicks.Mask;
                 if (distance < near) near = distance;
             }
-            if (touched) ctx.Refresh(row, pb, changed, ulong.MaxValue);
-            else if (ctx.AppendedKinds != 0) ctx.Refresh(row, pb, changed, ctx.AppendedKinds);
             var limit = HorizonLimit < global::Tl.Horizon.Max ? HorizonLimit : global::Tl.Horizon.Max;
             horizon = (byte)(near - 1 < limit ? near - 1 : limit);
             return live;
@@ -339,7 +308,6 @@ namespace Tl.Unity
         public int* Counters;
         public ulong Reach;
         public ulong Taken;
-        public ulong AppendedKinds;
         public EnabledMask* Masks;
         public ulong Masked;
         public EnabledMask Playing;
@@ -416,49 +384,8 @@ namespace Tl.Unity
             buffer->ResizeUninitialized(row, length + 1);
             var entry = (byte*)buffer->GetUnsafePtr(row) + (long)length * stride;
             UnsafeUtility.MemClear(entry, stride);
-            AppendedKinds |= 1ul << kind;
             if (length == 0) SetActive(row, kind, true);
             return (global::Tl.KindEntry*)entry;
-        }
-
-        public void Refresh(int row, global::Tl.Playback* slots, ulong* changed, ulong kinds)
-        {
-            for (var kind = 0; kind < Index.KindCount; kind++)
-            {
-                if ((Reach & kinds & (1ul << kind)) == 0) continue;
-                var stride = Index.EntryStride[kind];
-                if (stride < KindEntryCache.MinStride) continue;
-                var buffer = Buffer(kind);
-                var length = buffer->GetBufferLength(row);
-                if (length == 0) continue;
-                var data = (byte*)buffer->GetUnsafePtr(row);
-                for (var i = 0; i < length; i++)
-                {
-                    var e = (global::Tl.KindEntry*)(data + (long)i * stride);
-                    if (!KindEntryCache.Cacheable(e)) continue;
-                    if (changed != null && (KindEntryCache.Bits(e) & KindEntryCache.Valid) != 0 && (changed[e->Slot >> 6] & (1ul << (e->Slot & 63))) == 0) continue;
-                    KindEntryCache.Write(e, slots + e->Slot);
-                    if (stride >= KindEntryCache.StepStride) *(uint*)((byte*)e + 12) = Index.PackedStep(e->Timeline, e->Step);
-                }
-            }
-        }
-
-        public void Forget(int row)
-        {
-            for (var kind = 0; kind < Index.KindCount; kind++)
-            {
-                if ((Reach & (1ul << kind)) == 0) continue;
-                var stride = Index.EntryStride[kind];
-                if (stride < KindEntryCache.MinStride) continue;
-                var buffer = Buffer(kind);
-                var length = buffer->GetBufferLength(row);
-                var data = (byte*)buffer->GetUnsafePtr(row);
-                for (var i = 0; i < length; i++)
-                {
-                    var e = (global::Tl.KindEntry*)(data + (long)i * stride);
-                    if (KindEntryCache.Cacheable(e)) *((byte*)e + 10) = 0;
-                }
-            }
         }
 
         public void Purge(int row, byte slot, ushort timeline)
@@ -498,97 +425,11 @@ namespace Tl.Unity
             return (global::Tl.Playback*)buffer.GetUnsafePtr();
         }
 
-        public void Sample(int row, byte slot, byte sample)
-        {
-            for (var kind = 0; kind < Index.KindCount; kind++)
-            {
-                if ((Reach & (1ul << kind)) == 0) continue;
-                var stride = Index.EntryStride[kind];
-                var buffer = Buffer(kind);
-                var length = buffer->GetBufferLength(row);
-                if (length == 0) continue;
-                var data = (byte*)buffer->GetUnsafePtr(row);
-                var add = 0;
-                for (var i = 0; i < length; i++)
-                {
-                    var e = (global::Tl.KindEntry*)(data + (long)i * stride);
-                    if ((e->Flags & global::Tl.KindEntryFlags.Sample) == 0 && e->Slot == slot && e->Timeline != 0) add++;
-                }
-                if (add == 0) continue;
-                buffer->ResizeUninitialized(row, length + add);
-                data = (byte*)buffer->GetUnsafePtr(row);
-                UnsafeUtility.MemMove(data + (long)add * stride, data, (long)length * stride);
-                var w = 0;
-                var pulses = 0;
-                for (var i = 0; i < length; i++)
-                {
-                    var e = (global::Tl.KindEntry*)(data + (long)(add + i) * stride);
-                    if ((e->Flags & global::Tl.KindEntryFlags.Sample) != 0 || e->Slot != slot || e->Timeline == 0) continue;
-                    var copy = (global::Tl.KindEntry*)(data + (long)w++ * stride);
-                    UnsafeUtility.MemCpy(copy, e, stride);
-                    copy->Slot = sample;
-                    copy->Flags = (copy->Flags | global::Tl.KindEntryFlags.Pulse | global::Tl.KindEntryFlags.Sample) & ~global::Tl.KindEntryFlags.Ready;
-                    if ((e->Flags & global::Tl.KindEntryFlags.Pulse) != 0)
-                    {
-                        e->Flags = (global::Tl.KindEntryFlags)0xff;
-                        pulses++;
-                    }
-                }
-                if (pulses == 0) continue;
-                var total = length + add;
-                var kept = add;
-                for (var i = add; i < total; i++)
-                {
-                    var e = (global::Tl.KindEntry*)(data + (long)i * stride);
-                    if (e->Flags == (global::Tl.KindEntryFlags)0xff) continue;
-                    if (kept != i) UnsafeUtility.MemCpy(data + (long)kept * stride, e, stride);
-                    kept++;
-                }
-                buffer->ResizeUninitialized(row, kept);
-            }
-        }
+        public TimelinePlaying* Copies;
 
-        public void Unsample(int row)
+        public void Sampled(int row, int samples)
         {
-            for (var kind = 0; kind < Index.KindCount; kind++)
-            {
-                if ((Reach & (1ul << kind)) == 0) continue;
-                var stride = Index.EntryStride[kind];
-                var buffer = Buffer(kind);
-                var length = buffer->GetBufferLength(row);
-                if (length == 0) continue;
-                var data = (byte*)buffer->GetUnsafePtr(row);
-                var kept = 0;
-                for (var i = 0; i < length; i++)
-                {
-                    var e = (global::Tl.KindEntry*)(data + (long)i * stride);
-                    if ((e->Flags & global::Tl.KindEntryFlags.Sample) != 0) continue;
-                    if (kept != i) UnsafeUtility.MemCpy(data + (long)kept * stride, e, stride);
-                    kept++;
-                }
-                if (kept == length) continue;
-                buffer->ResizeUninitialized(row, kept);
-                if (kept == 0) SetActive(row, kind, false);
-            }
-        }
-
-        public void RemoveSpan(int row, int kind, byte slot, ushort timeline, ushort step)
-        {
-            if ((Reach & (1ul << kind)) == 0) return;
-            var stride = Index.EntryStride[kind];
-            var buffer = Buffer(kind);
-            var length = buffer->GetBufferLength(row);
-            var data = (byte*)buffer->GetUnsafePtr(row);
-            for (var i = 0; i < length; i++)
-            {
-                var e = (global::Tl.KindEntry*)(data + (long)i * stride);
-                if ((e->Flags & global::Tl.KindEntryFlags.Span) == 0 || e->Slot != slot || e->Timeline != timeline || e->Step != step) continue;
-                var tail = (length - i - 1) * stride;
-                if (tail > 0) UnsafeUtility.MemMove(data + (long)i * stride, data + (long)(i + 1) * stride, tail);
-                buffer->ResizeUninitialized(row, length - 1);
-                if (length == 1) SetActive(row, kind, false);
-                return;
-            }
+            if (Copies != null) Copies[row].Copies = (byte)samples;
         }
     }
 }

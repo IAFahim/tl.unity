@@ -85,6 +85,9 @@ public sealed unsafe class KindStore : IDisposable
     int _windowTotal;
     KindTables _t;
     Rows _kindRows;
+    KindScore _score;
+    byte* _samples;
+    ulong** _listed;
     readonly Dictionary<(string, int), (nint Routes, int Part)> _joined = new();
     readonly HashSet<string> _feeding = new(StringComparer.Ordinal);
     readonly object _joinGate = new();
@@ -221,7 +224,24 @@ public sealed unsafe class KindStore : IDisposable
 
     public KindTable* Table(int kind) => (uint)kind < (uint)_kindCount ? _tables[kind] : null;
 
+    public KindScore Score => _score;
+
+    public ulong* Playing => _players.PlayingBits;
+
+    public int SamplesOf(int entity) => _samples[entity];
+
+    public ulong* ListedOf(int kind) => _listed[kind];
+
+    public bool RowsAreEntities(int kind) => _tables[kind] != null && _tables[kind]->Rows == _players.EntityCapacity;
+
     public static int TrailingZeros(ulong value) => Tz(value);
+
+    struct Steps : IKindSteps
+    {
+        public KindStore Store;
+
+        public LibraryStep* StepOf(ushort timeline, int window, ushort tick) => Store.StepOf(timeline, window, tick);
+    }
 
     public LibraryStep* StepOf(ushort timeline, int window, ushort tick)
     {
@@ -304,25 +324,6 @@ public sealed unsafe class KindStore : IDisposable
         return _rows[_offset[entity] + Pop(mask & ((1ul << kind) - 1))];
     }
 
-    internal void ClearPulses()
-    {
-        for (var k = 0; k < _kindCount; k++)
-        {
-            _queues[k].Count = 0;
-            var t = _tables[k];
-            if (t == null || _owner[k] != k) continue;
-            for (var w = 0; w < t->Words; w++)
-            {
-                var bits = t->Active[w];
-                while (bits != 0)
-                {
-                    t->RemovePulses((w << 6) + Tz(bits));
-                    bits &= bits - 1;
-                }
-            }
-        }
-    }
-
     internal void ValidateStart(int entity, ushort timeline)
     {
         if (Unreachable(entity, timeline) is { } bad) throw bad;
@@ -341,10 +342,15 @@ public sealed unsafe class KindStore : IDisposable
 
     internal void ResetEntity(int entity)
     {
+        _samples[entity] = 0;
         for (var k = 0; k < _kindCount; k++)
         {
             var row = RowOf(entity, k);
-            if (row >= 0 && _tables[k] != null) _tables[k]->Clear(row);
+            if (row >= 0 && _tables[k] != null)
+            {
+                _tables[k]->Clear(row);
+                _listed[k][row >> 6] &= ~(1ul << (row & 63));
+            }
             var q = _queues + k;
             var kept = 0;
             for (var n = 0; n < q->Count; n++)
@@ -386,8 +392,9 @@ public sealed unsafe class KindStore : IDisposable
             return entry;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void RemoveSpan(int entity, int kind, byte slot, ushort timeline, ushort step) => Tables[kind]->RemoveSpan(RowOf(entity, kind), slot, timeline, step, kind);
+        public byte* Samples;
+
+        public void Sampled(int entity, int samples) => Samples[entity] = (byte)samples;
 
         public void Purge(int entity, byte slot, ushort timeline)
         {
@@ -403,38 +410,6 @@ public sealed unsafe class KindStore : IDisposable
         public PlaybackTable Players;
 
         public Playback* Reserve(int entity, int used, int length) => Players.Reserve(entity, length, used);
-
-        public void Sample(int entity, byte slot, byte sample)
-        {
-            var kinds = Mask[entity];
-            while (kinds != 0)
-            {
-                var kind = Tz(kinds);
-                kinds &= kinds - 1;
-                if (!Repeat(entity, kind)) Tables[kind]->Sample(RowOf(entity, kind), slot, sample);
-            }
-        }
-
-        bool Repeat(int entity, int kind)
-        {
-            var table = Tables[kind];
-            if (!table->Grouped) return false;
-            var prior = Mask[entity] & ((1ul << kind) - 1);
-            for (; prior != 0; prior &= prior - 1)
-                if (Tables[Tz(prior)] == table) return true;
-            return false;
-        }
-
-        public void Unsample(int entity)
-        {
-            var kinds = Mask[entity];
-            while (kinds != 0)
-            {
-                var kind = Tz(kinds);
-                kinds &= kinds - 1;
-                Tables[kind]->Unsample(RowOf(entity, kind));
-            }
-        }
     }
 
     internal void Sync()
@@ -631,7 +606,7 @@ public sealed unsafe class KindStore : IDisposable
                 member++;
             }
             var grouped = row.GroupNameLength != 0;
-            var table = KindTable.Create(o, new ReadOnlySpan<int>(members, count), (int)(grouped ? row.GroupCapacity : row.Capacity), grouped ? 12 + (int)((largest + 3u) & ~3u) : 8 + (int)((row.ValueBytes + 3u) & ~3u), grouped);
+            var table = KindTable.Create(o, new ReadOnlySpan<int>(members, count), grouped ? (int)row.GroupCapacity : row.Accepts == (byte)KindEntries.Spans ? 0 : (int)row.Capacity, grouped ? 12 + (int)((largest + 3u) & ~3u) : 8 + (int)((row.ValueBytes + 3u) & ~3u), grouped);
             NativeMemory.AlignedFree(members);
             for (var k = o; k < _kindCount; k++)
                 if (_owner[k] == o) _tables[k] = table;
@@ -662,7 +637,12 @@ public sealed unsafe class KindStore : IDisposable
         _pairs = (uint*)Zeroed((nuint)Math.Max(1, pairs.Count) * 4);
         for (var n = 0; n < pairs.Count; n++) _pairs[n] = pairs[n];
         _t = new KindTables { Timelines = _tls, TimelineCount = _timelineCount, Sec = _sec, KindCount = _kindCount, Closure = _closure, Pairs = _pairs, PairStart = _pairStart };
-        _kindRows = new Rows { Tables = _tables, Mask = _mask, Offset = _offset, Row = _rows, Players = _players };
+        var steps = new Steps { Store = this };
+        _score = KindScore.Build(in _t, ref steps);
+        _samples = (byte*)Zeroed((nuint)entities);
+        _listed = (ulong**)Zeroed((nuint)Math.Max(1, _kindCount) * (nuint)sizeof(nint));
+        for (var k = 0; k < _kindCount; k++) _listed[k] = (ulong*)Zeroed((nuint)(_tables[k] == null ? 1 : _tables[k]->Words) * 8);
+        _kindRows = new Rows { Tables = _tables, Mask = _mask, Offset = _offset, Row = _rows, Players = _players, Samples = _samples };
     }
 
     void BuildSteps()
@@ -714,7 +694,7 @@ public sealed unsafe class KindStore : IDisposable
         else Buffer.MemoryCopy(from, to, bytes, bytes);
     }
 
-    static void* Zeroed(nuint bytes)
+    internal static void* Zeroed(nuint bytes)
     {
         var p = NativeMemory.AlignedAlloc(bytes == 0 ? 1 : bytes, 64);
         NativeMemory.Clear(p, bytes);
@@ -734,8 +714,13 @@ public sealed unsafe class KindStore : IDisposable
         for (var r = 0; r < _routes.Length; r++) if (_routes[r] != null) NativeMemory.AlignedFree(_routes[r]);
         _routes = new ushort*[0];
         _parts = Array.Empty<List<int>?>();
-        foreach (var block in new void*[] { _tables, _queues, _mask, _offset, _rows, _closure, _pairs, _pairStart, _windowBase, _windows })
+        _score.Free();
+        if (_listed != null)
+            for (var k = 0; k < _kindCount; k++) NativeMemory.AlignedFree(_listed[k]);
+        foreach (var block in new void*[] { _tables, _queues, _mask, _offset, _rows, _closure, _pairs, _pairStart, _windowBase, _windows, _samples, _listed })
             if (block != null) NativeMemory.AlignedFree(block);
+        _samples = null;
+        _listed = null;
         _tables = null;
         _queues = null;
         _mask = null;

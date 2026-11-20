@@ -19,11 +19,9 @@ public unsafe struct KindTables
 public unsafe interface IKindRows
 {
     KindEntry* Append(int row, LibraryFeeder* feeder);
-    void RemoveSpan(int row, int kind, byte slot, ushort timeline, ushort step);
     void Purge(int row, byte slot, ushort timeline);
     Playback* Reserve(int row, int used, int length);
-    void Sample(int row, byte slot, byte sample);
-    void Unsample(int row);
+    void Sampled(int row, int samples);
 }
 
 public static unsafe class KindRules
@@ -54,35 +52,20 @@ public static unsafe class KindRules
             var w = (int)(t.Pairs[k] >> 16);
             if (tick < windows[w].Start || tick >= windows[w].End) continue;
             var feeder = t.Sec.Feeders + (t.Pairs[k] & 0xffff);
-            if (feeder->Trigger == 0) rows.RemoveSpan(row, feeder->Kind, (byte)slot, id, (ushort)w);
-            else if (feeder->Trigger == 2 && tick < windows[w].End - 1) Append(ref rows, row, feeder, slot, id, w, KindEntryFlags.Pulse | KindEntryFlags.Interrupted);
+            if (feeder->Trigger == 2 && tick < windows[w].End - 1) Append(ref rows, row, feeder, slot, id, w, KindEntryFlags.Pulse | KindEntryFlags.Interrupted);
         }
     }
 
-    public const byte Marker = 255;
     public const int MaxSampleSlots = 256;
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsSampled(byte* data, int length) => length != 0 && (((KindEntry*)data)->Flags & KindEntryFlags.Sample) != 0;
-
-    public static int SampleDepth(byte* data, int length, int stride, Playback* slots)
+    public static int Depth(Playback* copies, int samples)
     {
         var depth = 1;
-        for (var i = 0; i < length; i++)
-        {
-            var e = (KindEntry*)(data + (nuint)i * (nuint)stride);
-            if ((e->Flags & KindEntryFlags.Sample) == 0) break;
-            var j = slots[e->Slot].Phase;
-            if (j != Marker && j + 1 > depth) depth = j + 1;
-        }
+        for (var i = 0; i < samples; i++) depth = Math.Max(depth, copies[i].Phase + 1);
         return depth;
     }
 
-    public static bool Due(KindEntry* entry, int substep, Playback* slot)
-    {
-        if ((entry->Flags & KindEntryFlags.Sample) != 0) return slot->Phase == substep;
-        return substep == 0 && (entry->Timeline == 0 || (entry->Flags & KindEntryFlags.Pulse) != 0 || slot->Rate == 0);
-    }
+    public static bool Due(KindEntry* entry, int substep, Playback* run, int count) => entry->Timeline != 0 && entry->Slot >= count ? run[entry->Slot].Phase == substep : substep == 0;
 
     public static bool TickEntity<TRows>(in KindTables t, Playback* slots, int count, ref TRows rows, int row, int stepDir) where TRows : struct, IKindRows
     {
@@ -109,6 +92,7 @@ public static unsafe class KindRules
             else if (s->Rate != 0) return TickRatedFrom(in t, slots, count, ref rows, row, i, stepDir, live);
             live |= TickSlot(in t, ref rows, row, i, s, stepDir);
         }
+        rows.Sampled(row, 0);
         return live;
     }
 
@@ -126,7 +110,8 @@ public static unsafe class KindRules
                 live |= rated;
             }
         }
-        return live;
+        rows.Sampled(row, samples);
+        return live || samples != 0;
     }
 
     static Playback* TickRated<TRows>(in KindTables t, Playback* slots, int count, ref TRows rows, int row, int i, int stepDir, ref int samples, out bool live) where TRows : struct, IKindRows
@@ -138,32 +123,22 @@ public static unsafe class KindRules
             live = TickSlot(in t, ref rows, row, i, s, stepDir);
             return slots;
         }
-        if (samples == 0) rows.Unsample(row);
         var crossings = PlaybackRules.Cross(ref *s);
         var room = MaxSampleSlots - count - samples;
-        if (room <= 0 && crossings == 0) return slots;
-        if (room > 0)
+        if (crossings > 0 && room > 0)
         {
-            slots = rows.Reserve(row, count + samples, count + samples + Math.Min(crossings == 0 ? 1 : crossings, room));
+            slots = rows.Reserve(row, count + samples, count + samples + Math.Min(crossings, room));
             s = slots + i;
-        }
-        if (crossings == 0)
-        {
-            var mark = count + samples++;
-            slots[mark] = *s;
-            slots[mark].Phase = Marker;
-            rows.Sample(row, (byte)i, (byte)mark);
-            return slots;
         }
         for (var j = 0; j < crossings; j++)
         {
-            live = TickSlot(in t, ref rows, row, i, s, stepDir);
-            if (j < room)
+            var at = j < room ? count + samples : i;
+            live = TickSlot(in t, ref rows, row, at, s, stepDir);
+            if (at != i)
             {
-                var at = count + samples++;
                 slots[at] = *s;
                 slots[at].Phase = (byte)j;
-                rows.Sample(row, (byte)i, (byte)at);
+                samples++;
             }
             if (!live || s->Timeline == 0 || (s->Flags & (PlaybackFlags.Ended | PlaybackFlags.Paused)) != 0) break;
         }
@@ -193,7 +168,6 @@ public static unsafe class KindRules
         if ((s->Flags & PlaybackFlags.ReenterPending) != 0)
         {
             s->Flags |= PlaybackFlags.Began;
-            Reenter(in t, ref rows, row, in *s, i);
             return true;
         }
         if ((s->Flags & PlaybackFlags.Paused) != 0) return false;
@@ -207,21 +181,16 @@ public static unsafe class KindRules
                 Events(in t, ref rows, row, i, before.Timeline, s->Tick, dir);
                 return true;
             case PlaybackMotion.Wrapped:
-                WrapRemove(in t, ref rows, row, i, before.Timeline, dir);
                 Events(in t, ref rows, row, i, before.Timeline, s->Tick, dir);
                 return true;
             case PlaybackMotion.Handed:
-                RemoveActiveSpans(in t, ref rows, row, i, &before);
                 Begin(in t, ref rows, row, i, s, stepDir);
                 return true;
             case PlaybackMotion.Parked:
-                RemoveActiveSpans(in t, ref rows, row, i, &before);
                 return true;
             case PlaybackMotion.Held:
-                RemoveActiveSpans(in t, ref rows, row, i, &before);
                 return false;
             case PlaybackMotion.Removed:
-                RemoveActiveSpans(in t, ref rows, row, i, &before);
                 *s = default;
                 return false;
             case PlaybackMotion.Unknown:
@@ -243,7 +212,6 @@ public static unsafe class KindRules
         s->Flags = (s->Flags & ~PlaybackFlags.StartPending) | PlaybackFlags.Began;
         var id = s->Timeline;
         if (t.KindCount == 0 || t.Sec.Timelines[id - 1].KindMask == 0) return;
-        var dir = (s->Flags & PlaybackFlags.Reverse) != 0 ? -stepDir : stepDir;
         var windows = t.Sec.Windows(t.Sec.Timelines + (id - 1));
         int tick = s->Tick;
         for (var k = t.PairStart[id - 1]; k < t.PairStart[id]; k++)
@@ -255,7 +223,6 @@ public static unsafe class KindRules
             switch (feeder->Trigger)
             {
                 case 0:
-                    if (inside) Append(ref rows, row, feeder, i, id, w, KindEntryFlags.Span | ((dir > 0 ? tick != window.Start : tick != window.End - 1) ? KindEntryFlags.Synthetic : 0));
                     break;
                 case 1:
                     if (inside) Append(ref rows, row, feeder, i, id, w, KindEntryFlags.Pulse | (tick != window.Start ? KindEntryFlags.Synthetic : 0));
@@ -270,49 +237,6 @@ public static unsafe class KindRules
         }
     }
 
-    public static void Reenter<TRows>(in KindTables t, ref TRows rows, int row, in Playback s, int slot) where TRows : struct, IKindRows
-    {
-        var id = s.Timeline;
-        if (t.KindCount == 0 || t.Sec.Timelines[id - 1].KindMask == 0) return;
-        var windows = t.Sec.Windows(t.Sec.Timelines + (id - 1));
-        int tick = s.Tick;
-        for (var k = t.PairStart[id - 1]; k < t.PairStart[id]; k++)
-        {
-            var w = (int)(t.Pairs[k] >> 16);
-            var feeder = t.Sec.Feeders + (t.Pairs[k] & 0xffff);
-            if (feeder->Trigger == 0 && tick >= windows[w].Start && tick < windows[w].End) Append(ref rows, row, feeder, slot, id, w, KindEntryFlags.Span | KindEntryFlags.Synthetic);
-        }
-    }
-
-    static void RemoveActiveSpans<TRows>(in KindTables t, ref TRows rows, int row, int i, Playback* s) where TRows : struct, IKindRows
-    {
-        var id = s->Timeline;
-        if (t.KindCount == 0 || t.Sec.Timelines[id - 1].KindMask == 0) return;
-        var windows = t.Sec.Windows(t.Sec.Timelines + (id - 1));
-        int tick = s->Tick;
-        for (var k = t.PairStart[id - 1]; k < t.PairStart[id]; k++)
-        {
-            var w = (int)(t.Pairs[k] >> 16);
-            var feeder = t.Sec.Feeders + (t.Pairs[k] & 0xffff);
-            if (feeder->Trigger == 0 && tick >= windows[w].Start && tick < windows[w].End) rows.RemoveSpan(row, feeder->Kind, (byte)i, id, (ushort)w);
-        }
-    }
-
-    static void WrapRemove<TRows>(in KindTables t, ref TRows rows, int row, int i, ushort id, int dir) where TRows : struct, IKindRows
-    {
-        if (t.KindCount == 0) return;
-        var tk = t.Sec.Timelines + (id - 1);
-        if (tk->KindMask == 0) return;
-        var events = t.Sec.Events(tk);
-        var from = dir > 0 ? tk->WrapForward : tk->WrapBackward;
-        var to = from + (dir > 0 ? tk->WrapForwardCount : tk->WrapBackwardCount);
-        for (var n = from; n < to; n++)
-        {
-            var feeder = t.Sec.Feeders + events[n].Feeder;
-            rows.RemoveSpan(row, feeder->Kind, (byte)i, id, events[n].Window);
-        }
-    }
-
     static void ApplyEvents<TRows>(in KindTables t, ref TRows rows, int row, int i, ushort id, int tick, int dir) where TRows : struct, IKindRows
     {
         var tk = t.Sec.Timelines + (id - 1);
@@ -323,18 +247,7 @@ public static unsafe class KindRules
         {
             var ev = events[n];
             var feeder = t.Sec.Feeders + ev.Feeder;
-            switch ((KindEventOp)ev.Op)
-            {
-                case KindEventOp.Remove:
-                    rows.RemoveSpan(row, feeder->Kind, (byte)i, id, ev.Window);
-                    break;
-                case KindEventOp.Insert:
-                    Append(ref rows, row, feeder, i, id, ev.Window, KindEntryFlags.Span);
-                    break;
-                default:
-                    Append(ref rows, row, feeder, i, id, ev.Window, KindEntryFlags.Pulse);
-                    break;
-            }
+            if (ev.Op >= (byte)KindEventOp.PulseStart) Append(ref rows, row, feeder, i, id, ev.Window, KindEntryFlags.Pulse);
         }
     }
 

@@ -222,7 +222,7 @@ public partial struct StartDashWhenFar : IJobEntity
 | bake | `TlDirectorBaker` (Editor) | one blob per timeline on the director's entity, kind buffers and your components; incremental with `DependsOn` |
 | load | `TlLibrarySystem`, `TlTimelineRegisterSystem` (Initialization) | the library is assembled from the loaded blobs; nothing per frame once registered |
 | start | `TlPlayOnAwakeSystem` | Play On Awake and Initial Time |
-| tick | `TlRequestResolveSystem`, `TimelineKindTickSystem` (Burst) | requests, one tick per fixed step, one kind entry per active clip |
+| tick | `TlRequestResolveSystem`, `TimelineKindTickSystem` (Burst) | requests, one tick per fixed step, pulse entries; live spans are read from the library's shared table |
 | apply | generated `TlKindSystem<...>` (Burst jobs) | `Combine` then `Apply` into your components |
 | yours | anything in `TlSimulationGroup` | here `ForceSystem` |
 

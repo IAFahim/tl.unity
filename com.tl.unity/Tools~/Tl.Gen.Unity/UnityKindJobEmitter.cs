@@ -223,6 +223,7 @@ namespace Tl.Gen.Unity
             W(writer, "public bool Forward;");
             W(writer, "[ReadOnly] public BufferTypeHandle<global::Tl.Unity.Playback> PlaybackHandle;");
             W(writer, "[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelineClock> ClockHandle;");
+            W(writer, "[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelinePlaying> PlayingHandle;");
             foreach (var column in model.Columns)
                 W(writer, (column.ReadOnly ? "[ReadOnly] " : "") + "public ComponentTypeHandle<" + ComponentName(model, column) + "> " + column.Name + "Handle;");
             foreach (var context in model.Contexts)
@@ -252,7 +253,8 @@ namespace Tl.Gen.Unity
                 {
                     W(writer, "var __a" + k + " = chunk.GetEnableableBits(ref " + name + "ActiveHandle);");
                     W(writer, "var __e" + k + " = chunk.GetEnableableBits(ref " + name + "EnabledHandle);");
-                    W(writer, "__l" + k + " = ((__a" + k + ".ULong0 & __e" + k + ".ULong0) | (__a" + k + ".ULong1 & __e" + k + ".ULong1)) != 0;");
+                    W(writer, "var __p" + k + " = chunk.Has(ref PlayingHandle) ? chunk.GetEnableableBits(ref PlayingHandle) : default;");
+                    W(writer, "__l" + k + " = (((__a" + k + ".ULong0 | __p" + k + ".ULong0) & __e" + k + ".ULong0) | ((__a" + k + ".ULong1 | __p" + k + ".ULong1) & __e" + k + ".ULong1)) != 0;");
                 }
                 W(writer, "}");
                 live.Append(k == 0 ? "" : " && ").Append("!__l" + k);
@@ -301,6 +303,7 @@ namespace Tl.Gen.Unity
             var handles = new List<(string field, string type, string getter, bool readOnly)>();
             handles.Add(("PlaybackHandle", "BufferTypeHandle<global::Tl.Unity.Playback>", "GetBufferTypeHandle<global::Tl.Unity.Playback>", true));
             handles.Add(("ClockHandle", "ComponentTypeHandle<global::Tl.Unity.TimelineClock>", "GetComponentTypeHandle<global::Tl.Unity.TimelineClock>", true));
+            handles.Add(("PlayingHandle", "ComponentTypeHandle<global::Tl.Unity.TimelinePlaying>", "GetComponentTypeHandle<global::Tl.Unity.TimelinePlaying>", true));
             foreach (var column in model.Columns)
                 handles.Add((column.Name + "Handle", "ComponentTypeHandle<" + ComponentName(model, column) + ">", "GetComponentTypeHandle<" + ComponentName(model, column) + ">", column.ReadOnly));
             foreach (var evented in events)
@@ -357,6 +360,105 @@ namespace Tl.Gen.Unity
             W(writer, "}");
         }
 
+        static int KindId(string name)
+        {
+            var hash = 2166136261u;
+            foreach (var c in name)
+            {
+                hash ^= c;
+                hash *= 16777619u;
+            }
+            return unchecked((int)hash);
+        }
+
+        static void EmitSlotWalk(StringBuilder writer, string kindIdVar)
+        {
+            W(writer, "for (var __q = 0; __q < __cnt + __smp; __q++)");
+            W(writer, "{");
+            W(writer, "var __i = __q < __smp ? __cnt + __q : __q - __smp;");
+            W(writer, "var __pb = __run + __i;");
+            W(writer, "if (__pb->Timeline == 0 || !global::Tl.KindScore.Listed(__pb->Flags)) continue;");
+            W(writer, "ushort __tick = __i < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;");
+            W(writer, "var __cell = Index.Score.CellOf(__pb->Timeline, __tick, " + kindIdVar + ");");
+            W(writer, "if (__cell < 0 || Index.Score.Start[__cell] == Index.Score.Start[__cell + 1]) continue;");
+        }
+
+        static void EmitSpanHead(StringBuilder writer)
+        {
+            W(writer, "if ((__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;");
+            W(writer, "var __tl = Index.Timelines + (__pb->Timeline - 1);");
+            W(writer, "var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;");
+            W(writer, "for (var __f = Index.Score.Start[__cell]; __f < Index.Score.Start[__cell + 1]; __f++)");
+            W(writer, "{");
+            W(writer, "var __sp = Index.Score.Spans + __f;");
+            W(writer, "var __r = Index.Routes[__sp->Feeder];");
+        }
+
+        static void EmitSpanFrame(StringBuilder writer)
+        {
+            W(writer, "var __def = __sp->Step;");
+            W(writer, "if (__def == null) continue;");
+            W(writer, "var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None) | (global::Tl.KindScore.Synthetic(__pb->Flags, __tick, __def, __backward) ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None);");
+            W(writer, "if (__tick == 0) __kflags |= global::Tl.FrameFlags.TimelineStart;");
+            W(writer, "if (__tick == (ushort)(__tl->Duration - 1)) __kflags |= global::Tl.FrameFlags.TimelineEnd;");
+        }
+
+        static void EmitCases(StringBuilder writer, Shape shape, SystemAssignment assignment, int assignmentIndex, List<(int consumer, FeederDecl feeder)> feeders, string selector, bool spans)
+        {
+            var any = false;
+            for (var i = 0; i < feeders.Count; i++)
+            {
+                var (c, feeder) = feeders[i];
+                if (spans && feeder.Trigger != FeederTrigger.Span) continue;
+                if (!any) { W(writer, "switch (" + selector + ")"); W(writer, "{"); any = true; }
+                var consumer = assignment.Consumers[c];
+                W(writer, "case " + i + ":");
+                W(writer, "{");
+                if (feeder.Trigger == FeederTrigger.Marker)
+                {
+                    W(writer, "byte* __mptr" + c + " = Index.MarkerOf(__en->Timeline, __en->Step);");
+                    W(writer, "if (__mptr" + c + " == null) break;");
+                    W(writer, consumer.MarkerTypeName + " __m" + c + " = *(" + consumer.MarkerTypeName + "*)__mptr" + c + ";");
+                    W(writer, "var __mf" + c + " = new global::Tl.MarkerFrame<" + consumer.MarkerTypeName + ">(in __m" + c + ", __tick, 0, __kflags);");
+                    W(writer, "__v = " + consumer.ConsumerTypeName + "." + feeder.MethodName + "(" + CallArgs(shape, feeder.Method.Params, "__mf" + c, "__row", "") + ");");
+                }
+                else
+                {
+                    if (!spans)
+                    {
+                        W(writer, "var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);");
+                        W(writer, "if (__def == null) break;");
+                    }
+                    EmitMaterialize(writer, consumer, assignmentIndex, c);
+                    if (FoldOf(consumer) != null)
+                        EmitFeeds(writer, consumer, c);
+                    var frameVar = "__f" + c;
+                    if (IsTlFrame(feeder.Method))
+                    {
+                        frameVar = "__tf" + c;
+                        W(writer, "var " + frameVar + " = new global::Tl.TlFrame<" + consumer.ClipTypeName + ">(in __f" + c + ");");
+                    }
+                    W(writer, "__v = " + consumer.ConsumerTypeName + "." + feeder.MethodName + "(" + CallArgs(shape, feeder.Method.Params, frameVar, "__row", "__fd" + c + "_") + ");");
+                }
+                W(writer, "__ok = true;");
+                W(writer, "break;");
+                W(writer, "}");
+            }
+            if (any)
+                W(writer, "}");
+            W(writer, "if (!__ok) continue;");
+        }
+
+        static void EmitRowHead(StringBuilder writer)
+        {
+            W(writer, "var __pbuf = __playbacks[__row];");
+            W(writer, "var __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr();");
+            W(writer, "var __cnt = __pbuf.Length;");
+            W(writer, "var __smp = __copies == null ? 0 : (int)__copies[__row].Copies;");
+            W(writer, "if (__cnt + __smp > __pbuf.Capacity) __smp = 0;");
+            W(writer, "var __clock = __clocks == null ? (ushort)0 : __clocks[__row];");
+        }
+
         static void EmitKind(StringBuilder writer, Shape shape, SystemAssignment assignment, int assignmentIndex, UnityKindInfo info, int ordinal)
         {
             var kind = info.Decl;
@@ -370,27 +472,37 @@ namespace Tl.Gen.Unity
                 var by = string.CompareOrdinal(a.feeder.ConsumerMetadata, b.feeder.ConsumerMetadata);
                 return by != 0 ? by : string.CompareOrdinal(a.feeder.MethodName, b.feeder.MethodName);
             });
-            var valueAt = 8;
             var value = kind.ValueTypeName;
             var applyArgs = CallArgs(shape, kind.ApplyParams, "", "__row", "");
             var tail = applyArgs.Length == 0 ? "" : ", " + applyArgs;
+            void Fold()
+            {
+                if (kind.Each)
+                    W(writer, kind.TypeName + ".Apply(in __v" + tail + ");");
+                else
+                {
+                    W(writer, "if (__has) " + kind.TypeName + ".Combine(ref __total, in __v);");
+                    W(writer, "else { __total = __v; __has = true; }");
+                }
+            }
             W(writer, "void Kind_" + ordinal + "(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks" + ColumnArgs(shape, true) + ")");
             W(writer, "{");
             W(writer, "var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;");
-            if (info.EntryBytes >= 12)
-                W(writer, "var __cached = __clocks != null && Index.TickStamp != null && Index.TickStamp->Index == (ulong)Index.WindowStep && chunk.GetChangeVersion(ref PlaybackHandle) == Index.TickStamp->Version;");
             W(writer, "if (!chunk.Has(ref " + info.Name + "EntryHandle)) return;");
+            W(writer, "var __kid = Index.KindOf(" + KindId(kind.Id) + ");");
+            W(writer, "if (__kid < 0) return;");
+            W(writer, "var __copies = chunk.Has(ref PlayingHandle) ? (global::Tl.Unity.TimelinePlaying*)chunk.GetRequiredComponentDataPtrRO(ref PlayingHandle) : null;");
+            W(writer, "var __epl = chunk.Has(ref PlayingHandle) ? chunk.GetEnableableBits(ref PlayingHandle) : default;");
             W(writer, "var __acc = chunk.GetBufferAccessor(ref " + info.Name + "EntryHandle);");
             W(writer, "var __ema = chunk.GetEnableableBits(ref " + info.Name + "ActiveHandle);");
             W(writer, "var __eme = chunk.GetEnableableBits(ref " + info.Name + "EnabledHandle);");
             W(writer, "var __stride = sizeof(" + info.Entry + ");");
             W(writer, "var __count = chunk.Count;");
-            W(writer, "var __active = default(global::Unity.Entities.EnabledMask);");
-            W(writer, "var __masked = false;");
+            W(writer, "var __active = chunk.GetEnabledMask(ref " + info.Name + "ActiveHandle);");
             W(writer, "for (var __kw = 0; __kw < 2; __kw++)");
             W(writer, "{");
             W(writer, "if (__kw == 1 && __count <= 64) break;");
-            W(writer, "var __kb = __kw == 0 ? __ema.ULong0 & __eme.ULong0 : __ema.ULong1 & __eme.ULong1;");
+            W(writer, "var __kb = __kw == 0 ? (__ema.ULong0 | __epl.ULong0) & __eme.ULong0 : (__ema.ULong1 | __epl.ULong1) & __eme.ULong1;");
             W(writer, "while (__kb != 0)");
             W(writer, "{");
             W(writer, "var __row = (__kw << 6) + (int)global::Unity.Mathematics.math.tzcnt(__kb);");
@@ -399,153 +511,75 @@ namespace Tl.Gen.Unity
             W(writer, "var __buf = __acc[__row];");
             W(writer, "var __len = __buf.Length;");
             W(writer, "byte* __data = (byte*)__buf.GetUnsafePtr();");
-            W(writer, "var __pulses = 0;");
-            void Body(bool sampled)
-            {
-                if (!kind.Each)
-                {
-                    W(writer, value + " __total = default;");
-                    W(writer, "var __has = false;");
-                }
-                W(writer, "for (var __j = 0; __j < __len; __j++)");
-                W(writer, "{");
-                W(writer, "var __en = (global::Tl.KindEntry*)(__data + (long)__j * __stride);");
-                if (sampled)
-                    W(writer, "if (!global::Tl.KindRules.Due(__en, __sj, __pbase + __en->Slot)) continue;");
-                W(writer, value + " __v = default;");
-                W(writer, "if (__en->Timeline == 0)");
-                W(writer, "{");
-                W(writer, "__v = *(" + value + "*)((byte*)__en + " + valueAt + ");");
-                W(writer, "__pulses++;");
-                W(writer, "}");
-                W(writer, "else");
-                W(writer, "{");
-                W(writer, "var __isPulse = (__en->Flags & global::Tl.KindEntryFlags.Pulse) != 0;");
-                W(writer, "if (__isPulse) __pulses++;");
-                W(writer, "if (__en->Owner != 0)");
-                W(writer, "{");
-                W(writer, "if ((__en->Flags & global::Tl.KindEntryFlags.Ready) == 0) continue;");
-                W(writer, "__v = *(" + value + "*)((byte*)__en + " + valueAt + ");");
-                W(writer, "__en->Flags &= ~global::Tl.KindEntryFlags.Ready;");
-                W(writer, "}");
-                W(writer, "else");
-                W(writer, "{");
-                W(writer, "var __pb = __pbase + __en->Slot;");
-                if (!sampled && info.EntryBytes >= 12)
-                {
-                    W(writer, "var __cb = __cached ? global::Tl.Unity.KindEntryCache.Bits(__en) : (byte)0;");
-                    W(writer, "var __hit = (__cb & global::Tl.Unity.KindEntryCache.Valid) != 0;");
-                    W(writer, "if (!__isPulse && (__hit ? (__cb & global::Tl.Unity.KindEntryCache.Paused) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0)) continue;");
-                    W(writer, "var __tl = Index.Timelines + (__en->Timeline - 1);");
-                    W(writer, "ushort __tick = __hit ? global::Tl.Unity.KindEntryCache.Tick(__en, __clocks[__row], __cb) : global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);");
-                    W(writer, "var __rev = __hit ? (__cb & global::Tl.Unity.KindEntryCache.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0;");
-                    W(writer, "var __backward = Forward ? __rev : !__rev;");
-                }
-                else
-                {
-                    W(writer, "if (!__isPulse && (__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;");
-                    W(writer, "var __tl = Index.Timelines + (__en->Timeline - 1);");
-                    W(writer, "ushort __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);");
-                    W(writer, "var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;");
-                }
-                W(writer, "var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)");
-                W(writer, "| ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)");
-                W(writer, "| ((__en->Flags & global::Tl.KindEntryFlags.Interrupted) != 0 ? global::Tl.FrameFlags.Interrupted : global::Tl.FrameFlags.None);");
-                W(writer, "if (__tick == 0) __kflags |= global::Tl.FrameFlags.TimelineStart;");
-                W(writer, "if (__tick == (ushort)(__tl->Duration - 1)) __kflags |= global::Tl.FrameFlags.TimelineEnd;");
-                W(writer, "var __ok = false;");
-                if (feeders.Count > 0)
-                {
-                    W(writer, "switch (__en->Feeder)");
-                    W(writer, "{");
-                }
-                for (var i = 0; i < feeders.Count; i++)
-                {
-                    var (c, feeder) = feeders[i];
-                    var consumer = assignment.Consumers[c];
-                    W(writer, "case " + i + ":");
-                    W(writer, "{");
-                    if (feeder.Trigger == FeederTrigger.Marker)
-                    {
-                        W(writer, "byte* __mptr" + c + " = Index.MarkerOf(__en->Timeline, __en->Step);");
-                        W(writer, "if (__mptr" + c + " == null) break;");
-                        W(writer, consumer.MarkerTypeName + " __m" + c + " = *(" + consumer.MarkerTypeName + "*)__mptr" + c + ";");
-                        W(writer, "var __mf" + c + " = new global::Tl.MarkerFrame<" + consumer.MarkerTypeName + ">(in __m" + c + ", __tick, 0, __kflags);");
-                        W(writer, "__v = " + consumer.ConsumerTypeName + "." + feeder.MethodName + "(" + CallArgs(shape, feeder.Method.Params, "__mf" + c, "__row", "") + ");");
-                    }
-                    else
-                    {
-                        W(writer, !sampled && info.EntryBytes >= 16 ? "var __def = Index.StepOfEntry(__en, __tick, __hit);" : "var __def = Index.StepInWindow(__en->Timeline, __en->Step, __tick);");
-                        W(writer, "if (__def == null) break;");
-                        EmitMaterialize(writer, consumer, assignmentIndex, c);
-                        if (FoldOf(consumer) != null)
-                            EmitFeeds(writer, consumer, c);
-                        var frameVar = "__f" + c;
-                        if (IsTlFrame(feeder.Method))
-                        {
-                            frameVar = "__tf" + c;
-                            W(writer, "var " + frameVar + " = new global::Tl.TlFrame<" + consumer.ClipTypeName + ">(in __f" + c + ");");
-                        }
-                        W(writer, "__v = " + consumer.ConsumerTypeName + "." + feeder.MethodName + "(" + CallArgs(shape, feeder.Method.Params, frameVar, "__row", "__fd" + c + "_") + ");");
-                    }
-                    W(writer, "__ok = true;");
-                    W(writer, "break;");
-                    W(writer, "}");
-                }
-                if (feeders.Count > 0)
-                    W(writer, "}");
-                W(writer, "if (!__ok) continue;");
-                W(writer, "}");
-                W(writer, "}");
-                if (kind.Each)
-                    W(writer, kind.TypeName + ".Apply(in __v" + tail + ");");
-                else
-                {
-                    W(writer, "if (__has) " + kind.TypeName + ".Combine(ref __total, in __v);");
-                    W(writer, "else { __total = __v; __has = true; }");
-                }
-                W(writer, "}");
-                if (!kind.Each)
-                    W(writer, "if (__has) " + kind.TypeName + ".Apply(in __total" + tail + ");");
-            }
-            W(writer, "var __pbase = (global::Tl.Playback*)__playbacks[__row].GetUnsafeReadOnlyPtr();");
-            W(writer, "var __sampled = global::Tl.KindRules.IsSampled(__data, __len);");
-            W(writer, "if (!__sampled)");
+            EmitRowHead(writer);
+            W(writer, "var __listed = false;");
+            W(writer, "var __sampled = __smp != 0;");
+            W(writer, "var __sk = __sampled ? global::Tl.KindRules.Depth(__run + __cnt, __smp) : 1;");
+            W(writer, "for (var __sj = 0; __sj < __sk; __sj++)");
             W(writer, "{");
-            Body(false);
+            if (!kind.Each)
+            {
+                W(writer, value + " __total = default;");
+                W(writer, "var __has = false;");
+            }
+            EmitSlotWalk(writer, "__kid");
+            W(writer, "if (__i < __cnt) { __listed = true; if (__sj != 0 || __pb->Rate != 0) continue; }");
+            W(writer, "else if (__pb->Phase != __sj) continue;");
+            EmitSpanHead(writer);
+            W(writer, "if ((__r >> 8) != 0) continue;");
+            EmitSpanFrame(writer);
+            W(writer, value + " __v = default;");
+            W(writer, "var __ok = false;");
+            EmitCases(writer, shape, assignment, assignmentIndex, feeders, "__r & 0xff", true);
+            Fold();
+            W(writer, "}");
+            W(writer, "}");
+            W(writer, "for (var __j = 0; __j < __len; __j++)");
+            W(writer, "{");
+            W(writer, "var __en = (global::Tl.KindEntry*)(__data + (long)__j * __stride);");
+            W(writer, "if (__sampled && !global::Tl.KindRules.Due(__en, __sj, __run, __cnt)) continue;");
+            W(writer, value + " __v = default;");
+            W(writer, "if (__en->Timeline == 0)");
+            W(writer, "__v = *(" + value + "*)((byte*)__en + 8);");
+            W(writer, "else if (__en->Owner != 0)");
+            W(writer, "{");
+            W(writer, "if ((__en->Flags & global::Tl.KindEntryFlags.Ready) == 0) continue;");
+            W(writer, "__v = *(" + value + "*)((byte*)__en + 8);");
+            W(writer, "__en->Flags &= ~global::Tl.KindEntryFlags.Ready;");
             W(writer, "}");
             W(writer, "else");
             W(writer, "{");
-            W(writer, "var __sk = global::Tl.KindRules.SampleDepth(__data, __len, __stride, __pbase);");
-            W(writer, "for (var __sj = 0; __sj < __sk; __sj++)");
-            W(writer, "{");
-            Body(true);
+            W(writer, "var __pb = __run + __en->Slot;");
+            W(writer, "var __tl = Index.Timelines + (__en->Timeline - 1);");
+            W(writer, "ushort __tick = __en->Slot < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;");
+            W(writer, "var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;");
+            W(writer, "var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None)");
+            W(writer, "| ((__en->Flags & global::Tl.KindEntryFlags.Synthetic) != 0 ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None)");
+            W(writer, "| ((__en->Flags & global::Tl.KindEntryFlags.Interrupted) != 0 ? global::Tl.FrameFlags.Interrupted : global::Tl.FrameFlags.None);");
+            W(writer, "if (__tick == 0) __kflags |= global::Tl.FrameFlags.TimelineStart;");
+            W(writer, "if (__tick == (ushort)(__tl->Duration - 1)) __kflags |= global::Tl.FrameFlags.TimelineEnd;");
+            W(writer, "var __ok = false;");
+            EmitCases(writer, shape, assignment, assignmentIndex, feeders, "__en->Feeder", false);
             W(writer, "}");
+            Fold();
             W(writer, "}");
-            W(writer, "if (__sampled)");
-            W(writer, "{");
-            W(writer, "__pulses = 0;");
-            W(writer, "for (var __j = 0; __j < __len; __j++)");
-            W(writer, "if ((((global::Tl.KindEntry*)(__data + (long)__j * __stride))->Flags & global::Tl.KindEntryFlags.Pulse) != 0) __pulses++;");
+            if (!kind.Each)
+                W(writer, "if (__has) " + kind.TypeName + ".Apply(in __total" + tail + ");");
             W(writer, "}");
-            W(writer, "if (__pulses == __len)");
-            W(writer, "{");
-            W(writer, "__buf.Clear();");
-            W(writer, "if (!__masked) { __active = chunk.GetEnabledMask(ref " + info.Name + "ActiveHandle); __masked = true; }");
-            W(writer, "__active[__row] = false;");
-            W(writer, "}");
-            W(writer, "else if (__pulses != 0)");
+            W(writer, "if (__len != 0)");
             W(writer, "{");
             W(writer, "var __kept = 0;");
             W(writer, "for (var __j = 0; __j < __len; __j++)");
             W(writer, "{");
             W(writer, "var __en = (global::Tl.KindEntry*)(__data + (long)__j * __stride);");
-            W(writer, "if ((__en->Flags & global::Tl.KindEntryFlags.Pulse) != 0) continue;");
+            W(writer, "if ((__en->Flags & global::Tl.KindEntryFlags.Pulse) != 0 || __en->Timeline == 0) continue;");
             W(writer, "if (__kept != __j) global::Unity.Collections.LowLevel.Unsafe.UnsafeUtility.MemCpy(__data + (long)__kept * __stride, __en, __stride);");
             W(writer, "__kept++;");
             W(writer, "}");
             W(writer, "__buf.ResizeUninitialized(__kept);");
+            W(writer, "__listed |= __kept != 0;");
             W(writer, "}");
+            W(writer, "__active[__row] = __listed;");
             W(writer, "if (__buf.Capacity > " + info.Capacity + " && __buf.Length <= " + info.Capacity + ") __buf.TrimExcess();");
             W(writer, "}");
             W(writer, "}");

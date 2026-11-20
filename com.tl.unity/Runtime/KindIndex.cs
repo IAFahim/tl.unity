@@ -28,8 +28,6 @@ namespace Tl.Unity
         public ComponentType* EntryTypes;
         public ComponentType* ActiveTypes;
         public ulong Bound;
-        public KindTickStamp* TickStamp;
-        public global::Tl.LibraryStep* WindowSteps;
         public int* IdKeys;
         public int* IdKinds;
         public int IdCount;
@@ -40,6 +38,7 @@ namespace Tl.Unity
         public int* OwnerIds;
         public int OwnerCount;
         public global::Tl.KindCalm Calm;
+        public global::Tl.KindScore Score;
 
         public bool IsCreated => Timelines != null || KindCount == 0 && Closure != null;
 
@@ -71,28 +70,17 @@ namespace Tl.Unity
             return tick < step->WindowStart || tick >= step->WindowEnd ? null : step;
         }
 
-        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-        public global::Tl.LibraryStep* StepOfEntry(global::Tl.KindEntry* entry, ushort tick, bool cached)
-        {
-            var window = cached ? *(uint*)((byte*)entry + 12) : 0u;
-            if (window == 0 || window > (uint)WindowTotal) return StepInWindow(entry->Timeline, entry->Step, tick);
-            var step = WindowSteps + (window - 1);
-            return tick < step->WindowStart || tick >= step->WindowEnd ? null : step;
-        }
-
-        public uint PackedStep(ushort timeline, int window)
-        {
-            var t = timeline - 1;
-            if ((uint)t >= (uint)TimelineCount) return 0;
-            var g = WindowBase[t] + window;
-            return WindowStep[g] != null ? (uint)g + 1 : 0u;
-        }
-
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         global::Tl.LibraryStep* StepAcrossStages(ushort timeline, int window, ushort tick)
         {
             var step = StepOf(timeline, window, tick);
             return step == null || tick < step->WindowStart || tick >= step->WindowEnd ? null : step;
+        }
+
+        public int SpanCount(ushort timeline, int tick, int kind)
+        {
+            var cell = Score.CellOf(timeline, tick, kind);
+            return cell < 0 ? 0 : Score.Start[cell + 1] - Score.Start[cell];
         }
 
         public byte* MarkerOf(ushort timeline, int window)
@@ -277,6 +265,8 @@ namespace Tl.Unity
             var calm = Math.Max(1, global::Tl.KindCalm.Length(in tables));
             index.Calm = global::Tl.KindCalm.Build(in tables, Zeroed<byte>(calm), Zeroed<byte>(calm), Zeroed<int>(Math.Max(1, count)));
             BuildSteps(ref index, view, world);
+            var steps = new ScoreSteps { Index = index };
+            index.Score = global::Tl.KindScore.Build(in tables, ref steps);
             return index;
         }
 
@@ -341,9 +331,13 @@ namespace Tl.Unity
             for (var i = 0; i < table.Count; i++) index.StepTable[i] = (global::Tl.LibraryStep*)table[i];
             index.WindowStep = (global::Tl.LibraryStep**)Zeroed<IntPtr>(Math.Max(1, total));
             foreach (var (window, start) in single) index.WindowStep[window] = index.StepTable[start];
-            index.WindowSteps = Zeroed<global::Tl.LibraryStep>(Math.Max(1, total));
-            for (var g = 0; g < total; g++)
-                if (index.WindowStep[g] != null) index.WindowSteps[g] = *index.WindowStep[g];
+        }
+
+        struct ScoreSteps : global::Tl.IKindSteps
+        {
+            public KindIndex Index;
+
+            public global::Tl.LibraryStep* StepOf(ushort timeline, int window, ushort tick) => Index.StepInWindow(timeline, window, tick);
         }
 
         static bool EndsAscending(global::Tl.LibraryTimeline* tl)
@@ -365,7 +359,6 @@ namespace Tl.Unity
             Free(StepTable);
             Free(WindowStep);
             Free(MarkerValues);
-            Free(WindowSteps);
             Free(EntryTypes);
             Free(ActiveTypes);
             Free(IdKeys);
@@ -378,6 +371,7 @@ namespace Tl.Unity
             Free(Calm.Forward);
             Free(Calm.Backward);
             Free(Calm.Start);
+            Score.Free();
             this = default;
         }
 

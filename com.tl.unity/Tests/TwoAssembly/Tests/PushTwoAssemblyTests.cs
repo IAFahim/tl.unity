@@ -38,8 +38,9 @@ namespace PushTests
             Assert.IsTrue(typeof(IComponentData).IsAssignableFrom(typeof(Wind)));
         }
 
-        [Test]
-        public void ATrackInTheGameFeedsTheKindInThePackWithTheDotNetHash()
+        [TestCase(1)]
+        [TestCase(3)]
+        public void ATrackInTheGameFeedsTheKindInThePackWithTheDotNetHash(int feedsPerStep)
         {
             using var library = TlLibrary.FromBytes(PushLibraryBytes.Bytes());
             using var world = new World("TlPush");
@@ -90,7 +91,7 @@ namespace PushTests
                     }
                 }
                 tick.Update(world.Unmanaged);
-                feed.Update(world.Unmanaged);
+                for (var f = 0; f < feedsPerStep; f++) feed.Update(world.Unmanaged);
                 apply.Update(world.Unmanaged);
                 entities.CompleteAllTrackedJobs();
                 for (var e = 0; e < Rows; e++)
