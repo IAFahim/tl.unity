@@ -1058,6 +1058,7 @@ Things to know:
 | Timeline ids | name order of the baked library | the order timelines stream in (`TlLibrary.FromBytes` keeps the library's) | Unity assembles the library as SubScenes load |
 | Requests | one queue per table | one buffer per entity | a write to another entity's buffer needs a single-threaded job or an ECB |
 | Game pulse sender | `DamageKind.Pulses(kinds)`, taken once | `DamageKind.Pulses(writer)` per job | the .NET sender holds a managed handle |
+| Generated sender for a derived kind (`Sum<T>`, `Set<T>`) | none; `kinds.Pulses<T>("Tl.Derived.<Name>")` | `Tl.Derived.<Name>Kind.Pulses(writer)` | tl's source budget |
 | One entity's events | `drained.Of(entity)` after `events.Drain()` | `DynamicBuffer<TimelineEvent<T>>` | same run (slot order, then raise order); `Record.Entity` and `Record.Sequence` are host-specific |
 | Event methods above 1x | see tl docs | once per step, at the last tick | use `[Pulse]` (chapter 10) |
 | Legacy consumers (`Fold`, `ExecuteActive` with columns, `ref Requests`) | run | not run, TLUNITY9105 | |
