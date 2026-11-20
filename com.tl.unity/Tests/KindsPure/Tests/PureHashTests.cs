@@ -7,7 +7,7 @@ namespace KindPure
     {
         const int StepsLikeDotNetKindShape = 1 + 40 + 16;
 
-        static byte[] _library;
+        byte[] _library;
 
         [OneTimeSetUp]
         public void BakeTheKindShapeLibraryOnce()
