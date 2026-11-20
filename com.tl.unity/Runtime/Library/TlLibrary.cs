@@ -51,6 +51,14 @@ namespace Tl.Unity
 
         public ushort IdOf(Hash128 asset) => _ids.TryGetValue(asset, out var id) ? id : (ushort)0;
 
+        public ushort Find(string name)
+        {
+            for (var i = 0; i < _entries.Count; i++)
+                if (string.Equals(_entries[i].Name, name, StringComparison.Ordinal))
+                    return (ushort)(i + 1);
+            return _entries.Count == 0 && _world != null ? _world.Find(name) : (ushort)0;
+        }
+
         public IEnumerable<KeyValuePair<Hash128, ushort>> Ids => _ids;
 
         public List<ushort> Swapped { get; } = new List<ushort>();

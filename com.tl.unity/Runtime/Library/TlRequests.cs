@@ -5,34 +5,24 @@ namespace Tl
 {
     public static class TlRequests
     {
+        public static void Start(this DynamicBuffer<TimelineRequest> requests, ushort timeline, ushort atTick = 0)
+        {
+            requests.Add(TimelineRequest.Start(-1, timeline, atTick));
+        }
+
         public static void Start(this DynamicBuffer<TimelineRequest> requests, in TlTimeline timeline, ushort atTick = 0)
         {
             requests.Add(new TimelineRequest { Slot = -1, At = atTick, Op = RequestOp.Start, Asset = timeline.Asset.ToHash128() });
         }
 
+        public static void Stop(this DynamicBuffer<TimelineRequest> requests, ushort timeline)
+        {
+            requests.Add(TimelineRequest.Stop(-1, timeline));
+        }
+
         public static void Stop(this DynamicBuffer<TimelineRequest> requests, in TlTimeline timeline)
         {
             requests.Add(new TimelineRequest { Slot = -1, Op = RequestOp.Stop, Asset = timeline.Asset.ToHash128() });
-        }
-
-        public static void Pause(this DynamicBuffer<TimelineRequest> requests, in TlTimeline timeline)
-        {
-            requests.Add(new TimelineRequest { Slot = -1, Op = RequestOp.Pause, Asset = timeline.Asset.ToHash128() });
-        }
-
-        public static void Resume(this DynamicBuffer<TimelineRequest> requests, in TlTimeline timeline)
-        {
-            requests.Add(new TimelineRequest { Slot = -1, Op = RequestOp.Resume, Asset = timeline.Asset.ToHash128() });
-        }
-
-        public static void Seek(this DynamicBuffer<TimelineRequest> requests, in TlTimeline timeline, ushort tick)
-        {
-            requests.Add(new TimelineRequest { Slot = -1, At = tick, Op = RequestOp.Seek, Asset = timeline.Asset.ToHash128() });
-        }
-
-        public static void Reverse(this DynamicBuffer<TimelineRequest> requests, in TlTimeline timeline, bool reverse)
-        {
-            requests.Add(new TimelineRequest { Slot = -1, At = reverse ? (ushort)1 : (ushort)0, Op = RequestOp.Reverse, Asset = timeline.Asset.ToHash128() });
         }
 
         public static void StopChannel(this DynamicBuffer<TimelineRequest> requests, byte channel)
@@ -43,6 +33,46 @@ namespace Tl
         public static void StopAll(this DynamicBuffer<TimelineRequest> requests)
         {
             requests.Add(TimelineRequest.StopAll(-1));
+        }
+
+        public static void Pause(this DynamicBuffer<TimelineRequest> requests, ushort timeline)
+        {
+            requests.Add(TimelineRequest.Pause(-1, timeline));
+        }
+
+        public static void Pause(this DynamicBuffer<TimelineRequest> requests, in TlTimeline timeline)
+        {
+            requests.Add(new TimelineRequest { Slot = -1, Op = RequestOp.Pause, Asset = timeline.Asset.ToHash128() });
+        }
+
+        public static void Resume(this DynamicBuffer<TimelineRequest> requests, ushort timeline)
+        {
+            requests.Add(TimelineRequest.Resume(-1, timeline));
+        }
+
+        public static void Resume(this DynamicBuffer<TimelineRequest> requests, in TlTimeline timeline)
+        {
+            requests.Add(new TimelineRequest { Slot = -1, Op = RequestOp.Resume, Asset = timeline.Asset.ToHash128() });
+        }
+
+        public static void Seek(this DynamicBuffer<TimelineRequest> requests, ushort timeline, ushort tick)
+        {
+            requests.Add(TimelineRequest.Seek(-1, timeline, tick));
+        }
+
+        public static void Seek(this DynamicBuffer<TimelineRequest> requests, in TlTimeline timeline, ushort tick)
+        {
+            requests.Add(new TimelineRequest { Slot = -1, At = tick, Op = RequestOp.Seek, Asset = timeline.Asset.ToHash128() });
+        }
+
+        public static void Reverse(this DynamicBuffer<TimelineRequest> requests, ushort timeline, bool reverse)
+        {
+            requests.Add(TimelineRequest.Reverse(-1, timeline, reverse));
+        }
+
+        public static void Reverse(this DynamicBuffer<TimelineRequest> requests, in TlTimeline timeline, bool reverse)
+        {
+            requests.Add(new TimelineRequest { Slot = -1, At = reverse ? (ushort)1 : (ushort)0, Op = RequestOp.Reverse, Asset = timeline.Asset.ToHash128() });
         }
 
         public static void PauseChannel(this DynamicBuffer<TimelineRequest> requests, byte channel)
@@ -65,6 +95,11 @@ namespace Tl
             requests.Add(TimelineRequest.ReverseChannel(-1, channel, reverse));
         }
 
+        public static void SetSpeed(this DynamicBuffer<TimelineRequest> requests, ushort timeline, ushort sixteenths)
+        {
+            requests.Add(TimelineRequest.SetSpeed(-1, timeline, sixteenths));
+        }
+
         public static void SetSpeed(this DynamicBuffer<TimelineRequest> requests, in TlTimeline timeline, ushort sixteenths)
         {
             requests.Add(new TimelineRequest { Slot = -1, At = sixteenths, Op = RequestOp.Speed, Asset = timeline.Asset.ToHash128() });
@@ -73,6 +108,11 @@ namespace Tl
         public static void SetChannelSpeed(this DynamicBuffer<TimelineRequest> requests, byte channel, ushort sixteenths)
         {
             requests.Add(TimelineRequest.SetChannelSpeed(-1, channel, sixteenths));
+        }
+
+        public static void Reset(this DynamicBuffer<TimelineRequest> requests)
+        {
+            requests.Add(TimelineRequest.Reset(-1));
         }
     }
 }

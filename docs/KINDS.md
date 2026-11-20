@@ -98,7 +98,12 @@ it lives on the Tick system's entity), call `BeginPulses(n)`, write with
 job; pass the job's handle to `AddPulseWriter`). Pulses to an entity without
 the kind are counted in `DroppedPulses` and dropped, as are starts for
 unreachable timelines (`DroppedStarts`), both on `TimelineKindTick`; reading
-either completes the Tick's last jobs first, so read them on the main thread. A count
+either completes the Tick's last jobs first, so read them on the main thread.
+A dropped start changes nothing on the entity: a playback on the same channel
+keeps playing. The plain .NET host does the same (`DamageKind.Pulses(kinds)`
+is generated there too; `PlaybackTable.DroppedStarts` counts dropped starts).
+With the scripting define `TL_CHECKED`, `TlCheckedStartsSystem` throws at the
+end of a step that dropped a start, as checked .NET builds do. A count
 above zero usually means the object never plays a timeline that feeds the kind:
 declare `[TlKind(GamePulses = n)]` and let one of its timelines reach it, or add
 the kind's entry buffer in an `ITlBaker`.
@@ -217,10 +222,15 @@ stopped inside the clip, `ExecuteActive` on every tick inside it). Each
 owner entity gets a `DynamicBuffer<TimelineEvent<T>>` (`Tl.Unity`); the
 director baker adds one for every event type the game declares. Every
 step clears the buffer and refills it with the events that entity raised in
-that step, ordered by playback slot, then by raise order (the order of the
-.NET host's `Events<T>.Drain`). `TimelineEvent<T>.Record` holds `Slot`,
-`Sequence` and `Value`; `Record.Entity` is not used on Unity. Read the buffer
-in a system that runs after `TimelineSimulationGroup`.
+that step, ordered by playback slot, then by raise order: the same run the
+.NET host's `drained.Of(entity)` returns after `Events<T>.Drain()`.
+`TimelineEvent<T>.Record` holds `Slot`, `Sequence` and `Value`;
+`Record.Entity` is not used on Unity, and `Sequence` restarts for every entity
+and step (on .NET it counts across the whole drain), so compare events by
+slot, value and position. Read the buffer in `TlSimulationGroup` with
+`OrderLast = true`: it is refilled every tick, so a reader at frame rate misses
+ticks. A reader that starts timelines on other entities writes their
+`TimelineRequest` buffers; those requests apply on the next tick (README 8.4).
 
 The job writes the events straight into the owner's buffer: `Events<T>` is
 built over the buffer's memory (`Events<T>(header, items, capacity)`), and a

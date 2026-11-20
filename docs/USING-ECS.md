@@ -208,8 +208,14 @@ public partial struct StartDashWhenFar : IJobEntity
 }
 ```
 
-- `requests.Start(timeline, atTick)`, `Stop(timeline)`, `Pause(timeline)`, `Resume(timeline)`. A paused timeline holds its tick; its clips
-  stay active.
+- `requests.Start(timeline, atTick)`, `Stop(timeline)`, `Pause(timeline)`, `Resume(timeline)`, `Seek(timeline, tick)`,
+  `Reverse(timeline, on)`, `SetSpeed(timeline, sixteenths)`, the channel verbs, `StopAll()` and `Reset()`. A paused timeline holds its
+  tick; its clips stay active. `timeline` is a `TlTimeline` or a library id (`ushort`); `TlLibrary.Find(name)` gives the id of a
+  timeline by its own name. The verbs and their argument order are the ones of tl's .NET `PlaybackTable` (entity first): the README's
+  chapter 8.4 shows them side by side.
+- Any system can send a verb to another entity: write that entity's buffer through a `BufferLookup<TimelineRequest>` from a job
+  scheduled single-threaded, or through an `EntityCommandBuffer` that plays back before the next tick. The request applies on the next
+  tick. A job that reads this step's `TimelineEvent<T>` buffers belongs in `TlSimulationGroup` with `OrderLast = true`.
 - A timeline named in a clip field is added to the object automatically. A timeline the object cannot play is dropped with one warning:
   drag it into **Also Plays**.
 - `TimelineId` fields in clips (for Tl's own clip logic) are written as library ids when the library is assembled.

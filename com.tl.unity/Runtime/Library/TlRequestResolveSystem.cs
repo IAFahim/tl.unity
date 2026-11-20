@@ -31,6 +31,31 @@ namespace Tl.Unity
         }
     }
 
+#if !TL_CHECKED
+    [DisableAutoCreation]
+#endif
+    [UpdateInGroup(typeof(TimelineSimulationGroup), OrderLast = true)]
+    public partial struct TlCheckedStartsSystem : ISystem
+    {
+        EntityQuery _tick;
+        int _seen;
+
+        public void OnCreate(ref SystemState state)
+        {
+            _tick = new EntityQueryBuilder(Allocator.Temp).WithAll<TimelineKindTick>().WithOptions(EntityQueryOptions.IncludeSystems).Build(ref state);
+            state.RequireForUpdate(_tick);
+        }
+
+        public void OnUpdate(ref SystemState state)
+        {
+            var dropped = _tick.GetSingleton<TimelineKindTick>().DroppedStarts;
+            if (dropped == _seen)
+                return;
+            _seen = dropped;
+            throw new System.InvalidOperationException("Tl: " + dropped + " start(s) dropped so far because an object cannot hold every kind the timeline feeds (TimelineKindTick.DroppedStarts). Let one of the object's timelines reach those kinds, or add the kind's buffers in an ITlBaker.");
+        }
+    }
+
     [BurstCompile]
     public struct TlRequestResolveJob : IJobChunk
     {

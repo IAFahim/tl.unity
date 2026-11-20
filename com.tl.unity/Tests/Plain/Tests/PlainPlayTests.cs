@@ -115,6 +115,38 @@ namespace PlainGame.Tests
         }
 
         [Test]
+        public void CrossScriptStompsTheAimedRowLikeTheEcsHost()
+        {
+            using (var host = NewHost())
+                Assert.AreEqual(PlainScript.CrossPinned, PlainScript.PlayCross(host, PlainScript.Steps));
+        }
+
+        [Test]
+        public void AWhistleOnOneRowStartsAStompOnTheNextRowWhichHitsTwoTicksLater()
+        {
+            using (var host = NewHost(3))
+            {
+                host.Start(1, Timelines.Whistle);
+                host.Step();
+                var cues = host.DrainCues();
+                var whistled = global::Tl.EventRecords.Of(cues, 1);
+                Assert.AreEqual(1, whistled.Length);
+                Assert.AreEqual(0, global::Tl.EventRecords.Of(cues, 0).Length);
+                for (var i = 0; i < whistled.Length; i++)
+                    host.Start(2, Timelines.Stomp);
+                Assert.IsFalse(host.IsPlaying(2, Timelines.Stomp));
+                host.Step();
+                Assert.IsTrue(host.IsPlaying(2, Timelines.Stomp));
+                host.Step();
+                Assert.AreEqual(1000, host.Health[2].Value);
+                host.Step();
+                Assert.AreEqual(975, host.Health[2].Value);
+                Assert.AreEqual(1000, host.Health[0].Value);
+                Assert.AreEqual(1000, host.Health[1].Value);
+            }
+        }
+
+        [Test]
         public void GamePulsesAndClipsWriteTheRowColumns()
         {
             using (var host = NewHost(4))
