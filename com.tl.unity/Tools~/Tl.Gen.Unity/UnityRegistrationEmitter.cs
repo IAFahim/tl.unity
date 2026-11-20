@@ -14,9 +14,9 @@ namespace Tl.Gen.Unity
             writer.Append("namespace TlUnityGenerated\n{\n");
             writer.Append("internal static class ").Append(type).Append("\n{\n");
             writer.Append("internal static void Register()\n{\n");
-            writer.Append("using var scope = global::UnityEngine.TypeManagerV2.BeginRegistration(typeof(").Append(type).Append(").TypeHandle);\n");
+            writer.Append("using var scope = global::UnityEngine.Internal.TypeManagerV2.BeginRegistration(typeof(").Append(type).Append(").TypeHandle);\n");
             foreach (var component in components)
-                writer.Append("global::UnityEngine.TypeManagerV2.RegisterComponentType(typeof(").Append(component).Append(").TypeHandle);\n");
+                writer.Append("global::UnityEngine.Internal.TypeManagerV2.RegisterComponentType(typeof(").Append(component).Append(").TypeHandle);\n");
             writer.Append("}\n}\n}\n");
             return writer.ToString();
         }
