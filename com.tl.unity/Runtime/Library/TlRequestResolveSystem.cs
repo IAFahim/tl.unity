@@ -34,7 +34,7 @@ namespace Tl.Unity
 #if !TL_CHECKED
     [DisableAutoCreation]
 #endif
-    [UpdateInGroup(typeof(TimelineSimulationGroup), OrderLast = true)]
+    [UpdateInGroup(typeof(TlSimulationGroup), OrderLast = true)]
     public partial struct TlCheckedStartsSystem : ISystem
     {
         EntityQuery _tick;

@@ -61,14 +61,6 @@ public unsafe struct RequestQueue
 
     public static void SortStable(RequestQueue* queue) => SortWith(queue->_items, queue->_count, queue->_scratch);
 
-    public static void Sort(RequestRecord* items, int count)
-    {
-        if (count <= 1) return;
-        var scratch = (RequestRecord*)NativeMemory.AlignedAlloc((nuint)count * (nuint)sizeof(RequestRecord), 8u);
-        try { SortWith(items, count, scratch); }
-        finally { NativeMemory.AlignedFree(scratch); }
-    }
-
     public static void Sort(RequestRecord* items, int count, RequestRecord* scratch) => SortWith(items, count, scratch);
 
     static void SortWith(RequestRecord* items, int count, RequestRecord* scratch)
@@ -234,21 +226,22 @@ public readonly unsafe struct Requests
         _slot = slot;
     }
     public Requests For(int entity, int slot) => new(_queue, entity, slot);
-    public void Start(ushort timeline, ushort at = 0) => RequestQueue.Add(_queue, _entity, _slot, timeline, at, RequestOp.Start);
-    public void Stop(ushort timeline) => RequestQueue.Add(_queue, _entity, _slot, timeline, 0, RequestOp.Stop);
-    public void StopChannel(byte channel) => RequestQueue.Add(_queue, _entity, _slot, channel, 0, RequestOp.StopChannel);
-    public void StopAll() => RequestQueue.Add(_queue, _entity, _slot, 0, 0, RequestOp.StopAll);
-    public void Pause(ushort timeline) => RequestQueue.Add(_queue, _entity, _slot, timeline, 0, RequestOp.Pause);
-    public void Resume(ushort timeline) => RequestQueue.Add(_queue, _entity, _slot, timeline, 0, RequestOp.Resume);
-    public void Seek(ushort timeline, ushort tick) => RequestQueue.Add(_queue, _entity, _slot, timeline, tick, RequestOp.Seek);
-    public void Reverse(ushort timeline, bool reverse) => RequestQueue.Add(_queue, _entity, _slot, timeline, reverse ? (ushort)1 : (ushort)0, RequestOp.Reverse);
-    public void PauseChannel(byte channel) => RequestQueue.Add(_queue, _entity, _slot, channel, 0, RequestOp.PauseChannel);
-    public void ResumeChannel(byte channel) => RequestQueue.Add(_queue, _entity, _slot, channel, 0, RequestOp.ResumeChannel);
-    public void SeekChannel(byte channel, ushort tick) => RequestQueue.Add(_queue, _entity, _slot, channel, tick, RequestOp.SeekChannel);
-    public void ReverseChannel(byte channel, bool reverse) => RequestQueue.Add(_queue, _entity, _slot, channel, reverse ? (ushort)1 : (ushort)0, RequestOp.ReverseChannel);
-    public void SetSpeed(ushort timeline, ushort sixteenths) => RequestQueue.Add(_queue, _entity, _slot, timeline, sixteenths, RequestOp.Speed);
-    public void SetChannelSpeed(byte channel, ushort sixteenths) => RequestQueue.Add(_queue, _entity, _slot, channel, sixteenths, RequestOp.SpeedChannel);
-    public void Reset() => RequestQueue.Add(_queue, _entity, _slot, 0, 0, RequestOp.Reset);
+    void Add(ushort timeline, ushort at, RequestOp op) => RequestQueue.Add(_queue, _entity, _slot, timeline, at, op);
+    public void Start(ushort timeline, ushort at = 0) => Add(timeline, at, RequestOp.Start);
+    public void Stop(ushort timeline) => Add(timeline, 0, RequestOp.Stop);
+    public void StopChannel(byte channel) => Add(channel, 0, RequestOp.StopChannel);
+    public void StopAll() => Add(0, 0, RequestOp.StopAll);
+    public void Pause(ushort timeline) => Add(timeline, 0, RequestOp.Pause);
+    public void Resume(ushort timeline) => Add(timeline, 0, RequestOp.Resume);
+    public void Seek(ushort timeline, ushort tick) => Add(timeline, tick, RequestOp.Seek);
+    public void Reverse(ushort timeline, bool reverse) => Add(timeline, reverse ? (ushort)1 : (ushort)0, RequestOp.Reverse);
+    public void PauseChannel(byte channel) => Add(channel, 0, RequestOp.PauseChannel);
+    public void ResumeChannel(byte channel) => Add(channel, 0, RequestOp.ResumeChannel);
+    public void SeekChannel(byte channel, ushort tick) => Add(channel, tick, RequestOp.SeekChannel);
+    public void ReverseChannel(byte channel, bool reverse) => Add(channel, reverse ? (ushort)1 : (ushort)0, RequestOp.ReverseChannel);
+    public void SetSpeed(ushort timeline, ushort sixteenths) => Add(timeline, sixteenths, RequestOp.Speed);
+    public void SetChannelSpeed(byte channel, ushort sixteenths) => Add(channel, sixteenths, RequestOp.SpeedChannel);
+    public void Reset() => Add(0, 0, RequestOp.Reset);
     public void ConcatSegments(RequestQueue** segs, int chunks)
     {
         if (segs == null || chunks <= 0) return;

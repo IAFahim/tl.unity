@@ -103,7 +103,8 @@ A dropped start changes nothing on the entity: a playback on the same channel
 keeps playing. The plain .NET host does the same (`DamageKind.Pulses(kinds)`
 is generated there too; `PlaybackTable.DroppedStarts` counts dropped starts).
 With the scripting define `TL_CHECKED`, `TlCheckedStartsSystem` throws at the
-end of a step that dropped a start, as checked .NET builds do. A count
+end of a step that dropped a start (Unity logs the exception), as checked .NET
+builds throw. A count
 above zero usually means the object never plays a timeline that feeds the kind:
 declare `[TlKind(GamePulses = n)]` and let one of its timelines reach it, or add
 the kind's entry buffer in an `ITlBaker`.

@@ -42,7 +42,9 @@ public sealed partial class TimelineWorld
                 return new ArgumentOutOfRangeException(nameof(record), $"Request names entity {record.Entity} outside the table capacity.");
             if (record.Op == RequestOp.Start && (record.Timeline == 0 || (uint)(record.Timeline - 1) >= (uint)_view.TimelineCount))
                 return new ArgumentException($"Request starts timeline {record.Timeline}; the loaded library holds {_view.TimelineCount}.");
+#if TL_CHECKED
             if (record.Op == RequestOp.Start && players.Kinds?.Unreachable(record.Entity, record.Timeline) is { } unreachable) return unreachable;
+#endif
         }
         return null;
     }

@@ -325,7 +325,8 @@ namespace KindGame
             check.Update(_game.World.Unmanaged);
             global::Tl.TlRequests.Start(_game.Entities.GetBuffer<TimelineRequest>(bare), KindWorld.Run);
             _game.Step();
-            Assert.Throws<System.InvalidOperationException>(() => check.Update(_game.World.Unmanaged));
+            UnityEngine.TestTools.LogAssert.Expect(UnityEngine.LogType.Exception, new System.Text.RegularExpressions.Regex(@"InvalidOperationException: Tl: 1 start\(s\) dropped"));
+            check.Update(_game.World.Unmanaged);
             Assert.AreEqual(1, _game.Tick.DroppedStarts);
             check.Update(_game.World.Unmanaged);
         }

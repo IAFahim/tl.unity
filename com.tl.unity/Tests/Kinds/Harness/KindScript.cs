@@ -8,7 +8,7 @@ namespace KindGame
         public const int Rows = 4;
         public const int Steps = 600;
         public const ulong EventsPinned = 6607956939547305625UL;
-        public const ulong CrossPinned = 0UL;
+        public const ulong CrossPinned = 6621184945860697932UL;
 
         static uint Next(ref uint state)
         {
