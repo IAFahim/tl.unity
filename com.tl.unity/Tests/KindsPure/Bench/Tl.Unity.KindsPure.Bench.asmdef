@@ -1,0 +1,25 @@
+{
+  "name": "Tl.Unity.KindsPure.Bench",
+  "rootNamespace": "KindPure",
+  "references": [
+    "Tl.Core",
+    "Tl.Unity",
+    "Tl.Unity.Bake",
+    "Tl.Unity.KindsPure",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": true,
+  "overrideReferences": false,
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

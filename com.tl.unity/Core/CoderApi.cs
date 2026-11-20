@@ -21,6 +21,7 @@ public sealed class TlKindAttribute : Attribute
     public bool FoldsPulses { get; set; }
     public int Inline { get; set; }
     public int GamePulses { get; set; }
+    public bool Associative { get; set; }
 }
 
 [AttributeUsage(AttributeTargets.Struct)]

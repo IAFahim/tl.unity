@@ -91,3 +91,82 @@ public unsafe struct KindScore
         this = default;
     }
 }
+
+public unsafe interface IKindSpanValues<T> where T : unmanaged
+{
+    bool Evaluate(int feeder, LibraryStep* step, LibraryTimeline* timeline, ushort tick, bool backward, out T value);
+    void Combine(ref T total, in T next);
+}
+
+public unsafe struct KindValues
+{
+    public int* Row;
+    public byte* Data;
+    public int Stride;
+    public int Front;
+    public int Back;
+    public int TimelineCount;
+    public int Part;
+    public int Rows;
+    public long Bytes;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public byte* RowOf(ushort timeline, ushort tick)
+    {
+        var t = (uint)(timeline - 1);
+        if (t >= (uint)TimelineCount || Row[t] < 0) return null;
+        var row = Data + (nuint)(Row[t] + tick) * (nuint)Stride;
+        return *row == 0 ? null : row;
+    }
+
+    public static KindValues Layout<T>(in KindScore score, LibraryTimeline* timelines, int kind, int part, int* row) where T : unmanaged
+    {
+        var head = sizeof(T) >= 8 ? 8 : 4;
+        var v = new KindValues { Row = row, Front = head, Back = head + sizeof(T), Stride = (2 * head + 2 * sizeof(T) - 1) / head * head, TimelineCount = score.TimelineCount, Part = part };
+        for (var t = 0; t < v.TimelineCount; t++)
+        {
+            row[t] = (score.Masks[t].KindMask & (1ul << kind)) == 0 ? -1 : v.Rows;
+            if (row[t] >= 0) v.Rows += (int)timelines[t].Duration;
+        }
+        v.Bytes = (long)Math.Max(1, v.TimelineCount) * 4 + (long)v.Rows * v.Stride;
+        return v;
+    }
+
+    public void Fill<T, TSpans>(in KindScore score, LibraryTimeline* timelines, int kind, ushort* routes, bool byFeeder, ref TSpans spans) where T : unmanaged where TSpans : struct, IKindSpanValues<T>
+    {
+        for (var t = 0; t < TimelineCount; t++)
+            for (var tick = 0; Row[t] >= 0 && tick < timelines[t].Duration; tick++)
+            {
+                var cell = score.CellOf((ushort)(t + 1), tick, kind);
+                var at = Data + (nuint)(Row[t] + tick) * (nuint)Stride;
+                if (score.Start[cell] != score.Start[cell + 1]) *at = 1;
+                for (var d = 0; d < 2; d++)
+                {
+                    var has = false;
+                    T total = default;
+                    for (var f = score.Start[cell]; f < score.Start[cell + 1]; f++)
+                    {
+                        var span = score.Spans + f;
+                        var route = routes[byFeeder ? span->Feeder : span->Ordinal];
+                        if ((route >> 8) != Part || span->Step == null || !spans.Evaluate(route & 0xff, span->Step, timelines + t, (ushort)tick, d == 1, out var next)) continue;
+                        if (has) spans.Combine(ref total, in next);
+                        else
+                        {
+                            total = next;
+                            has = true;
+                        }
+                    }
+                    if (!has) continue;
+                    *at |= (byte)(2 << d);
+                    *(T*)(at + (d == 0 ? Front : Back)) = total;
+                }
+            }
+    }
+
+    public void Free()
+    {
+        NativeMemory.AlignedFree(Row);
+        NativeMemory.AlignedFree(Data);
+        this = default;
+    }
+}

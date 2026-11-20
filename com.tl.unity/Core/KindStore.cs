@@ -88,6 +88,7 @@ public sealed unsafe class KindStore : IDisposable
     KindScore _score;
     byte* _samples;
     ulong** _listed;
+    KindValues* _values;
     readonly Dictionary<(string, int), (nint Routes, int Part)> _joined = new();
     readonly HashSet<string> _feeding = new(StringComparer.Ordinal);
     readonly object _joinGate = new();
@@ -225,6 +226,31 @@ public sealed unsafe class KindStore : IDisposable
     public KindTable* Table(int kind) => (uint)kind < (uint)_kindCount ? _tables[kind] : null;
 
     public KindScore Score => _score;
+
+    public KindValues* SpanValues<T, TSpans>(int kind, int part, ushort* routes, ref TSpans spans) where T : unmanaged where TSpans : struct, IKindSpanValues<T>
+    {
+        if ((uint)kind >= (uint)_kindCount) return null;
+        var v = _values + kind;
+        if (Volatile.Read(ref *(nint*)&v->Data) == default)
+        {
+            lock (_joinGate)
+            {
+                if (v->Data == null)
+                {
+                    var built = KindValues.Layout<T>(in _score, _tls, kind, part, (int*)Zeroed((nuint)Math.Max(1, _score.TimelineCount) * 4));
+                    var data = (byte*)Zeroed((nuint)built.Rows * (nuint)built.Stride);
+                    built.Data = data;
+                    built.Fill<T, TSpans>(in _score, _tls, kind, routes, false, ref spans);
+                    built.Data = null;
+                    *v = built;
+                    Volatile.Write(ref *(nint*)&v->Data, (nint)data);
+                }
+            }
+        }
+        return v->Part == part ? v : null;
+    }
+
+    public long SpanValueBytes(int kind) => (uint)kind < (uint)_kindCount && _values[kind].Data != null ? _values[kind].Bytes : 0;
 
     public ulong* Playing => _players.PlayingBits;
 
@@ -642,6 +668,7 @@ public sealed unsafe class KindStore : IDisposable
         _samples = (byte*)Zeroed((nuint)entities);
         _listed = (ulong**)Zeroed((nuint)Math.Max(1, _kindCount) * (nuint)sizeof(nint));
         for (var k = 0; k < _kindCount; k++) _listed[k] = (ulong*)Zeroed((nuint)(_tables[k] == null ? 1 : _tables[k]->Words) * 8);
+        _values = (KindValues*)Zeroed((nuint)Math.Max(1, _kindCount) * (nuint)sizeof(KindValues));
         _kindRows = new Rows { Tables = _tables, Mask = _mask, Offset = _offset, Row = _rows, Players = _players, Samples = _samples };
     }
 
@@ -717,10 +744,13 @@ public sealed unsafe class KindStore : IDisposable
         _score.Free();
         if (_listed != null)
             for (var k = 0; k < _kindCount; k++) NativeMemory.AlignedFree(_listed[k]);
-        foreach (var block in new void*[] { _tables, _queues, _mask, _offset, _rows, _closure, _pairs, _pairStart, _windowBase, _windows, _samples, _listed })
+        if (_values != null)
+            for (var k = 0; k < _kindCount; k++) _values[k].Free();
+        foreach (var block in new void*[] { _tables, _queues, _mask, _offset, _rows, _closure, _pairs, _pairStart, _windowBase, _windows, _samples, _listed, _values })
             if (block != null) NativeMemory.AlignedFree(block);
         _samples = null;
         _listed = null;
+        _values = null;
         _tables = null;
         _queues = null;
         _mask = null;

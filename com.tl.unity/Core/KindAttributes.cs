@@ -14,6 +14,7 @@ public sealed class TimelineKindAttribute : Attribute
     public int Order { get; set; }
     public string? Group { get; set; }
     public bool FoldsPulses { get; set; }
+    public bool Associative { get; set; }
 }
 
 public interface IPulseFold<T> where T : unmanaged

@@ -51,7 +51,7 @@ var __active = chunk.GetEnabledMask(ref DamageActiveHandle);
 for (var __kw = 0; __kw < 2; __kw++)
 {
 if (__kw == 1 && __count <= 64) break;
-var __kb = __kw == 0 ? (__ema.ULong0 | __epl.ULong0) & __eme.ULong0 : (__ema.ULong1 | __epl.ULong1) & __eme.ULong1;
+var __kb = __kw == 0 ? __ema.ULong0 & __eme.ULong0 : __ema.ULong1 & __eme.ULong1;
 while (__kb != 0)
 {
 var __row = (__kw << 6) + (int)global::Unity.Mathematics.math.tzcnt(__kb);
@@ -73,36 +73,6 @@ for (var __sj = 0; __sj < __sk; __sj++)
 {
 int __total = default;
 var __has = false;
-for (var __q = 0; __q < __cnt + __smp; __q++)
-{
-var __i = __q < __smp ? __cnt + __q : __q - __smp;
-var __pb = __run + __i;
-if (__pb->Timeline == 0 || !global::Tl.KindScore.Listed(__pb->Flags)) continue;
-ushort __tick = __i < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;
-var __cell = Index.Score.CellOf(__pb->Timeline, __tick, __kid);
-if (__cell < 0 || Index.Score.Start[__cell] == Index.Score.Start[__cell + 1]) continue;
-if (__i < __cnt) { __listed = true; if (__sj != 0 || __pb->Rate != 0) continue; }
-else if (__pb->Phase != __sj) continue;
-if ((__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;
-var __tl = Index.Timelines + (__pb->Timeline - 1);
-var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
-for (var __f = Index.Score.Start[__cell]; __f < Index.Score.Start[__cell + 1]; __f++)
-{
-var __sp = Index.Score.Spans + __f;
-var __r = Index.Routes[__sp->Feeder];
-if ((__r >> 8) != 0) continue;
-var __def = __sp->Step;
-if (__def == null) continue;
-var __kflags = (__backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None) | (global::Tl.KindScore.Synthetic(__pb->Flags, __tick, __def, __backward) ? global::Tl.FrameFlags.Synthetic : global::Tl.FrameFlags.None);
-if (__tick == 0) __kflags |= global::Tl.FrameFlags.TimelineStart;
-if (__tick == (ushort)(__tl->Duration - 1)) __kflags |= global::Tl.FrameFlags.TimelineEnd;
-int __v = default;
-var __ok = false;
-if (!__ok) continue;
-if (__has) global::KindGame.Damage.Combine(ref __total, in __v);
-else { __total = __v; __has = true; }
-}
-}
 for (var __j = 0; __j < __len; __j++)
 {
 var __en = (global::Tl.KindEntry*)(__data + (long)__j * __stride);
