@@ -78,7 +78,7 @@ var __i = __q < __smp ? __cnt + __q : __q - __smp;
 var __pb = __run + __i;
 if (__pb->Timeline == 0 || !global::Tl.KindScore.Listed(__pb->Flags)) continue;
 ushort __tick = __i < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;
-var __cell = Index.Score.CellOf(in Index.Sec, __pb->Timeline, __tick, __kid);
+var __cell = Index.Score.CellOf(__pb->Timeline, __tick, __kid);
 if (__cell < 0 || Index.Score.Start[__cell] == Index.Score.Start[__cell + 1]) continue;
 if (__i < __cnt) { __listed = true; if (__sj != 0 || __pb->Rate != 0) continue; }
 else if (__pb->Phase != __sj) continue;

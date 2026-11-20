@@ -379,7 +379,7 @@ namespace Tl.Gen.Unity
             W(writer, "var __pb = __run + __i;");
             W(writer, "if (__pb->Timeline == 0 || !global::Tl.KindScore.Listed(__pb->Flags)) continue;");
             W(writer, "ushort __tick = __i < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;");
-            W(writer, "var __cell = Index.Score.CellOf(in Index.Sec, __pb->Timeline, __tick, " + kindIdVar + ");");
+            W(writer, "var __cell = Index.Score.CellOf(__pb->Timeline, __tick, " + kindIdVar + ");");
             W(writer, "if (__cell < 0 || Index.Score.Start[__cell] == Index.Score.Start[__cell + 1]) continue;");
         }
 

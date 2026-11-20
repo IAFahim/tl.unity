@@ -4,6 +4,8 @@ A self-contained brief for a reviewer who wants to try. It says what was measure
 
 Repositories: `IAFahim/tl` (the engine, plain .NET) and `IAFahim/tl.unity` (the Unity ECS host, package `com.tl.unity`). Tracking issue: IAFahim/tl#647. Merged work: IAFahim/tl#648 (tl `63d0d16d`), IAFahim/tl.unity#40 (tl.unity `c4d88a6`).
 
+Since IAFahim/tl#652, spans are no longer kind entries: kind jobs read them from a load-time table, and the span-entry cache of sections 5 and 7 (`KindEntryCache`, `KindIndex.TickStamp`, `WindowSteps`) is gone. Sections 3 to 7 record the design as measured at `c4d88a6`; item 4 of section 8 has the new numbers.
+
 ## 1. Short answer
 
 - The **timeline step** in Unity is already about 11x faster than before at long timelines (20,000 characters x 200 playbacks, 3,000-tick timelines: 2.84 -> 0.25 ms per frame). That is the part comparable to the .NET result.
@@ -152,7 +154,7 @@ Each item lists what it would change and what it would break. The hard constrain
 1. **Change-driven span evaluation.** Re-evaluate a span feeder only when its inputs change: the clip (start/end, blend), the direction, the row columns and lookups it reads. Needs generator analysis of each feeder (which `Frame` members and columns it reads; anything tick-dependent such as `Progress` stays per frame) and change versions on the columns it reads. Potential: kinds 0.75 -> about 0.1 ms at duration 3000, which alone is close to 10x on that frame. Risk: feeders that read through `ComponentLookup` or shared context cannot be proven unchanged cheaply; must stay bit-identical.
 2. **Loop wraps that are not events.** Store ticks modulo the timeline duration (`stored = (tick - clock) mod duration`) so a wrap with no kind edge needs no step, no re-encode and no cache refresh. About a third of the events at duration 120. Changes `TimelineTicks.Real` (needs the duration) and every reader.
 3. **A slab layout instead of one heap block per character per buffer.** `Playback`, `PlaybackDue` and kind entries as structure-of-arrays slabs per chunk or per world, indexed by row, so a frame streams memory instead of chasing one pointer per row per buffer. Changes the public `DynamicBuffer<Playback>` contract and every reader; the per-row heap hop measured only 3 % on its own once data was cached (section 7), so this pays mainly together with item 1.
-4. **Cheaper kind events.** Fixed-position entries with an active bit instead of append and `RemoveSpan` (linear search plus memmove). `Combine` would then run in slot order, not start order, which changes results for order-sensitive kinds (re-pinned hashes: an owner decision).
+4. **Cheaper kind events.** Done in IAFahim/tl#652: spans are no longer entries. A load-time table (`KindIndex.Score`) lists the live spans per (timeline, tick, kind), kind jobs walk playback slots, and `Combine` runs in slot order, then pair order (owner-approved re-pin). Owner shape (500 timelines x 16 tracks, 10,000 to 50,000 rows x 40 to 100 playbacks): 3.8x to 4.7x faster, entity heap 21.5 KB to 1 KB per row.
 5. **Fusing the tick and the kind jobs per chunk**, so a row's data is still in cache when its feeders run. Breaks the contract that user systems can run between the tick system and the kind systems.
 6. **Skip the refresh scan** with a per-row bitmask of slots that own cached entries (about 0.1 ms at duration 120).
 7. **A2 on .NET**: a reader for generated systems that does not force eager stepping, so the .NET kinds path gets lazy ticks too.
@@ -170,12 +172,12 @@ Each item lists what it would change and what it would break. The hard constrain
 
 Code (paths in `IAFahim/tl.unity` unless marked tl):
 
-- `com.tl.unity/Runtime/KindTick.cs`: `KindTickJob` (`Execute`, `TickLazy`, `Unclock`), `KindCursor` (`AppendEntry`, `RemoveSpan`, `Refresh`, `Forget`, `SetActive`)
-- `com.tl.unity/Runtime/KindSystems.cs`: `TimelineKindTickSystem` (tick stamp, forget rules)
-- `com.tl.unity/Runtime/KindIndex.cs`: `StepInWindow`, `StepOfEntry`, `PackedStep`, `WindowSteps`, `Calm`
-- `com.tl.unity/Runtime/TimelineHorizon.cs`: `DueScan`, `KindTickStamp`, `KindEntryCache`, `TimelineTicks`
+- `com.tl.unity/Runtime/KindTick.cs`: `KindTickJob` (`Execute`, `TickLazy`, `Unclock`), `KindCursor` (`AppendEntry`, `Sampled`, `SetActive`)
+- `com.tl.unity/Runtime/KindSystems.cs`: `TimelineKindTickSystem` (forget rules)
+- `com.tl.unity/Runtime/KindIndex.cs`: `StepInWindow`, `Score`, `SpanCount`, `Calm`
+- `com.tl.unity/Runtime/TimelineHorizon.cs`: `DueScan`, `TimelineTicks`
 - `com.tl.unity/Tools~/Tl.Gen.Unity/UnityKindJobEmitter.cs`: generated kind jobs
-- `com.tl.unity/Core/KindRules.cs` (copy of tl `src/Tl.Core/KindRules.cs`): `TickSlot`, `ApplyEvents`, `WrapRemove`
+- `com.tl.unity/Core/KindRules.cs` (copy of tl `src/Tl.Core/KindRules.cs`): `TickSlot`, `ApplyEvents`; `com.tl.unity/Core/KindScore.cs`: the span table
 - `com.tl.unity/Tests/Kinds/Bench/OwnerScaleBench.cs`: the benchmark
 - `docs/KINDS.md`, section "Lazy rows": the contract
 - tl `src/Tl.Core/TimelineWorld.Systems.cs`, `src/Tl.Core/LazyTicks.cs`: .NET lazy ticks

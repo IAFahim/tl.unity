@@ -79,7 +79,7 @@ namespace Tl.Unity
 
         public int SpanCount(ushort timeline, int tick, int kind)
         {
-            var cell = Score.CellOf(in Sec, timeline, tick, kind);
+            var cell = Score.CellOf(timeline, tick, kind);
             return cell < 0 ? 0 : Score.Start[cell + 1] - Score.Start[cell];
         }
 

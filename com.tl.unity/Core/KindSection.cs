@@ -196,6 +196,9 @@ internal static unsafe class KindSectionReader
             || (ulong)t->EventIndex + 4ul * (2ul * duration + 1) > view.Bytes
             || (ulong)t->Events + 8ul * total > view.Bytes) throw Fail($"{where} data out of bounds");
         if (t->WrapForward != t->EventCount || t->WrapBackward != t->EventCount + t->WrapForwardCount) throw Fail($"{where} wrap lists must follow the tick events");
+        var windows = (LibraryWindow*)(view.Base + t->Windows);
+        for (var w = 0; w < t->WindowCount; w++)
+            if (windows[w].Start >= windows[w].End || windows[w].End > duration) throw Fail($"{where} window {w} lies outside the timeline");
         var starts = (uint*)(view.Base + t->EventIndex);
         var last = 0u;
         for (var i = 0; i <= 2 * (int)duration; i++)

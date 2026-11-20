@@ -65,7 +65,6 @@ public static unsafe class KindRules
         return depth;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool Due(KindEntry* entry, int substep, Playback* run, int count) => entry->Timeline != 0 && entry->Slot >= count ? run[entry->Slot].Phase == substep : substep == 0;
 
     public static bool TickEntity<TRows>(in KindTables t, Playback* slots, int count, ref TRows rows, int row, int stepDir) where TRows : struct, IKindRows
@@ -112,7 +111,7 @@ public static unsafe class KindRules
             }
         }
         rows.Sampled(row, samples);
-        return live;
+        return live || samples != 0;
     }
 
     static Playback* TickRated<TRows>(in KindTables t, Playback* slots, int count, ref TRows rows, int row, int i, int stepDir, ref int samples, out bool live) where TRows : struct, IKindRows
