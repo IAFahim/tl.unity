@@ -42,9 +42,33 @@ namespace KindPure
             using var writer = new StreamWriter(log, append: true);
             Row(writer, "env unity=" + UnityEngine.Application.unityVersion + " burst=" + Unity.Burst.BurstCompiler.IsEnabled + " workers=" + Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerCount + " timelines=" + TimelineCount + " live=" + LiveTracks + " warmup=" + warmup + " measure=" + measure + " runs=" + runs);
             var library = Library(LiveTracks);
+            var split = Array.IndexOf(args, "-pureSplit") >= 0;
             foreach (var rowsText in rowsList.Split(','))
             foreach (var activeText in activeList.Split(','))
-                Cell(writer, library, int.Parse(rowsText, CultureInfo.InvariantCulture), int.Parse(activeText, CultureInfo.InvariantCulture), warmup, measure, runs);
+            {
+                var rows = int.Parse(rowsText, CultureInfo.InvariantCulture);
+                var active = int.Parse(activeText, CultureInfo.InvariantCulture);
+                if (split) Split(writer, library, rows, active, warmup, measure);
+                else Cell(writer, library, rows, active, warmup, measure, runs);
+            }
+        }
+
+        static void Split(StreamWriter writer, byte[] library, int rows, int active, int warmup, int measure)
+        {
+            using var game = World(library, rows, active);
+            for (var i = 0; i <= warmup; i++) game.Step();
+            game.Entities.CompleteAllTrackedJobs();
+            var parts = new double[3];
+            var samples = new double[3][];
+            for (var s = 0; s < 3; s++) samples[s] = new double[measure];
+            for (var i = 0; i < measure; i++)
+            {
+                game.StepEachSystemCompleted(parts);
+                for (var s = 0; s < 3; s++) samples[s][i] = parts[s] * 1000.0 / Stopwatch.Frequency;
+            }
+            for (var s = 0; s < 3; s++) Array.Sort(samples[s]);
+            Row(writer, string.Format(CultureInfo.InvariantCulture, "split rows={0} active={1} precombined={2} tickMs={3:F3} movementMs={4:F3} vitalsMs={5:F3}",
+                rows, active, game.Precombined("KindPure.Locomotion") && game.Precombined("KindPure.Lift"), samples[0][measure / 2], samples[1][measure / 2], samples[2][measure / 2]));
         }
 
         static void Row(StreamWriter writer, string text)

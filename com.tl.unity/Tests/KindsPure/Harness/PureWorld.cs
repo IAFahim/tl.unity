@@ -121,6 +121,23 @@ namespace KindPure
             VitalsHandle.Update(World.Unmanaged);
         }
 
+        public void StepEachSystemCompleted(double[] ticksPerSystem)
+        {
+            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+            TickHandle.Update(World.Unmanaged);
+            Entities.CompleteAllTrackedJobs();
+            var afterTick = System.Diagnostics.Stopwatch.GetTimestamp();
+            MovementHandle.Update(World.Unmanaged);
+            Entities.CompleteAllTrackedJobs();
+            var afterMovement = System.Diagnostics.Stopwatch.GetTimestamp();
+            VitalsHandle.Update(World.Unmanaged);
+            Entities.CompleteAllTrackedJobs();
+            var afterVitals = System.Diagnostics.Stopwatch.GetTimestamp();
+            ticksPerSystem[0] = afterTick - start;
+            ticksPerSystem[1] = afterMovement - afterTick;
+            ticksPerSystem[2] = afterVitals - afterMovement;
+        }
+
         public bool Precombined(string kind)
         {
             Entities.CompleteAllTrackedJobs();
