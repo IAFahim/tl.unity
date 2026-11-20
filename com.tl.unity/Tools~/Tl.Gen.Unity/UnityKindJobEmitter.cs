@@ -290,6 +290,9 @@ namespace Tl.Gen.Unity
             W(writer, "}");
             for (var k = 0; k < kinds.Count; k++)
                 EmitKind(writer, shape, assignment, assignmentIndex, kinds[k], k);
+            for (var k = 0; k < kinds.Count; k++)
+                if (kinds[k].Decl.Precombined)
+                    EmitSpanValues(writer, shape, assignment, assignmentIndex, kinds[k], k);
             if (events.Count != 0)
                 EmitEvents(writer, events, eventConsumers, assignmentIndex);
             W(writer, "}");
@@ -348,6 +351,13 @@ namespace Tl.Gen.Unity
             W(writer, "{");
             foreach (var handle in handles)
                 W(writer, "_" + handle.field + ".Update(ref state);");
+            for (var k = 0; k < kinds.Count; k++)
+            {
+                if (!kinds[k].Decl.Precombined)
+                    continue;
+                W(writer, "var __kid" + k + " = index.KindOf(" + KindId(kinds[k].Decl.Id) + ");");
+                W(writer, "if (__kid" + k + " >= 0) { var __spans" + k + " = default(" + name + "ChunkJob.KindSpans_" + k + "); index.SpanValues<" + kinds[k].Decl.ValueTypeName + ", " + name + "ChunkJob.KindSpans_" + k + ">(__kid" + k + ", ref __spans" + k + "); }");
+            }
             W(writer, "var job = new " + name + "ChunkJob { View = view, Index = index, Forward = forward");
             foreach (var handle in handles)
                 W(writer, ", " + handle.field + " = _" + handle.field);
@@ -403,7 +413,7 @@ namespace Tl.Gen.Unity
             W(writer, "if (__tick == (ushort)(__tl->Duration - 1)) __kflags |= global::Tl.FrameFlags.TimelineEnd;");
         }
 
-        static void EmitCases(StringBuilder writer, Shape shape, SystemAssignment assignment, int assignmentIndex, List<(int consumer, FeederDecl feeder)> feeders, string selector, bool spans)
+        static void EmitCases(StringBuilder writer, Shape shape, SystemAssignment assignment, int assignmentIndex, List<(int consumer, FeederDecl feeder)> feeders, string selector, bool spans, string skip = "continue")
         {
             var any = false;
             for (var i = 0; i < feeders.Count; i++)
@@ -446,7 +456,63 @@ namespace Tl.Gen.Unity
             }
             if (any)
                 W(writer, "}");
-            W(writer, "if (!__ok) continue;");
+            W(writer, "if (!__ok) " + skip + ";");
+        }
+
+        static List<(int consumer, FeederDecl feeder)> FeedersOf(SystemAssignment assignment, KindDecl kind)
+        {
+            var feeders = new List<(int consumer, FeederDecl feeder)>();
+            for (var c = 0; c < assignment.Consumers.Count; c++)
+                foreach (var feeder in assignment.Consumers[c].Feeders)
+                    if (feeder.KindName == kind.Id)
+                        feeders.Add((c, feeder));
+            feeders.Sort((a, b) =>
+            {
+                var by = string.CompareOrdinal(a.feeder.ConsumerMetadata, b.feeder.ConsumerMetadata);
+                return by != 0 ? by : string.CompareOrdinal(a.feeder.MethodName, b.feeder.MethodName);
+            });
+            return feeders;
+        }
+
+        static void EmitSpanValues(StringBuilder writer, Shape shape, SystemAssignment assignment, int assignmentIndex, UnityKindInfo info, int ordinal)
+        {
+            var kind = info.Decl;
+            var value = kind.ValueTypeName;
+            W(writer, "public struct KindSpans_" + ordinal + " : global::Tl.IKindSpanValues<" + value + ">");
+            W(writer, "{");
+            W(writer, "public bool Evaluate(int __r, global::Tl.LibraryStep* __def, global::Tl.LibraryTimeline* __tl, ushort __tick, bool __backward, out " + value + " __v)");
+            W(writer, "{");
+            W(writer, "__v = default;");
+            W(writer, "var __kflags = __backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None;");
+            W(writer, "if (__tick == 0) __kflags |= global::Tl.FrameFlags.TimelineStart;");
+            W(writer, "if (__tick == (ushort)(__tl->Duration - 1)) __kflags |= global::Tl.FrameFlags.TimelineEnd;");
+            W(writer, "var __ok = false;");
+            EmitCases(writer, shape, assignment, assignmentIndex, FeedersOf(assignment, kind), "__r", true, "return false");
+            W(writer, "return true;");
+            W(writer, "}");
+            W(writer, "public void Combine(ref " + value + " total, in " + value + " next) => " + kind.TypeName + ".Combine(ref total, in next);");
+            W(writer, "}");
+        }
+
+        static void EmitValueWalk(StringBuilder writer, KindDecl kind)
+        {
+            W(writer, "for (var __q = 0; __q < __cnt + __smp; __q++)");
+            W(writer, "{");
+            W(writer, "var __i = __q < __smp ? __cnt + __q : __q - __smp;");
+            W(writer, "var __pb = __run + __i;");
+            W(writer, "if (__pb->Timeline == 0 || !global::Tl.KindScore.Listed(__pb->Flags)) continue;");
+            W(writer, "ushort __tick = __i < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;");
+            W(writer, "var __vr = __kv->RowOf(__pb->Timeline, __tick);");
+            W(writer, "if (__vr == null) continue;");
+            W(writer, "if (__i < __cnt) { __listed = true; if (__sj != 0 || __pb->Rate != 0) continue; }");
+            W(writer, "else if (__pb->Phase != __sj) continue;");
+            W(writer, "if ((__pb->Flags & global::Tl.PlaybackFlags.Paused) != 0) continue;");
+            W(writer, "var __bk = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;");
+            W(writer, "if ((*__vr & (__bk ? 4 : 2)) == 0) continue;");
+            W(writer, "ref readonly var __sv = ref *(" + kind.ValueTypeName + "*)(__vr + (__bk ? __kv->Back : __kv->Front));");
+            W(writer, "if (__has) " + kind.TypeName + ".Combine(ref __total, in __sv);");
+            W(writer, "else { __total = __sv; __has = true; }");
+            W(writer, "}");
         }
 
         static void EmitRowHead(StringBuilder writer)
@@ -462,16 +528,8 @@ namespace Tl.Gen.Unity
         static void EmitKind(StringBuilder writer, Shape shape, SystemAssignment assignment, int assignmentIndex, UnityKindInfo info, int ordinal)
         {
             var kind = info.Decl;
-            var feeders = new List<(int consumer, FeederDecl feeder)>();
-            for (var c = 0; c < assignment.Consumers.Count; c++)
-                foreach (var feeder in assignment.Consumers[c].Feeders)
-                    if (feeder.KindName == kind.Id)
-                        feeders.Add((c, feeder));
-            feeders.Sort((a, b) =>
-            {
-                var by = string.CompareOrdinal(a.feeder.ConsumerMetadata, b.feeder.ConsumerMetadata);
-                return by != 0 ? by : string.CompareOrdinal(a.feeder.MethodName, b.feeder.MethodName);
-            });
+            var feeders = FeedersOf(assignment, kind);
+            var spanless = kind.Accepts == 1;
             var value = kind.ValueTypeName;
             var applyArgs = CallArgs(shape, kind.ApplyParams, "", "__row", "");
             var tail = applyArgs.Length == 0 ? "" : ", " + applyArgs;
@@ -491,6 +549,8 @@ namespace Tl.Gen.Unity
             W(writer, "if (!chunk.Has(ref " + info.Name + "EntryHandle)) return;");
             W(writer, "var __kid = Index.KindOf(" + KindId(kind.Id) + ");");
             W(writer, "if (__kid < 0) return;");
+            if (kind.Precombined)
+                W(writer, "var __kv = Index.Values + __kid;");
             W(writer, "var __copies = chunk.Has(ref PlayingHandle) ? (global::Tl.Unity.TimelinePlaying*)chunk.GetRequiredComponentDataPtrRO(ref PlayingHandle) : null;");
             W(writer, "var __epl = chunk.Has(ref PlayingHandle) ? chunk.GetEnableableBits(ref PlayingHandle) : default;");
             W(writer, "var __acc = chunk.GetBufferAccessor(ref " + info.Name + "EntryHandle);");
@@ -502,7 +562,7 @@ namespace Tl.Gen.Unity
             W(writer, "for (var __kw = 0; __kw < 2; __kw++)");
             W(writer, "{");
             W(writer, "if (__kw == 1 && __count <= 64) break;");
-            W(writer, "var __kb = __kw == 0 ? (__ema.ULong0 | __epl.ULong0) & __eme.ULong0 : (__ema.ULong1 | __epl.ULong1) & __eme.ULong1;");
+            W(writer, spanless ? "var __kb = __kw == 0 ? __ema.ULong0 & __eme.ULong0 : __ema.ULong1 & __eme.ULong1;" : "var __kb = __kw == 0 ? (__ema.ULong0 | __epl.ULong0) & __eme.ULong0 : (__ema.ULong1 | __epl.ULong1) & __eme.ULong1;");
             W(writer, "while (__kb != 0)");
             W(writer, "{");
             W(writer, "var __row = (__kw << 6) + (int)global::Unity.Mathematics.math.tzcnt(__kb);");
@@ -522,18 +582,32 @@ namespace Tl.Gen.Unity
                 W(writer, value + " __total = default;");
                 W(writer, "var __has = false;");
             }
-            EmitSlotWalk(writer, "__kid");
-            W(writer, "if (__i < __cnt) { __listed = true; if (__sj != 0 || __pb->Rate != 0) continue; }");
-            W(writer, "else if (__pb->Phase != __sj) continue;");
-            EmitSpanHead(writer);
-            W(writer, "if ((__r >> 8) != 0) continue;");
-            EmitSpanFrame(writer);
-            W(writer, value + " __v = default;");
-            W(writer, "var __ok = false;");
-            EmitCases(writer, shape, assignment, assignmentIndex, feeders, "__r & 0xff", true);
-            Fold();
-            W(writer, "}");
-            W(writer, "}");
+            if (kind.Precombined)
+            {
+                W(writer, "if (__kv->Data != null)");
+                W(writer, "{");
+                EmitValueWalk(writer, kind);
+                W(writer, "}");
+                W(writer, "else");
+                W(writer, "{");
+            }
+            if (!spanless)
+            {
+                EmitSlotWalk(writer, "__kid");
+                W(writer, "if (__i < __cnt) { __listed = true; if (__sj != 0 || __pb->Rate != 0) continue; }");
+                W(writer, "else if (__pb->Phase != __sj) continue;");
+                EmitSpanHead(writer);
+                W(writer, "if ((__r >> 8) != 0) continue;");
+                EmitSpanFrame(writer);
+                W(writer, value + " __v = default;");
+                W(writer, "var __ok = false;");
+                EmitCases(writer, shape, assignment, assignmentIndex, feeders, "__r & 0xff", true);
+                Fold();
+                W(writer, "}");
+                W(writer, "}");
+            }
+            if (kind.Precombined)
+                W(writer, "}");
             W(writer, "for (var __j = 0; __j < __len; __j++)");
             W(writer, "{");
             W(writer, "var __en = (global::Tl.KindEntry*)(__data + (long)__j * __stride);");

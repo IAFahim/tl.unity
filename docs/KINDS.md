@@ -28,6 +28,14 @@ shows `Each` mode: every pulse applies exactly once, in a fixed merge order.
 A kind is named by its type name (`Damage`). New code writes `[TlKind]`; the test game keeps the older `[TimelineKind]` and
 `[TimelineSystem]` spelling, which still works.
 
+## Precombined spans (`Associative = true`)
+
+A kind that declares `Associative = true` on `[TimelineKind]`/`[TlKind]` reads one precombined value per playback slot instead of evaluating every live span, when every `[Feeds]` method of the kind in that system takes only the frame and its own fold results and none reads `Synthetic` or `Interrupted` (the same rules as tl, IAFahim/tl#655; `TLGEN115` is an info diagnostic naming why an opted-in kind keeps the per-span walk). Move per-entity inputs into `Apply`.
+
+- The generated `TimelineJobs.<System>.Schedule` builds each precombined table on the main thread the first time it runs after a library is published (`KindIndex.SpanValues`, `UnsafeUtility` memory, so it runs under Burst); `KindIndex.Dispose` frees it with the library. The generated job then does one lookup and one `Combine` per slot.
+- `Tests/KindsPure` runs tl's `benchmarks/KindShape` pure domain: `PureHashTests` checks that both opted-in kinds read precombined tables and that the state hash equals the .NET host's for the same library and script. `KindPure.PureShapeBench.RunBatch` (`-pureRows`, `-pureActive`, `-pureRuns`, `-pureLog`) times it; `-define:TL_BASELINE` in a `csc.rsp` next to `Tl.Unity.KindsPure.asmdef` drops the opt-in for the per-span arm.
+- A kind that accepts only pulses no longer walks playback slots at all.
+
 ## Step order
 
 Each step runs `TimelineKindTickSystem` first, then the kind loops inside each

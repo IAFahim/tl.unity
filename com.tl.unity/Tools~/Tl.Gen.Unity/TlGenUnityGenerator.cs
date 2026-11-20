@@ -91,11 +91,12 @@ namespace Tl.Gen.Unity
             {
                 if (diagnostic.Code == "TLGEN107")
                     continue;
+                var info = diagnostic.Code == "TLGEN115";
                 var warning = diagnostic.Code is "TLGEN98" or "TLGEN113" or "TLGEN114";
-                if (!warning)
+                if (!warning && !info)
                     failed = true;
                 context.ReportDiagnostic(Diagnostic.Create(
-                    new DiagnosticDescriptor(diagnostic.Code, "Invalid timeline declaration", "{0}", "Tl.Generation", warning ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error, true),
+                    new DiagnosticDescriptor(diagnostic.Code, "Invalid timeline declaration", "{0}", "Tl.Generation", info ? DiagnosticSeverity.Info : warning ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error, true),
                     Location(diagnostic), diagnostic.Message));
             }
             foreach (var model in models)

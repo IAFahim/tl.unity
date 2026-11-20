@@ -39,6 +39,7 @@ namespace Tl.Unity
         public int OwnerCount;
         public global::Tl.KindCalm Calm;
         public global::Tl.KindScore Score;
+        public global::Tl.KindValues* Values;
 
         public bool IsCreated => Timelines != null || KindCount == 0 && Closure != null;
 
@@ -267,7 +268,20 @@ namespace Tl.Unity
             BuildSteps(ref index, view, world);
             var steps = new ScoreSteps { Index = index };
             index.Score = global::Tl.KindScore.Build(in tables, ref steps);
+            index.Values = Zeroed<global::Tl.KindValues>(Math.Max(1, index.KindCount));
             return index;
+        }
+
+        public void SpanValues<T, TSpans>(int kind, ref TSpans spans) where T : unmanaged where TSpans : struct, global::Tl.IKindSpanValues<T>
+        {
+            var values = Values + kind;
+            if (values->Data != null) return;
+            var built = global::Tl.KindValues.Layout<T>(in Score, Timelines, kind, 0, Zeroed<int>(Math.Max(1, TimelineCount)));
+            var bytes = (long)built.Rows * built.Stride;
+            if (bytes > int.MaxValue) throw new InvalidOperationException("Tl: a precombined kind table would exceed 2 GB.");
+            built.Data = Zeroed<byte>(Math.Max(1, (int)bytes));
+            built.Fill<T, TSpans>(in Score, Timelines, kind, Routes, true, ref spans);
+            *values = built;
         }
 
         static void BuildSteps(ref KindIndex index, in global::Tl.LibraryView view, global::Tl.TimelineWorld world)
@@ -371,6 +385,12 @@ namespace Tl.Unity
             Free(Calm.Forward);
             Free(Calm.Backward);
             Free(Calm.Start);
+            for (var k = 0; Values != null && k < Math.Max(1, KindCount); k++)
+            {
+                Free(Values[k].Row);
+                Free(Values[k].Data);
+            }
+            Free(Values);
             Score.Free();
             this = default;
         }
