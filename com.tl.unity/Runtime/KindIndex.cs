@@ -277,7 +277,9 @@ namespace Tl.Unity
             var values = Values + kind;
             if (values->Data != null) return;
             var built = global::Tl.KindValues.Layout<T>(in Score, Timelines, kind, 0, Zeroed<int>(Math.Max(1, TimelineCount)));
-            built.Data = Zeroed<byte>(Math.Max(1, built.Rows * built.Stride));
+            var bytes = (long)built.Rows * built.Stride;
+            if (bytes > int.MaxValue) throw new InvalidOperationException("Tl: a precombined kind table would exceed 2 GB.");
+            built.Data = Zeroed<byte>(Math.Max(1, (int)bytes));
             built.Fill<T, TSpans>(in Score, Timelines, kind, Routes, true, ref spans);
             *values = built;
         }
