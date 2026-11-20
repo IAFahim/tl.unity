@@ -164,22 +164,6 @@ public unsafe struct KindTable
         if (kept == 0) Active[row >> 6] &= ~(1ul << (row & 63));
     }
 
-    public void RemovePulses(int row)
-    {
-        var length = Length[row];
-        var data = Data(row);
-        var kept = 0;
-        for (var i = 0; i < length; i++)
-        {
-            var e = (KindEntry*)(data + (nuint)i * (nuint)Stride);
-            if ((e->Flags & KindEntryFlags.Pulse) != 0) continue;
-            if (kept != i) Buffer.MemoryCopy(e, data + (nuint)kept * (nuint)Stride, Stride, Stride);
-            kept++;
-        }
-        Length[row] = (ushort)kept;
-        if (kept == 0) Active[row >> 6] &= ~(1ul << (row & 63));
-    }
-
     public void Clear(int row)
     {
         Length[row] = 0;
