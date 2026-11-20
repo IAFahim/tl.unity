@@ -64,7 +64,13 @@ public unsafe struct KindScore
                 if (t.Sec.Feeders[f].Trigger != 0) continue;
                 for (int tick = windows[w].Start; tick < windows[w].End; tick++)
                 {
-                    cells.Add(s.CellOf(id, tick, t.Sec.Feeders[f].Kind));
+                    var cell = s.CellOf(id, tick, t.Sec.Feeders[f].Kind);
+                    if (cell < 0)
+                    {
+                        s.Free();
+                        throw new ArgumentException($"timeline {id} feeds kind {t.Sec.Feeders[f].Kind} outside its kind mask; build the score from a validated kind section.");
+                    }
+                    cells.Add(cell);
                     spans.Add(new KindSpan { Step = steps.StepOf(id, w, (ushort)tick), Window = (ushort)w, Feeder = f, Ordinal = t.Sec.Feeders[f].Ordinal });
                 }
             }

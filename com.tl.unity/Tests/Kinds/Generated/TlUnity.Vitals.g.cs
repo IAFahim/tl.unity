@@ -64,6 +64,7 @@ var __pbuf = __playbacks[__row];
 var __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr();
 var __cnt = __pbuf.Length;
 var __smp = __copies == null ? 0 : (int)__copies[__row].Copies;
+if (__cnt + __smp > __pbuf.Capacity) __smp = 0;
 var __clock = __clocks == null ? (ushort)0 : __clocks[__row];
 var __listed = false;
 var __sampled = __smp != 0;

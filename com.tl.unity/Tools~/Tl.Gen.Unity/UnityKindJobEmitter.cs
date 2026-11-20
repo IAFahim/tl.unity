@@ -455,6 +455,7 @@ namespace Tl.Gen.Unity
             W(writer, "var __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr();");
             W(writer, "var __cnt = __pbuf.Length;");
             W(writer, "var __smp = __copies == null ? 0 : (int)__copies[__row].Copies;");
+            W(writer, "if (__cnt + __smp > __pbuf.Capacity) __smp = 0;");
             W(writer, "var __clock = __clocks == null ? (ushort)0 : __clocks[__row];");
         }
 

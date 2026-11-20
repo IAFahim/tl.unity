@@ -195,6 +195,15 @@ namespace Tl.Gen.Unity
             W(writer, "var __len = __buf.Length;");
             W(writer, "byte* __data = (byte*)__buf.GetUnsafePtr();");
             EmitRowHead(writer);
+            W(writer, "var __kept = 0;");
+            W(writer, "for (var __j = 0; __j < __len; __j++)");
+            W(writer, "{");
+            W(writer, "var __q = (global::Tl.KindEntry*)(__data + (long)__j * __stride);");
+            W(writer, "if ((__q->Flags & global::Tl.KindEntryFlags.Span) != 0 && __q->Owner == __owner) continue;");
+            W(writer, "if (__kept != __j) global::Unity.Collections.LowLevel.Unsafe.UnsafeUtility.MemCpy(__data + (long)__kept * __stride, __q, __stride);");
+            W(writer, "__kept++;");
+            W(writer, "}");
+            W(writer, "if (__kept != __len) { __buf.ResizeUninitialized(__kept); __len = __kept; }");
             W(writer, "for (var __j = 0; __j < __len; __j++)");
             W(writer, "{");
             W(writer, "var __en = (global::Tl.KindEntry*)(__data + (long)__j * __stride);");
