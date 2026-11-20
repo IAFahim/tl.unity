@@ -8,6 +8,7 @@ namespace KindGame
         public const int Rows = 4;
         public const int Steps = 600;
         public const ulong EventsPinned = 6607956939547305625UL;
+        public const ulong CrossPinned = 6621184945860697932UL;
 
         static uint Next(ref uint state)
         {
@@ -105,6 +106,44 @@ namespace KindGame
                         h = MixInt(h, cues[i].Record.Slot);
                         h = MixInt(h, cues[i].Record.Value.Voice);
                     }
+                }
+            }
+            return h;
+        }
+
+        public static ulong PlayCross(KindWorld game, int steps)
+        {
+            var ids = new ushort[] { Timelines.Jump, Timelines.PotionHop, Timelines.Run, Timelines.SpeedBoost, Timelines.Whistle };
+            var rng = 0xC2B2AE35u;
+            var h = global::Tl.TlStateHash.Seed;
+            for (var step = 0; step < steps; step++)
+            {
+                var forward = !(step >= 200 && step < 240);
+                for (var e = 0; e < Rows; e++)
+                {
+                    var r = Next(ref rng);
+                    switch (r & 7)
+                    {
+                        case 0:
+                        case 1:
+                            game.Start(e, ids[(r >> 8) % 5]);
+                            break;
+                        case 2:
+                            game.Stop(e, ids[(r >> 8) % 5]);
+                            break;
+                        case 3:
+                            if (((r >> 8) & 7) == 0) game.StopAll(e);
+                            break;
+                    }
+                }
+                game.Step(forward);
+                for (var e = 0; e < Rows; e++)
+                {
+                    h = MixInt(h, game.Cues(e).Length);
+                    h = MixInt(h, game.Health(e));
+                    var motion = game.Motion(e);
+                    h = Mix(h, motion.X);
+                    h = Mix(h, motion.Y);
                 }
             }
             return h;

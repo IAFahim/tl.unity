@@ -19,6 +19,19 @@ public readonly struct EventRecord<T>
     public readonly T Value;
 }
 
+public static class EventRecords
+{
+    public static ReadOnlySpan<EventRecord<T>> Of<T>(this Span<EventRecord<T>> drained, int entity) where T : unmanaged
+    {
+        int first = 0, end = drained.Length;
+        while (first < end)
+            if (drained[(first + end) >> 1].Entity.Index < entity) first = ((first + end) >> 1) + 1;
+            else end = (first + end) >> 1;
+        while (end < drained.Length && drained[end].Entity.Index == entity) end++;
+        return drained.Slice(first, end - first);
+    }
+}
+
 [StructLayout(LayoutKind.Sequential)]
 unsafe struct EventsHeader<T>
     where T : unmanaged

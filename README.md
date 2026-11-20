@@ -807,15 +807,41 @@ public struct StartIt : IComponentData { public Tl.TlTimeline Timeline; }   // t
 void Execute(in StartIt startIt, DynamicBuffer<TimelineRequest> requests) => requests.Start(startIt.Timeline);
 ```
 
-| Call | Does |
-|---|---|
-| `Start(timeline, atTick)`, `Stop`, `Pause`, `Resume` | the basics |
-| `Seek(timeline, tick)` | jumps there, fires no pulses on the way |
-| `Reverse(timeline, on)` | this timeline runs backward |
-| `SetSpeed(timeline, sixteenths)` | 16 is 1x, 32 is 2x, 8 is 0.5x |
-| `StopChannel`, `PauseChannel`, `ResumeChannel`, `SeekChannel`, `ReverseChannel`, `SetChannelSpeed`, `StopAll` | the same for a whole channel |
+`timeline` is either a `TlTimeline` (an asset a designer dragged in) or a library id (`ushort`): `library.Find("healing_hand")` on the `TlLibrary` (main thread) gives the id of a timeline by its own name. Every call takes the entity (its buffer), then the timeline or channel, then the rest, the same order as tl's .NET `PlaybackTable`:
 
-Requests apply at the start of the next step, in the order you send them. **Play on Awake** on the Playable Director starts its timeline when the SubScene loads. In a MonoBehaviour baker use `TlBaking.GetTimeline(this, timeline)` to get a `TlTimeline`.
+| Call | Does | tl .NET (`PlaybackTable`) |
+|---|---|---|
+| `Start(timeline, atTick)`, `Stop(timeline)`, `Pause(timeline)`, `Resume(timeline)` | the basics | `Start(entity, timeline, at)`, `Stop(entity, timeline)`, ... |
+| `Seek(timeline, tick)` | jumps there, fires no pulses on the way | `Seek(entity, timeline, tick)` |
+| `Reverse(timeline, on)` | this timeline runs backward | `Reverse(entity, timeline, on)` |
+| `SetSpeed(timeline, sixteenths)` | 16 is 1x, 32 is 2x, 8 is 0.5x | `SetSpeed(entity, timeline, sixteenths)` |
+| `StopChannel`, `PauseChannel`, `ResumeChannel`, `SeekChannel`, `ReverseChannel`, `SetChannelSpeed`, `StopAll` | the same for a whole channel | the same names, entity first |
+| `Reset()` | the row is a new entity: drops its playbacks and queued pulses with no end pulses | `Reset(entity)` |
+
+Requests apply at the start of the next tick, in the order you send them. **Play on Awake** on the Playable Director starts its timeline when the SubScene loads. In a MonoBehaviour baker use `TlBaking.GetTimeline(this, timeline)` to get a `TlTimeline`.
+
+**Another entity.** Any system can start, stop or push a timeline on any entity: write that entity's buffer through a `BufferLookup<TimelineRequest>`. A healer whose cast clip raises an event starts "healing_hand" on its target the same way this tested job (`Tests/Kinds/Harness/KindWorld.cs`, run by `KindHashTests`) starts `stomp` on the row a whistling row aims at:
+
+```csharp
+public struct Aim : IComponentData
+{
+    public Entity Target;
+}
+
+[BurstCompile]
+public partial struct StompTheAimOnACue : IJobEntity
+{
+    public BufferLookup<TimelineRequest> Requests;
+
+    void Execute(in DynamicBuffer<TimelineEvent<Cue>> cues, in Aim aim)
+    {
+        for (var i = 0; i < cues.Length; i++)
+            global::Tl.TlRequests.Start(Requests[aim.Target], Timelines.Stomp);
+    }
+}
+```
+
+Run it from a system in `TlSimulationGroup` with `OrderLast = true` (events are refilled every tick, so a reader at frame rate misses ticks) and schedule it with `Schedule`, not `ScheduleParallel` (two casters may aim at one target), or record into an `EntityCommandBuffer` that plays back before the next tick. The request lands on the next tick and the target's kinds apply it there. Take the id once from `library.Find("healing_hand")` or bake it from a `TlTimeline` field. `global::Tl.TlRequests.Start(buffer, id)` is the extension `buffer.Start(id)` written out, for files where `using Tl;` would make `Playback` ambiguous. A start the target cannot hold (its kinds do not cover the timeline) is dropped and counted in `TimelineKindTick.DroppedStarts`; with the scripting define `TL_CHECKED`, `TlCheckedStartsSystem` throws at the end of that step and Unity logs the exception.
 
 ### 8.5 Curves, markers, baking
 
@@ -980,6 +1006,7 @@ Other facts you need:
 
 - A reversed timeline that reaches tick 0 **parks** and stays parked while it faces backward.
 - World rewind can step back through a **Next** handover into the previous timeline.
+- World rewind (`TimelineStep.Forward = false`) also moves playbacks of a library without kinds backward.
 - Pausing: a paused timeline does not move in either direction until **Resume** or **Seek**.
 - **Speed** is in sixteenths of a tick per step. 1.5x crosses 1, 2, 1, 2 ticks. Kinds and pulses are exact at every speed (tests at 0.5x, 1.5x, 2x, 2.5x, 3x, 4x match a 1x run bit for bit). **Limit:** in Unity `ITlTrack` event methods (`OnClipStart`, `OnClipEnd`, `ExecuteActive` with `Events<T>`) run once per step at the last tick; above 1x a boundary crossed earlier in the step raises no event. Use `[Pulse]` when you need every boundary.
 
@@ -1016,11 +1043,28 @@ Printing the offset when it changes gives exactly the numbers from Unity: `30 â†
 Things to know:
 
 - The system class `Tl.Generated.TlAuto_<AssemblyName>` is **generated at build time**. The name comes from your assembly name with dots turned into underscores. Its column fields are named `C0_<Type>`, `C1_<Type>`; use your editor's completion to see them.
-- **Timeline ids** follow the timelines' **name order**. Adding a timeline can renumber them. Keep ids in one place.
+- **Timeline ids** follow the timelines' **name order** in a baked library. Adding a timeline can renumber them. Keep ids in one place, or look them up with `world.Find(name)` (.NET) and `library.Find(name)` (Unity).
 - You can bake without Unity: `tl bake tl.project.json -o game.tlib --assembly YourGame.dll` (the `tl` command line tool from the tl repository).
 - The exported library contains the kinds of the whole Unity project, so its size depends on what else is in that project. The behaviour for your timeline is the same.
 - **Prove two hosts agree: the state hash.** `Tl.TlStateHash` hashes every playback and every column after each step. Same scene, same hash, in `tl run`, in Unity (Burst), and in IL2CPP and CoreCLR players (tested with the Inventory, Stats and Crowd scenes). Use it in your own tests: run N steps, assert the hash.
 - **Scenes without an engine:** `tl run scene.json --steps N --assembly Game.dll` plays a scene file (entities, starting columns, `play`, `requests`, world `direction`) and prints the hash. It accepts `SetSpeed`.
+
+**What still differs between the hosts, and why** (everything else, the verbs in 8.4, kinds, pulses and event order, is the same; tl's `docs/playback-control.md` has the long form):
+
+| | tl .NET | Unity | Why |
+|---|---|---|---|
+| Entity | row index of the `PlaybackTable` | `Entity` and its buffers | ECS storage |
+| Timeline handle | library id | library id, or a `TlTimeline` asset | designers drag assets |
+| Timeline ids | name order of the baked library | the order timelines stream in (`TlLibrary.FromBytes` keeps the library's) | Unity assembles the library as SubScenes load |
+| Requests | one queue per table | one buffer per entity | a write to another entity's buffer needs a single-threaded job or an ECB |
+| Game pulse sender | `DamageKind.Pulses(kinds)`, taken once | `DamageKind.Pulses(writer)` per job | the .NET sender holds a managed handle |
+| Generated sender for a derived kind (`Sum<T>`, `Set<T>`) | none; `kinds.Pulses<T>("Tl.Derived.<Name>")` | `Tl.Derived.<Name>Kind.Pulses(writer)` | tl's source budget |
+| One entity's events | `drained.Of(entity)` after `events.Drain()` | `DynamicBuffer<TimelineEvent<T>>` | same run (slot order, then raise order); `Record.Entity` and `Record.Sequence` are host-specific |
+| Event methods above 1x | see tl docs | once per step, at the last tick | use `[Pulse]` (chapter 10) |
+| Legacy consumers (`Fold`, `ExecuteActive` with columns, `ref Requests`) | run | not run, TLUNITY9105 | |
+| Kind groups | run | skipped, TLUNITY9104 | |
+| Starts of timelines not baked onto the object | n/a | dropped with a warning (Also Plays) | per-object kind archetypes |
+| Checked builds (throw on a start the entity cannot hold) | `Debug` or `-p:TlChecked=true` | scripting define `TL_CHECKED` | |
 
 ---
 
@@ -1168,6 +1212,7 @@ Rewind  multiply signed values by frame.Direction; pulses come back exactly
 Stack   clips on different tracks or timelines: Combine adds them
 Blend   clips overlapping on ONE track: MyClip : IBlend<MyClip> crossfades, else the first counts
 Start   Play On Awake starts the Playable; Also Plays rows ticked Play On Awake start with it
+Control requests.Start/Stop/Pause/Resume/Seek/Reverse/SetSpeed(id or TlTimeline), Reset(); another entity: BufferLookup<TimelineRequest>
 Bake    own starting values: Baker<YourAuthoring> + AddComponent(...); Tl keeps what you added
 ```
 

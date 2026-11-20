@@ -11,6 +11,7 @@ namespace Tl.Unity
     {
         [global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public global::Tl.LibraryView View;
         public BufferTypeHandle<Playback> PlaybackHandle;
+        public bool Backward;
 
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in global::Unity.Burst.Intrinsics.v128 chunkEnabledMask)
         {
@@ -23,7 +24,7 @@ namespace Tl.Unity
                 var removed = false;
                 for (var i = 0; i < length; i++)
                 {
-                    if (cells[i].Timeline == 0 || global::Tl.PlaybackRules.Step(ref cells[i], View.Timelines, View.TimelineCount, true) != global::Tl.AdvanceResult.Removed)
+                    if (cells[i].Timeline == 0 || global::Tl.PlaybackRules.Step(ref cells[i], View.Timelines, View.TimelineCount, !Backward) != global::Tl.AdvanceResult.Removed)
                         continue;
                     cells[i] = default;
                     removed = true;
@@ -39,12 +40,13 @@ namespace Tl.Unity
 
     public static partial class TimelineJobs
     {
-        public static JobHandle ScheduleAdvance(ref SystemState state, EntityQuery query, global::Tl.LibraryView view, JobHandle dependsOn)
+        public static JobHandle ScheduleAdvance(ref SystemState state, EntityQuery query, global::Tl.LibraryView view, bool forward, JobHandle dependsOn)
         {
             var job = new TimelineAdvanceJob
             {
                 View = view,
                 PlaybackHandle = state.GetBufferTypeHandle<Playback>(false),
+                Backward = !forward,
             };
             return job.ScheduleParallel(query, dependsOn);
         }

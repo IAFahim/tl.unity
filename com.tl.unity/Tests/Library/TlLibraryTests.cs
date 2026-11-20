@@ -41,6 +41,24 @@ namespace Tl.Unity.Library.Tests
         }
 
         [Test]
+        public void FindNamesEveryTimelineByItsOwnNameAlsoWhenItArrivedLate()
+        {
+            using var blobs = new KindGameBlobs();
+            using var library = new TlLibrary();
+            var errors = new List<string>();
+            Assert.IsTrue(library.Add(blobs.Blobs.Skip(1).ToList(), errors));
+            Assert.IsTrue(library.Add(blobs.Blobs, errors), string.Join("\n", errors));
+            for (var i = 0; i < blobs.Names.Count; i++)
+                Assert.AreEqual(library.IdOf(blobs.Assets[i]), library.Find(blobs.Names[i]), blobs.Names[i]);
+            Assert.AreEqual(blobs.Names.Count, library.Find(blobs.Names[0]));
+            Assert.AreEqual(0, library.Find("no such timeline"));
+            using var loaded = TlLibrary.FromBytes(blobs.GameTlib);
+            for (var i = 0; i < blobs.Names.Count; i++)
+                Assert.AreEqual(i + 1, loaded.Find(blobs.Names[i]), blobs.Names[i]);
+            Assert.AreEqual(0, loaded.Find("no such timeline"));
+        }
+
+        [Test]
         public void ATimelineAddedLaterKeepsEveryEarlierId()
         {
             using var blobs = new KindGameBlobs();

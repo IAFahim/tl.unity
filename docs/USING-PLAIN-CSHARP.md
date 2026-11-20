@@ -58,12 +58,17 @@ public sealed class Host : System.IDisposable
 - `Pause` holds a playback's tick (its clips stay active); `Resume` continues. Stepping with `forward: false` rewinds exactly.
 - The `[TimelineSystem]` declaration and the generated `Run` are described in the tl README.
 - Nothing in the step allocates. Dispose the three objects in reverse order.
+- Game pulses: `var damage = DamageKind.Pulses(_kinds);` once (the generator writes `<Kind>Kind` for every kind that accepts pulses,
+  as in Unity), then `damage.To(entity, 5)` before `Step`. Events: `var drained = cues.Drain();` after `Step`, then
+  `drained.Of(entity)` is that entity's run, the same as the entity's `TimelineEvent<T>` buffer in Unity. A start an entity cannot
+  hold is dropped and counted in `_players.DroppedStarts`. The verbs side by side with Unity are in the README, chapter 8.4.
 
 ## How the two hosts agree
 
 Both hosts run the same `Tl.Core` code on the same library bytes. The package tests keep a 600-step kind script whose state hash is
 `13943614770702343869` and an events script with `6607956939547305625`; the ECS host, the plain host (package tests `Tests/Plain`) and the
-IL2CPP and CoreCLR players all print those values.
+IL2CPP and CoreCLR players all print those values. A cross-entity script (a whistle on one row starts `stomp` on the row it aims at,
+the next tick) gives one hash on the ECS host and the plain host (`KindScript.CrossPinned`, `PlainScript.CrossPinned`).
 
 ## Limits
 

@@ -40,8 +40,8 @@ namespace PlainGame
             _world = new TimelineWorld(library);
             _players = new PlaybackTable(rows);
             _kinds = new KindStore(_world, _players);
-            _damage = _kinds.Pulses<int>("PlainGame.Damage");
-            _stat = _kinds.Pulses<int>("PlainGame.StatChange");
+            _damage = DamageKind.Pulses(_kinds);
+            _stat = StatChangeKind.Pulses(_kinds);
             _cues = new Events<Cue>(16);
         }
 

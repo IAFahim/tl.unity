@@ -6,6 +6,7 @@ namespace PlainGame
         public const int Rows = 4;
         public const int Steps = 600;
         public const ulong EventsPinned = 6607956939547305625UL;
+        public const ulong CrossPinned = 6621184945860697932UL;
 
         static uint Next(ref uint state)
         {
@@ -98,6 +99,47 @@ namespace PlainGame
                     h = MixInt(h, cue.Entity.Index);
                     h = MixInt(h, cue.Slot);
                     h = MixInt(h, cue.Value.Voice);
+                }
+            }
+            return h;
+        }
+
+        public static ulong PlayCross(PlainHost host, int steps)
+        {
+            var ids = new ushort[] { Timelines.Jump, Timelines.PotionHop, Timelines.Run, Timelines.SpeedBoost, Timelines.Whistle };
+            var rng = 0xC2B2AE35u;
+            var h = global::Tl.TlStateHash.Seed;
+            for (var step = 0; step < steps; step++)
+            {
+                var forward = !(step >= 200 && step < 240);
+                for (var e = 0; e < Rows; e++)
+                {
+                    var r = Next(ref rng);
+                    switch (r & 7)
+                    {
+                        case 0:
+                        case 1:
+                            host.Start(e, ids[(r >> 8) % 5]);
+                            break;
+                        case 2:
+                            host.Stop(e, ids[(r >> 8) % 5]);
+                            break;
+                        case 3:
+                            if (((r >> 8) & 7) == 0) host.StopAll(e);
+                            break;
+                    }
+                }
+                host.Step(forward);
+                var cues = host.DrainCues();
+                for (var e = 0; e < Rows; e++)
+                {
+                    var mine = global::Tl.EventRecords.Of(cues, e);
+                    for (var i = 0; i < mine.Length; i++)
+                        host.Start((e + 1) % Rows, Timelines.Stomp);
+                    h = MixInt(h, mine.Length);
+                    h = MixInt(h, host.Health[e].Value);
+                    h = Mix(h, host.Motion[e].X);
+                    h = Mix(h, host.Motion[e].Y);
                 }
             }
             return h;

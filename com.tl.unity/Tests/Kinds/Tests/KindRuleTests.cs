@@ -317,6 +317,40 @@ namespace KindGame
         }
 
         [Test]
+        public void TheCheckedStartsSystemThrowsOnceForEachNewDroppedStart()
+        {
+            var check = _game.World.CreateSystem<TlCheckedStartsSystem>();
+            var bare = _game.Entities.CreateEntity(typeof(Playback), typeof(TimelineRequest), typeof(TimelinePlaying));
+            _game.Step();
+            check.Update(_game.World.Unmanaged);
+            global::Tl.TlRequests.Start(_game.Entities.GetBuffer<TimelineRequest>(bare), KindWorld.Run);
+            _game.Step();
+            UnityEngine.TestTools.LogAssert.Expect(UnityEngine.LogType.Exception, new System.Text.RegularExpressions.Regex(@"InvalidOperationException: Tl: 1 start\(s\) dropped"));
+            check.Update(_game.World.Unmanaged);
+            Assert.AreEqual(1, _game.Tick.DroppedStarts);
+            check.Update(_game.World.Unmanaged);
+        }
+
+        [Test]
+        public void ADroppedStartLeavesTheChannelItWouldHaveReplacedPlaying()
+        {
+            var partial = _game.Entities.CreateEntity(typeof(Playback), typeof(TimelineRequest), typeof(TimelinePlaying));
+            foreach (var type in LocomotionKind.Types)
+                _game.Entities.AddComponent(partial, type);
+            LocomotionKind.Init(_game.Entities, partial);
+            global::Tl.TlRequests.Start(_game.Entities.GetBuffer<TimelineRequest>(partial), KindWorld.Run);
+            Steps(2);
+            Assert.AreEqual(0, _game.Tick.DroppedStarts);
+            global::Tl.TlRequests.Start(_game.Entities.GetBuffer<TimelineRequest>(partial), KindWorld.Jump);
+            Steps(1);
+            Assert.AreEqual(1, _game.Tick.DroppedStarts);
+            var playing = _game.Entities.GetBuffer<Playback>(partial);
+            Assert.AreEqual(1, playing.Length);
+            Assert.AreEqual(KindWorld.Run, playing[0].Timeline);
+            Assert.AreEqual(0, (int)(playing[0].Flags & global::Tl.PlaybackFlags.Stopping));
+        }
+
+        [Test]
         public void AnOverflowedBufferReturnsInlineAfterItsPulsesAreApplied()
         {
             var inline = DamageKind.InlineCapacity;

@@ -90,7 +90,8 @@ namespace Tl.Unity
             var view = SystemAPI.GetSingleton<TimelineLibrary>().View;
             if (!view.Kinds.IsEmpty)
                 return;
-            state.Dependency = TimelineJobs.ScheduleAdvance(ref state, _playbackQuery, view, state.Dependency);
+            var forward = !SystemAPI.TryGetSingleton<TimelineStep>(out var step) || step.Forward;
+            state.Dependency = TimelineJobs.ScheduleAdvance(ref state, _playbackQuery, view, forward, state.Dependency);
         }
     }
 

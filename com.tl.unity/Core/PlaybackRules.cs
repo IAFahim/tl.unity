@@ -133,6 +133,7 @@ public static unsafe class PlaybackRules
         if (duration == 0) return false;
         var tick = tl->Loop != 0 ? (ushort)(at % duration) : at < duration ? at : (ushort)(duration - 1);
         var channel = (byte)tl->Channel;
+        if (!slots.Admit(timeline)) return false;
         if (channel != 0)
             for (var i = 0; i < slots.Length; i++)
                 if (IsLive(in slots[i]) && slots[i].Channel == channel)
@@ -149,7 +150,6 @@ public static unsafe class PlaybackRules
             if (slots[i].Timeline == 0) free = i;
             else if (slots[i].Timeline == timeline && (slots[i].Flags & PlaybackFlags.Stopping) == 0) return false;
         }
-        if (!slots.Admit(timeline)) return false;
         var playback = new Playback { Timeline = timeline, Tick = tick, Channel = channel, Flags = tick > 0 || slots.StartsPending ? PlaybackFlags.StartPending : PlaybackFlags.None };
         if (free < count)
         {

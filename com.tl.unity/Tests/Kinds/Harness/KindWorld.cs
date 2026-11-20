@@ -58,6 +58,45 @@ namespace KindGame
         }
     }
 
+    public struct Aim : IComponentData
+    {
+        public Entity Target;
+    }
+
+    [BurstCompile]
+    public partial struct StompTheAimOnACue : IJobEntity
+    {
+        public BufferLookup<TimelineRequest> Requests;
+
+        void Execute(in DynamicBuffer<TimelineEvent<Cue>> cues, in Aim aim)
+        {
+            for (var i = 0; i < cues.Length; i++)
+                global::Tl.TlRequests.Start(Requests[aim.Target], Timelines.Stomp);
+        }
+    }
+
+    [BurstCompile]
+    [DisableAutoCreation]
+    [UpdateInGroup(typeof(TimelineSimulationGroup))]
+    [UpdateAfter(typeof(MovementSystem))]
+    public partial struct StompTheAimOnACueSystem : ISystem
+    {
+        BufferLookup<TimelineRequest> _requests;
+
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            _requests = state.GetBufferLookup<TimelineRequest>();
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            _requests.Update(ref state);
+            state.Dependency = new StompTheAimOnACue { Requests = _requests }.Schedule(state.Dependency);
+        }
+    }
+
     public sealed class KindWorld : IDisposable
     {
         public const ushort Jump = 1, PotionHop = 2, Run = 3, RunLegacy = 4, SpeedBoost = 5, Stomp = 6, Vault = 7, Waltz = 8;
@@ -73,6 +112,8 @@ namespace KindGame
         readonly bool _events;
         readonly TlLibrary _library;
         bool _forward = true;
+        SystemHandle _aim;
+        bool _aims;
 
         public KindWorld(int count, bool events = false) : this(count, events, null)
         {
@@ -171,6 +212,16 @@ namespace KindGame
             TickHandle.Update(World.Unmanaged);
             MovementHandle.Update(World.Unmanaged);
             VitalsHandle.Update(World.Unmanaged);
+            if (_aims)
+                _aim.Update(World.Unmanaged);
+        }
+
+        public void AimEachRowAtTheNext()
+        {
+            for (var i = 0; i < Rows.Length; i++)
+                Entities.AddComponentData(Rows[i], new Aim { Target = Rows[(i + 1) % Rows.Length] });
+            _aim = World.CreateSystem<StompTheAimOnACueSystem>();
+            _aims = true;
         }
 
         public void Damage(int target, int amount)
