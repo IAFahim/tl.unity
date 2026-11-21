@@ -125,7 +125,7 @@ public sealed class KindPayload
         return length == 0 ? null : System.Text.Encoding.UTF8.GetString(Section, StringsAt + (int)U32(Section, at), length);
     }
 
-    static uint U32(ReadOnlySpan<byte> bytes, int at) => BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(at));
+    static uint U32(ReadOnlySpan<byte> bytes, int at) => LibraryLayout.U32(bytes, at);
 
     static InvalidOperationException Bad(string timeline, string what)
         => new("Tl: timeline '" + timeline + "': " + what + "; rebake it with this version of Tl.");

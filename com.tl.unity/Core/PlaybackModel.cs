@@ -113,14 +113,14 @@ public sealed unsafe class PlaybackTable : IDisposable
         if (horizonLimit != 0 && (!BitConverter.IsLittleEndian || sizeof(Playback) != 8)) throw new PlatformNotSupportedException("Glide requires little-endian 8-byte playback storage.");
         _entities = entityCapacity;
         _slotsPerEntity = slotsPerEntity;
-        _slots = (Playback*)Zeroed((nuint)entityCapacity * (nuint)slotsPerEntity * 8u, 64u);
-        _counts = (int*)Zeroed((nuint)entityCapacity * 4u, 8u);
+        _slots = (Playback*)KindStore.Zeroed((nuint)entityCapacity * (nuint)slotsPerEntity * 8u);
+        _counts = (int*)KindStore.Zeroed((nuint)entityCapacity * 4u);
         _spilledWords = (entityCapacity + 63) >> 6;
-        _spilled = (ulong*)Zeroed((nuint)_spilledWords * 8u, 8u);
+        _spilled = (ulong*)KindStore.Zeroed((nuint)_spilledWords * 8u);
         _freeHeads = new int[9];
         for (var i = 0; i < _freeHeads.Length; i++) _freeHeads[i] = -1;
         _playingWords = (entityCapacity + 63) >> 6;
-        _playing = (ulong*)Zeroed((nuint)_playingWords * 8u, 8u);
+        _playing = (ulong*)KindStore.Zeroed((nuint)_playingWords * 8u);
         _consumer = RequestQueue.Create();
         _pending = RequestQueue.Create();
         _closing = ClosingList.Create();
@@ -128,19 +128,12 @@ public sealed unsafe class PlaybackTable : IDisposable
         {
             try
             {
-                Next = (ushort*)Zeroed((nuint)entityCapacity * (nuint)(slotsPerEntity + 1) * 2u, 64u);
+                Next = (ushort*)KindStore.Zeroed((nuint)entityCapacity * (nuint)(slotsPerEntity + 1) * 2u);
                 _due = Next + entityCapacity;
                 _limit = horizonLimit;
             }
             catch { Dispose(); throw; }
         }
-    }
-
-    static void* Zeroed(nuint bytes, nuint alignment)
-    {
-        var block = NativeMemory.AlignedAlloc(bytes, alignment);
-        NativeMemory.Clear(block, bytes);
-        return block;
     }
 
     public const int MaxSlots = 256;
@@ -167,6 +160,7 @@ public sealed unsafe class PlaybackTable : IDisposable
 
     public int SlotsPerEntity => _slotsPerEntity;
     public PlaybackView View { get { Escape(); return new(_slots, _counts, _spilled, _blocks, _entities, _slotsPerEntity); } }
+    internal PlaybackView RawView => new(_slots, _counts, _spilled, _blocks, _entities, _slotsPerEntity);
     public int HorizonLimit => _limit;
     ushort* InlineDue(int entity) => _due + (nuint)entity * (nuint)_slotsPerEntity;
     internal ushort* DueOf(int entity) => IsSpilled(entity) ? _blockDue + *(int*)InlineRun(entity) : InlineDue(entity);
@@ -327,24 +321,21 @@ public sealed unsafe class PlaybackTable : IDisposable
                 return inline;
             }
             var size = NextPow2(Math.Min(needed, MaxSlots));
+            int oldOff = -1, oldCap = 0;
             if (IsSpilled(entity))
             {
-                var offset = *(int*)inline;
-                var capacity = *(int*)((byte*)inline + 4);
-                if (capacity >= Math.Min(needed, MaxSlots)) return _blocks + (nuint)offset;
-                var newOffset = AllocBlock(size);
-                new ReadOnlySpan<Playback>(_blocks + (nuint)offset, count).CopyTo(new Span<Playback>(_blocks + (nuint)newOffset, count));
-                FreeBlock(offset, capacity);
-                *(int*)inline = newOffset;
-                *(int*)((byte*)inline + 4) = size;
-                return _blocks + (nuint)newOffset;
+                oldOff = *(int*)inline;
+                oldCap = *(int*)((byte*)inline + 4);
+                if (oldCap >= Math.Min(needed, MaxSlots)) return _blocks + (nuint)oldOff;
             }
-            var blockOffset = AllocBlock(size);
-            new ReadOnlySpan<Playback>(inline, count).CopyTo(new Span<Playback>(_blocks + (nuint)blockOffset, count));
-            *(int*)inline = blockOffset;
+            var newOffset = AllocBlock(size);
+            var src = oldOff >= 0 ? _blocks + (nuint)oldOff : inline;
+            new ReadOnlySpan<Playback>(src, count).CopyTo(new Span<Playback>(_blocks + (nuint)newOffset, count));
+            if (oldOff >= 0) FreeBlock(oldOff, oldCap);
+            else _spilled[entity >> 6] |= 1ul << (entity & 63);
+            *(int*)inline = newOffset;
             *(int*)((byte*)inline + 4) = size;
-            _spilled[entity >> 6] |= 1ul << (entity & 63);
-            return _blocks + (nuint)blockOffset;
+            return _blocks + (nuint)newOffset;
         }
         finally { ExitGate(); }
     }

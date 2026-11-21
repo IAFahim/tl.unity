@@ -1,11 +1,70 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Entities.LowLevel.Unsafe;
 
 namespace Tl.Unity
 {
+    public struct KindPulseHit
+    {
+        public ArchetypeChunk Chunk;
+        public Entity Entity;
+        public int Cell;
+        public int Row;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Size = 64)]
+    public unsafe struct KindPulseLane
+    {
+        public KindPulseHit* Items;
+        public int Count;
+        public int Capacity;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Push(in ArchetypeChunk chunk, Entity entity, int row, int cell)
+        {
+            if (Count == Capacity) Grow();
+            Items[Count++] = new KindPulseHit { Chunk = chunk, Entity = entity, Cell = cell, Row = row };
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        void Grow()
+        {
+            long nextLong = Capacity == 0 ? 64L : (long)Capacity * 2L;
+            var itemSize = UnsafeUtility.SizeOf<KindPulseHit>();
+            if (nextLong > int.MaxValue || nextLong * itemSize > int.MaxValue)
+                throw new InvalidOperationException("Tl: pulse lane buffer would exceed 2 GB.");
+            var next = (int)nextLong;
+            var bytes = nextLong * itemSize;
+            var block = (KindPulseHit*)UnsafeUtility.Malloc(bytes, 16, Allocator.Persistent);
+            if (Items != null)
+            {
+                if (Count > 0) UnsafeUtility.MemCpy(block, Items, (long)Count * itemSize);
+                UnsafeUtility.Free(Items, Allocator.Persistent);
+            }
+            Items = block;
+            Capacity = next;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Rewind(Entity entity)
+        {
+            while (Count > 0 && Items[Count - 1].Entity == entity) Count--;
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential, Size = 64)]
+    public struct KindWorkerCache
+    {
+        public EntityArchetype Archetype;
+        public ulong Reach;
+        public byte Flags;
+    }
+
     public unsafe struct KindIndex
     {
         public int TimelineCount;
@@ -40,12 +99,79 @@ namespace Tl.Unity
         public global::Tl.KindCalm Calm;
         public global::Tl.KindScore Score;
         public global::Tl.KindValues* Values;
+        public uint* SpanMeta;
+        public int* PulseBase;
+        public byte* PulseBits;
+        public ulong* PulseMasks;
+        public global::Tl.KindPulseValues* PulseValuesTable;
+        public ulong* TablePulses;
+        public int ThreadCount;
+        public KindPulseLane* PulseLanes;
+        public ulong* TickFastPulses;
+        public byte* HeldBufferKinds;
+        public int* SlowCount;
+        public int* SpillCount;
+        public int* HeldSeen;
+        public int* TickOrderVersion;
+        public int* SampledCount;
+        public int* PrevSampledCount;
+        public KindWorkerCache* WorkerCache;
+        public UnsafeUntypedBufferAccessor* WorkerBuffers;
+        public EnabledMask* WorkerMasks;
 
         public bool IsCreated => Timelines != null || KindCount == 0 && Closure != null;
 
         public global::Tl.LibraryKind* Kind(int kind) => Sec.Kinds + kind;
 
-        public global::Tl.KindTables Tables => new global::Tl.KindTables { Timelines = Timelines, TimelineCount = TimelineCount, Sec = Sec, KindCount = KindCount, Closure = Closure, Pairs = Pairs, PairStart = PairStart };
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool NeedsBufferScan(int kind) => (uint)kind >= (uint)KindCount || SlowCount == null || HeldBufferKinds == null || TickFastPulses == null || SlowCount[kind] != 0 || HeldBufferKinds[kind] != 0 || (*TickFastPulses >> kind & 1) == 0;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool NeedsSpanValues(int kind) => (uint)kind < (uint)KindCount && Values != null && Values[kind].Data == null;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool NeedsPulseValues(int kind) => (uint)kind < (uint)KindCount && PulseValuesTable != null && PulseValuesTable[kind].Data == null && PulseValuesTable[kind].Cells >= 0;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void PushPulse(int kind, int threadIndex, in ArchetypeChunk chunk, Entity entity, int row, int cell)
+        {
+            var pv = PulseValuesTable + kind;
+            if (pv->Start[cell] == pv->Start[cell + 1]) return;
+            if ((uint)threadIndex >= (uint)ThreadCount)
+                throw new InvalidOperationException("Tl: worker thread index exceeded KindIndex.ThreadCount.");
+            PulseLanes[kind * ThreadCount + threadIndex].Push(in chunk, entity, row, cell);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void RewindPulse(int kind, int threadIndex, Entity entity)
+        {
+            if ((uint)threadIndex >= (uint)ThreadCount)
+                throw new InvalidOperationException("Tl: worker thread index exceeded KindIndex.ThreadCount.");
+            PulseLanes[kind * ThreadCount + threadIndex].Rewind(entity);
+        }
+
+        public bool HasForeign(int kind)
+        {
+            for (var i = 0; i < OwnerCount; i++)
+                if (OwnerKinds[i] == kind) return true;
+            return false;
+        }
+
+        public global::Tl.KindTables Tables => new global::Tl.KindTables
+        {
+            Timelines = Timelines,
+            TimelineCount = TimelineCount,
+            Sec = Sec,
+            KindCount = KindCount,
+            Closure = Closure,
+            Pairs = Pairs,
+            PairStart = PairStart,
+            SpanMeta = SpanMeta,
+            PulseBase = PulseBase,
+            PulseBits = PulseBits,
+            PulseMasks = PulseMasks,
+            FastPulseMask = TickFastPulses != null ? *TickFastPulses : 0ul,
+        };
 
         public global::Tl.LibraryStep* StepOf(ushort timeline, int window, ushort tick)
         {
@@ -231,57 +357,258 @@ namespace Tl.Unity
         public static KindIndex Build(in global::Tl.LibraryView view, global::Tl.TimelineWorld world)
         {
             var index = default(KindIndex);
-            index.TimelineCount = view.TimelineCount;
-            index.Timelines = view.Timelines;
-            index.Sec = view.Kinds;
-            index.KindCount = view.Kinds.IsEmpty ? 0 : view.Kinds.KindCount;
-            var count = view.TimelineCount;
-            index.Closure = Zeroed<ulong>(Math.Max(1, count));
-            index.PairStart = Zeroed<int>(count + 2);
-            index.WindowBase = Zeroed<int>(count + 1);
-            var pairs = new List<uint>();
-            for (var t = 0; t < count; t++)
+            try
             {
-                var at = t;
-                for (var hop = 0; hop <= count; hop++)
+                index.TimelineCount = view.TimelineCount;
+                index.Timelines = view.Timelines;
+                index.Sec = view.Kinds;
+                index.KindCount = view.Kinds.IsEmpty ? 0 : view.Kinds.KindCount;
+                var count = view.TimelineCount;
+                index.Closure = Zeroed<ulong>(Math.Max(1, count));
+                index.PairStart = Zeroed<int>(count + 2);
+                index.WindowBase = Zeroed<int>(count + 1);
+                var pairs = new List<uint>();
+                for (var t = 0; t < count; t++)
                 {
-                    if (index.KindCount != 0) index.Closure[t] |= index.Sec.Timelines[at].KindMask;
-                    if (view.Timelines[at].Next == 0) break;
-                    at = view.Timelines[at].Next - 1;
+                    var at = t;
+                    for (var hop = 0; hop <= count; hop++)
+                    {
+                        if (index.KindCount != 0) index.Closure[t] |= index.Sec.Timelines[at].KindMask;
+                        if (view.Timelines[at].Next == 0) break;
+                        at = view.Timelines[at].Next - 1;
+                    }
+                    index.PairStart[t] = pairs.Count;
+                    if (index.KindCount == 0 || index.Sec.Timelines[t].KindMask == 0) continue;
+                    var tk = index.Sec.Timelines + t;
+                    var events = index.Sec.Events(tk);
+                    var set = new SortedSet<uint>();
+                    for (var n = 0u; n < tk->EventCount; n++)
+                        if (events[n].Op != (byte)global::Tl.KindEventOp.Remove) set.Add(((uint)events[n].Window << 16) | events[n].Feeder);
+                    pairs.AddRange(set);
                 }
-                index.PairStart[t] = pairs.Count;
-                if (index.KindCount == 0 || index.Sec.Timelines[t].KindMask == 0) continue;
-                var tk = index.Sec.Timelines + t;
-                var events = index.Sec.Events(tk);
-                var set = new SortedSet<uint>();
-                for (var n = 0u; n < tk->EventCount; n++)
-                    if (events[n].Op != (byte)global::Tl.KindEventOp.Remove) set.Add(((uint)events[n].Window << 16) | events[n].Feeder);
-                pairs.AddRange(set);
+                index.PairStart[count] = pairs.Count;
+                index.PairCount = pairs.Count;
+                index.Pairs = Zeroed<uint>(Math.Max(1, pairs.Count));
+                for (var n = 0; n < pairs.Count; n++) index.Pairs[n] = pairs[n];
+                index.SpanMeta = Zeroed<uint>(Math.Max(1, count));
+                index.PulseBase = Zeroed<int>(Math.Max(1, count));
+                long pulseTicks = 0;
+                for (var t = 0; t < count; t++)
+                {
+                    var dur = view.Timelines[t].Duration;
+                    index.SpanMeta[t] = dur > 0 && dur <= 65536u ? (dur | (view.Timelines[t].Loop != 0 ? 0x8000_0000u : 0u)) : 0u;
+                    index.PulseBase[t] = -1;
+                    if (index.KindCount == 0 || index.Sec.Timelines[t].KindMask == 0 || dur == 0) continue;
+                    var tk = index.Sec.Timelines + t;
+                    var events = index.Sec.Events(tk);
+                    var anyPulse = false;
+                    for (var n = 0u; n < tk->EventCount && !anyPulse; n++)
+                        anyPulse = events[n].Op >= (byte)global::Tl.KindEventOp.PulseStart;
+                    if (anyPulse)
+                    {
+                        if (pulseTicks > int.MaxValue)
+                            throw new InvalidOperationException("Tl: pulse mask table would exceed 2 GB.");
+                        index.PulseBase[t] = (int)pulseTicks;
+                        pulseTicks += dur;
+                    }
+                }
+                if (pulseTicks > int.MaxValue / 2 || pulseTicks * 2L * sizeof(ulong) > int.MaxValue)
+                    throw new InvalidOperationException("Tl: pulse mask table would exceed 2 GB.");
+                index.PulseBits = Zeroed<byte>(Math.Max(1, (int)pulseTicks));
+                index.PulseMasks = Zeroed<ulong>(Math.Max(1, (int)(pulseTicks * 2L)));
+                for (var t = 0; t < count; t++)
+                {
+                    var pb = index.PulseBase[t];
+                    if (pb < 0) continue;
+                    var tk = index.Sec.Timelines + t;
+                    var events = index.Sec.Events(tk);
+                    var dur = (int)view.Timelines[t].Duration;
+                    for (var tick = 0; tick < dur; tick++)
+                    {
+                        var eb = index.Sec.EventBitsAt(tk, tick);
+                        byte b = 0;
+                        for (var d = 0; d < 2; d++)
+                        {
+                            if ((eb & (1 << d)) == 0) continue;
+                            ulong pm = 0;
+                            var to = index.Sec.EventEnd(tk, tick, d);
+                            for (var n = index.Sec.EventStart(tk, tick, d); n < to; n++)
+                                if (events[n].Op >= (byte)global::Tl.KindEventOp.PulseStart)
+                                    pm |= 1ul << index.Sec.Feeders[events[n].Feeder].Kind;
+                            if (pm != 0)
+                            {
+                                b |= (byte)(1 << d);
+                                index.PulseMasks[((pb + tick) << 1) + d] = pm;
+                            }
+                        }
+                        index.PulseBits[pb + tick] = b;
+                    }
+                }
+                var tables = index.Tables;
+                var calm = Math.Max(1, global::Tl.KindCalm.Length(in tables));
+                index.Calm = global::Tl.KindCalm.Build(in tables, Zeroed<byte>(calm), Zeroed<byte>(calm), Zeroed<int>(Math.Max(1, count)));
+                BuildSteps(ref index, view, world);
+                var steps = new ScoreSteps { Index = index };
+                index.Score = global::Tl.KindScore.Build(in tables, ref steps);
+                index.Values = Zeroed<global::Tl.KindValues>(Math.Max(1, index.KindCount));
+                index.PulseValuesTable = Zeroed<global::Tl.KindPulseValues>(Math.Max(1, index.KindCount));
+                index.TablePulses = Zeroed<ulong>(1);
+                index.ThreadCount = Math.Max(1, global::Unity.Jobs.LowLevel.Unsafe.JobsUtility.ThreadIndexCount);
+                var laneCount = (long)index.KindCount * index.ThreadCount;
+                if (laneCount > int.MaxValue || laneCount * UnsafeUtility.SizeOf<KindPulseLane>() > int.MaxValue)
+                    throw new InvalidOperationException("Tl: pulse lane table would exceed 2 GB.");
+                index.PulseLanes = Zeroed<KindPulseLane>(Math.Max(1, (int)laneCount));
+                index.WorkerCache = Zeroed<KindWorkerCache>(Math.Max(1, index.ThreadCount));
+                if (laneCount > 0 && (laneCount * UnsafeUtility.SizeOf<UnsafeUntypedBufferAccessor>() > int.MaxValue || laneCount * UnsafeUtility.SizeOf<EnabledMask>() > int.MaxValue))
+                    throw new InvalidOperationException("Tl: worker scratch table would exceed 2 GB.");
+                index.WorkerBuffers = Zeroed<UnsafeUntypedBufferAccessor>(Math.Max(1, (int)laneCount));
+                index.WorkerMasks = Zeroed<EnabledMask>(Math.Max(1, (int)laneCount));
+                index.TickFastPulses = Zeroed<ulong>(1);
+                index.HeldBufferKinds = Zeroed<byte>(Math.Max(1, index.KindCount));
+                for (var k = 0; k < index.KindCount; k++) index.HeldBufferKinds[k] = 1;
+                index.SlowCount = Zeroed<int>(Math.Max(1, index.KindCount));
+                index.SpillCount = Zeroed<int>(Math.Max(1, index.KindCount));
+                index.HeldSeen = Zeroed<int>(Math.Max(1, index.KindCount));
+                index.TickOrderVersion = Zeroed<int>(1);
+                index.SampledCount = Zeroed<int>(1);
+                index.PrevSampledCount = Zeroed<int>(1);
+                *index.SampledCount = 1;
+                *index.PrevSampledCount = 1;
+                return index;
             }
-            index.PairStart[count] = pairs.Count;
-            index.PairCount = pairs.Count;
-            index.Pairs = Zeroed<uint>(Math.Max(1, pairs.Count));
-            for (var n = 0; n < pairs.Count; n++) index.Pairs[n] = pairs[n];
-            var tables = index.Tables;
-            var calm = Math.Max(1, global::Tl.KindCalm.Length(in tables));
-            index.Calm = global::Tl.KindCalm.Build(in tables, Zeroed<byte>(calm), Zeroed<byte>(calm), Zeroed<int>(Math.Max(1, count)));
-            BuildSteps(ref index, view, world);
-            var steps = new ScoreSteps { Index = index };
-            index.Score = global::Tl.KindScore.Build(in tables, ref steps);
-            index.Values = Zeroed<global::Tl.KindValues>(Math.Max(1, index.KindCount));
-            return index;
+            catch
+            {
+                index.Dispose();
+                throw;
+            }
         }
 
-        public void SpanValues<T, TSpans>(int kind, ref TSpans spans) where T : unmanaged where TSpans : struct, global::Tl.IKindSpanValues<T>
+        public void SpanValues<TFill>(int kind, ref TFill fill) where TFill : struct, global::Tl.IKindFill
         {
-            var values = Values + kind;
-            if (values->Data != null) return;
-            var built = global::Tl.KindValues.Layout<T>(in Score, Timelines, kind, 0, Zeroed<int>(Math.Max(1, TimelineCount)));
-            var bytes = (long)built.Rows * built.Stride;
-            if (bytes > int.MaxValue) throw new InvalidOperationException("Tl: a precombined kind table would exceed 2 GB.");
-            built.Data = Zeroed<byte>(Math.Max(1, (int)bytes));
-            built.Fill<T, TSpans>(in Score, Timelines, kind, Routes, true, ref spans);
-            *values = built;
+            if ((uint)kind >= (uint)KindCount || Values[kind].Data != null) return;
+            var views = Zeroed<global::Tl.KindValues>(64);
+            var row = Zeroed<int>(Math.Max(1, TimelineCount));
+            byte* data = null;
+            var committed = false;
+            try
+            {
+                var b = global::Tl.KindBuild.Of(in Score, Timelines, views, row, true, ref fill);
+                if (b.Kinds != 0)
+                {
+                    var bytes = (long)b.Rows * b.Stride;
+                    if (bytes > int.MaxValue)
+                        throw new InvalidOperationException("Tl: a precombined kind table would exceed 2 GB.");
+                    data = ZeroedBytes(Math.Max(1L, bytes), 64);
+                    b.Fill(data, ref fill);
+                    for (var k = 0; k < KindCount; k++)
+                        if ((b.Kinds >> k & 1) != 0)
+                            Values[k] = views[k];
+                    committed = true;
+                }
+            }
+            finally
+            {
+                if (!committed)
+                {
+                    Free(row);
+                    Free(data);
+                }
+                Free(views);
+            }
+        }
+
+        public void PulseValues<T, TEval>(int kind, ref TEval eval) where T : unmanaged where TEval : struct, global::Tl.IKindSpanValues<T>
+        {
+            if ((uint)kind >= (uint)KindCount) return;
+            var v = PulseValuesTable + kind;
+            if (v->Data != null || v->Cells < 0) return;
+            if (HasForeign(kind)) { v->Cells = -1; return; }
+            long cellsLong = 0;
+            for (var tl = 0; tl < TimelineCount; tl++)
+                if (PulseBase[tl] >= 0)
+                    cellsLong = Math.Max(cellsLong, ((long)PulseBase[tl] + Timelines[tl].Duration) * 2L);
+            if (cellsLong > int.MaxValue - 1)
+                throw new InvalidOperationException("Tl: precombined pulse table would exceed 2 GB.");
+            var cells = (int)cellsLong;
+            var start = Zeroed<int>(cells + 1);
+            byte* data = null;
+            var committed = false;
+            try
+            {
+                var feeders = Sec.Feeders;
+                var total = 0;
+                var stride = UnsafeUtility.SizeOf<T>();
+                var align = UnsafeUtility.AlignOf<T>();
+                if (align < 16) align = 16;
+                for (var pass = 0; pass < 2; pass++)
+                {
+                    if (pass == 1)
+                    {
+                        start[cells] = total;
+                        var dataBytes = (long)Math.Max(1, total) * stride;
+                        if (dataBytes > int.MaxValue)
+                            throw new InvalidOperationException("Tl: precombined pulse table would exceed 2 GB.");
+                        data = ZeroedBytes(dataBytes, align);
+                    }
+                    var cursor = 0;
+                    for (var tl = 0; tl < TimelineCount; tl++)
+                    {
+                        var pb = PulseBase[tl];
+                        if (pb < 0) continue;
+                        var id = (ushort)(tl + 1);
+                        var tk = Sec.Timelines + tl;
+                        var events = Sec.Events(tk);
+                        var dur = (int)Timelines[tl].Duration;
+                        for (var tick = 0; tick < dur; tick++)
+                        {
+                            var bits = PulseBits[pb + tick];
+                            for (var d = 0; d < 2; d++)
+                            {
+                                var cell = ((pb + tick) << 1) + d;
+                                if (pass == 0) start[cell] = total;
+                                if ((bits & (1 << d)) == 0 || (PulseMasks[cell] >> kind & 1) == 0) continue;
+                                var to = Sec.EventEnd(tk, tick, d);
+                                for (var n = Sec.EventStart(tk, tick, d); n < to; n++)
+                                {
+                                    var ev = events[n];
+                                    if (ev.Op < (byte)global::Tl.KindEventOp.PulseStart) continue;
+                                    var feeder = feeders + ev.Feeder;
+                                    if (feeder->Kind != kind) continue;
+                                    var route = Routes[ev.Feeder];
+                                    if ((route >> 8) != 0) continue;
+                                    var step = StepInWindow(id, ev.Window, (ushort)tick);
+                                    if (step == null) continue;
+                                    if (eval.Evaluate(route & 0xff, step, Timelines + tl, (ushort)tick, d == 1, out var val))
+                                    {
+                                        if (pass == 0)
+                                        {
+                                            if (total == int.MaxValue)
+                                                throw new InvalidOperationException("Tl: precombined pulse table would exceed 2 GB.");
+                                            total++;
+                                        }
+                                        else ((T*)data)[cursor++] = val;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                v->Start = start;
+                v->Data = data;
+                v->Stride = stride;
+                v->Cells = cells;
+                v->Bytes = (long)(cells + 1) * 4 + (long)total * stride;
+                *TablePulses |= 1ul << kind;
+                committed = true;
+            }
+            finally
+            {
+                if (!committed)
+                {
+                    Free(start);
+                    Free(data);
+                }
+            }
         }
 
         static void BuildSteps(ref KindIndex index, in global::Tl.LibraryView view, global::Tl.TimelineWorld world)
@@ -386,11 +713,40 @@ namespace Tl.Unity
             Free(Calm.Backward);
             Free(Calm.Start);
             for (var k = 0; Values != null && k < Math.Max(1, KindCount); k++)
-            {
-                Free(Values[k].Row);
-                Free(Values[k].Data);
-            }
+                if (Values[k].Shift == 0)
+                {
+                    Free(Values[k].Row);
+                    Free(Values[k].Data);
+                }
             Free(Values);
+            Free(SpanMeta);
+            Free(PulseBase);
+            Free(PulseBits);
+            Free(PulseMasks);
+            Free(TablePulses);
+            if (PulseLanes != null)
+            {
+                var total = Math.Max(1, KindCount * ThreadCount);
+                for (var i = 0; i < total; i++) Free(PulseLanes[i].Items);
+                Free(PulseLanes);
+            }
+            Free(WorkerCache);
+            Free(WorkerBuffers);
+            Free(WorkerMasks);
+            Free(TickFastPulses);
+            Free(HeldBufferKinds);
+            Free(SlowCount);
+            Free(SpillCount);
+            Free(HeldSeen);
+            Free(TickOrderVersion);
+            Free(SampledCount);
+            Free(PrevSampledCount);
+            for (var k = 0; PulseValuesTable != null && k < Math.Max(1, KindCount); k++)
+            {
+                Free(PulseValuesTable[k].Start);
+                Free(PulseValuesTable[k].Data);
+            }
+            Free(PulseValuesTable);
             Score.Free();
             this = default;
         }
@@ -401,6 +757,13 @@ namespace Tl.Unity
             var p = UnsafeUtility.Malloc(bytes, 16, Allocator.Persistent);
             UnsafeUtility.MemClear(p, bytes);
             return (T*)p;
+        }
+
+        static byte* ZeroedBytes(long bytes, int align)
+        {
+            var p = UnsafeUtility.Malloc(bytes, align, Allocator.Persistent);
+            UnsafeUtility.MemClear(p, bytes);
+            return (byte*)p;
         }
 
         static void Free(void* p)

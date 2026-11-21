@@ -19,6 +19,8 @@ internal static class LibraryLayout
     internal const int KindRowBytes = 40;
     internal const int FeederRowBytes = 32;
     internal const int KindTimelineRowBytes = 48;
+    internal static uint U32(ReadOnlySpan<byte> b, int o = 0) => BinaryPrimitives.ReadUInt32LittleEndian(b.Slice(o));
+    internal static void Put(Span<byte> b, int o, uint v) => BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(o), v);
 }
 
 public struct LibraryPart
@@ -380,7 +382,7 @@ public static class LibraryAssembler
         return bytes;
     }
 
-    static uint U32(ReadOnlySpan<byte> bytes, int at) => BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(at));
+    static uint U32(ReadOnlySpan<byte> bytes, int at) => LibraryLayout.U32(bytes, at);
 
-    static void Put(Span<byte> bytes, int at, uint value) => BinaryPrimitives.WriteUInt32LittleEndian(bytes.Slice(at), value);
+    static void Put(Span<byte> bytes, int at, uint value) => LibraryLayout.Put(bytes, at, value);
 }

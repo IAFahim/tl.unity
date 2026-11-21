@@ -23,7 +23,7 @@ namespace Tl.Unity
             var clocks = chunk.Has(ref ClockHandle) ? (ushort*)chunk.GetNativeArray(ref ClockHandle).GetUnsafeReadOnlyPtr() : null;
             var kinds = Index.KindCount;
             var buffers = stackalloc UnsafeUntypedBufferAccessor[kinds > 0 ? kinds : 1];
-            var cursor = new KindCursor { Index = Index, Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers };
+            var cursor = new KindCursor { Index = (KindIndex*)UnsafeUtility.AddressOf(ref Index), Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers };
             if (kinds > 0)
                 cursor.Bind(in chunk);
             for (var row = 0; row < chunk.Count; row++)
