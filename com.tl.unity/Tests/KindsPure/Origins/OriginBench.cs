@@ -47,7 +47,7 @@ namespace KindPure.Origins
             {
                 _system = _world.CreateSystem<OriginChunkSystem>();
                 ref var chunkSystem = ref _world.Unmanaged.GetUnsafeSystemRef<OriginChunkSystem>(_system);
-                chunkSystem.Bind(ref _world.Unmanaged.ResolveSystemStateRef(_system), table, _originType, FixedActiveOf(layout), shape == OriginJobShape.Floor);
+                chunkSystem.Bind(ref _world.Unmanaged.ResolveSystemStateRef(_system), table, _originType, FixedActiveOf(layout), shape == OriginJobShape.Floor || shape == OriginJobShape.FloorUnrolled, shape == OriginJobShape.ChunkUnrolled || shape == OriginJobShape.FloorUnrolled);
             }
         }
 
@@ -204,12 +204,13 @@ namespace KindPure.Origins
             var log = Path.Combine(UnityEngine.Application.dataPath, "..", "OriginBench.log");
             var cells = "10000x40,10000x100,50000x40,50000x100,1000000x2,1000000x4";
             var layouts = "Heap,Inline2,Inline4,Inline8,Inline100,Fixed2,Fixed4";
-            var shapes = "Chunk,Entity";
+            var shapes = "Chunk,ChunkUnrolled,Entity,Floor,FloorUnrolled";
             var warmup = 40;
             var measure = 16;
             var runs = 5;
             var perfControl = "";
             var perfAck = "";
+            var burst = true;
             for (var i = 0; i + 1 < args.Length; i++)
             {
                 if (args[i] == "-originLog") log = args[i + 1];
@@ -221,7 +222,9 @@ namespace KindPure.Origins
                 if (args[i] == "-originRuns") runs = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
                 if (args[i] == "-originPerfControl") perfControl = args[i + 1];
                 if (args[i] == "-originPerfAck") perfAck = args[i + 1];
+                if (args[i] == "-originBurst") burst = args[i + 1] != "off";
             }
+            Unity.Burst.BurstCompiler.Options.EnableBurstCompilation = burst;
             Unity.Burst.BurstCompiler.Options.EnableBurstCompileSynchronously = true;
             Unity.Burst.BurstCompiler.Options.EnableBurstSafetyChecks = false;
             Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobDebuggerEnabled = false;
@@ -245,7 +248,8 @@ namespace KindPure.Origins
                         var shape = (OriginJobShape)Enum.Parse(typeof(OriginJobShape), shapeName);
                         var fixedActive = OriginWorld.FixedActiveOf(layout);
                         if (fixedActive > 0 && fixedActive != active) continue;
-                        if (shape == OriginJobShape.Floor && layout != OriginLayout.Fixed2 && layout != OriginLayout.Fixed4 && layout != OriginLayout.Heap && layout != OriginLayout.Inline100) continue;
+                        var floor = shape == OriginJobShape.Floor || shape == OriginJobShape.FloorUnrolled;
+                        if (floor && layout != OriginLayout.Fixed2 && layout != OriginLayout.Fixed4 && layout != OriginLayout.Heap && layout != OriginLayout.Inline100) continue;
                         Cell(writer, perf, table, characters, active, layout, shape, warmup, measure, runs);
                     }
                 }

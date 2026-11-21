@@ -74,7 +74,9 @@ namespace KindPure.Origins
     public enum OriginJobShape
     {
         Chunk,
+        ChunkUnrolled,
         Entity,
-        Floor
+        Floor,
+        FloorUnrolled
     }
 }

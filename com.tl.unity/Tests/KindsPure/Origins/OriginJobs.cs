@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using Unity.Collections;
@@ -13,40 +14,52 @@ namespace KindPure.Origins
         public uint Frame;
         public int FixedActive;
         public bool ReadOnlyFloor;
+        public bool UnrollSmallCounts;
         public DynamicComponentTypeHandle OriginsHandle;
         public ComponentTypeHandle<Motion> MotionHandle;
         public ComponentTypeHandle<Vitals> VitalsHandle;
         [ReadOnly] public ComponentTypeHandle<Stats> StatsHandle;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static void StepCharacter(in OriginTable table, uint frame, bool readOnlyFloor, ushort* origins, int active, ref Motion motion, ref Vitals vitals, in Stats stats)
+        {
+            if (readOnlyFloor) table.ReadOnlyFloor(origins, active, frame, ref motion, ref vitals, in stats);
+            else table.Step(origins, active, frame, ref motion, ref vitals, in stats);
+        }
 
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
         {
             var motion = (Motion*)chunk.GetRequiredComponentDataPtrRW(ref MotionHandle);
             var vitals = (Vitals*)chunk.GetRequiredComponentDataPtrRW(ref VitalsHandle);
             var stats = (Stats*)chunk.GetRequiredComponentDataPtrRO(ref StatsHandle);
-            if (FixedActive > 0)
+            var characters = chunk.Count;
+            var table = Table;
+            var frame = Frame;
+            var readOnlyFloor = ReadOnlyFloor;
+            var unroll = UnrollSmallCounts;
+            var stride = FixedActive;
+            if (stride > 0)
             {
-                var fixedOrigins = (ushort*)chunk.GetDynamicComponentDataArrayReinterpret<ushort>(ref OriginsHandle, FixedActive * sizeof(ushort)).GetUnsafePtr();
-                if (ReadOnlyFloor)
-                    for (var row = 0; row < chunk.Count; row++)
-                        Table.ReadOnlyFloor(fixedOrigins + row * FixedActive, FixedActive, Frame, ref motion[row], ref vitals[row], in stats[row]);
+                var fixedOrigins = (ushort*)chunk.GetDynamicComponentDataArrayReinterpret<ushort>(ref OriginsHandle, stride * sizeof(ushort)).GetUnsafePtr();
+                if (unroll && stride == 2)
+                    for (var row = 0; row < characters; row++)
+                        StepCharacter(in table, frame, readOnlyFloor, fixedOrigins + row * 2, 2, ref motion[row], ref vitals[row], in stats[row]);
+                else if (unroll && stride == 4)
+                    for (var row = 0; row < characters; row++)
+                        StepCharacter(in table, frame, readOnlyFloor, fixedOrigins + row * 4, 4, ref motion[row], ref vitals[row], in stats[row]);
                 else
-                    for (var row = 0; row < chunk.Count; row++)
-                        Table.Step(fixedOrigins + row * FixedActive, FixedActive, Frame, ref motion[row], ref vitals[row], in stats[row]);
+                    for (var row = 0; row < characters; row++)
+                        StepCharacter(in table, frame, readOnlyFloor, fixedOrigins + row * stride, stride, ref motion[row], ref vitals[row], in stats[row]);
                 return;
             }
             var buffers = chunk.GetUntypedBufferAccessor(ref OriginsHandle);
-            if (ReadOnlyFloor)
-                for (var row = 0; row < chunk.Count; row++)
-                {
-                    var origins = (ushort*)buffers.GetUnsafePtrAndLength(row, out var active);
-                    Table.ReadOnlyFloor(origins, active, Frame, ref motion[row], ref vitals[row], in stats[row]);
-                }
-            else
-                for (var row = 0; row < chunk.Count; row++)
-                {
-                    var origins = (ushort*)buffers.GetUnsafePtrAndLength(row, out var active);
-                    Table.Step(origins, active, Frame, ref motion[row], ref vitals[row], in stats[row]);
-                }
+            for (var row = 0; row < characters; row++)
+            {
+                var origins = (ushort*)buffers.GetUnsafePtrAndLength(row, out var active);
+                if (unroll && active == 2) StepCharacter(in table, frame, readOnlyFloor, origins, 2, ref motion[row], ref vitals[row], in stats[row]);
+                else if (unroll && active == 4) StepCharacter(in table, frame, readOnlyFloor, origins, 4, ref motion[row], ref vitals[row], in stats[row]);
+                else StepCharacter(in table, frame, readOnlyFloor, origins, active, ref motion[row], ref vitals[row], in stats[row]);
+            }
         }
     }
 
@@ -59,16 +72,18 @@ namespace KindPure.Origins
         EntityQuery _query;
         int _fixedActive;
         bool _readOnlyFloor;
+        bool _unrollSmallCounts;
         DynamicComponentTypeHandle _origins;
         ComponentTypeHandle<Motion> _motion;
         ComponentTypeHandle<Vitals> _vitals;
         ComponentTypeHandle<Stats> _stats;
 
-        public void Bind(ref SystemState state, OriginTable table, ComponentType originType, int fixedActive, bool readOnlyFloor)
+        public void Bind(ref SystemState state, OriginTable table, ComponentType originType, int fixedActive, bool readOnlyFloor, bool unrollSmallCounts)
         {
             Table = table;
             _fixedActive = fixedActive;
             _readOnlyFloor = readOnlyFloor;
+            _unrollSmallCounts = unrollSmallCounts;
             _query = state.GetEntityQuery(ComponentType.ReadWrite<Motion>(), ComponentType.ReadWrite<Vitals>(), ComponentType.ReadOnly<Stats>(), originType);
             _origins = state.GetDynamicComponentTypeHandle(originType);
             _motion = state.GetComponentTypeHandle<Motion>(false);
@@ -89,6 +104,7 @@ namespace KindPure.Origins
                 Frame = Frame,
                 FixedActive = _fixedActive,
                 ReadOnlyFloor = _readOnlyFloor,
+                UnrollSmallCounts = _unrollSmallCounts,
                 OriginsHandle = _origins,
                 MotionHandle = _motion,
                 VitalsHandle = _vitals,
