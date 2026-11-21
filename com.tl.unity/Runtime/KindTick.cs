@@ -5,6 +5,7 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Entities.LowLevel.Unsafe;
+using Unity.Jobs;
 
 namespace Tl.Unity
 {
@@ -17,9 +18,106 @@ namespace Tl.Unity
     }
 
     [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
+    public unsafe struct KindPulseClearJob : IJob
+    {
+        [NativeDisableUnsafePtrRestriction] public KindIndex Index;
+        public bool AllowFastPulses;
+        public int OrderVersion;
+        [ReadOnly] public EntityStorageInfoLookup Storage;
+        [NativeDisableContainerSafetyRestriction] public KindHandleSet Handles;
+
+        public void Execute()
+        {
+            if (Index.TickOrderVersion != null) *Index.TickOrderVersion = OrderVersion;
+            if (Index.PrevSampledCount != null && Index.SampledCount != null)
+            {
+                *Index.PrevSampledCount = *Index.SampledCount;
+                *Index.SampledCount = 0;
+            }
+            ulong fast = 0;
+            for (var k = 0; k < Index.KindCount; k++)
+            {
+                if (Index.SlowCount[k] != 0)
+                {
+                    Index.HeldBufferKinds[k] = 1;
+                    Index.SlowCount[k] = 0;
+                }
+                Index.SpillCount[k] = 0;
+                Index.HeldSeen[k] = 0;
+                var baseLane = Index.PulseLanes + k * Index.ThreadCount;
+                var anyPending = false;
+                for (var t = 0; t < Index.ThreadCount; t++)
+                    if (baseLane[t].Count > 0) { anyPending = true; break; }
+                if (anyPending)
+                {
+                    FlushKind(k, baseLane);
+                    Index.HeldBufferKinds[k] = 1;
+                }
+                if (AllowFastPulses && Index.TablePulses != null && (*Index.TablePulses >> k & 1) != 0 && Index.HeldBufferKinds[k] == 0)
+                    fast |= 1ul << k;
+            }
+            if (Index.TickFastPulses != null) *Index.TickFastPulses = fast;
+        }
+
+        void FlushKind(int kind, KindPulseLane* baseLane)
+        {
+            var handleSet = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles);
+            var mapped = KindHandleSet.IsMapped(handleSet, kind);
+            var pv = Index.PulseValuesTable + kind;
+            var canWrite = mapped && pv->Data != null;
+            if (canWrite)
+            {
+                var entryHandle = KindHandleSet.Entry(handleSet, kind);
+                var activeHandle = KindHandleSet.Active(handleSet, kind);
+                var starts = pv->Start;
+                var vbytes = pv->Stride;
+                var stride = Index.EntryStride[kind];
+                for (var th = 0; th < Index.ThreadCount; th++)
+                {
+                    var lane = baseLane + th;
+                    var n = lane->Count;
+                    if (n == 0) continue;
+                    var items = lane->Items;
+                    for (var i = 0; i < n; i++)
+                    {
+                        var e = items[i].Entity;
+                        if (!Storage.Exists(e)) continue;
+                        var info = Storage[e];
+                        if (!info.Chunk.Has(ref *entryHandle)) continue;
+                        var c = items[i].Cell;
+                        var s = starts[c];
+                        var cnt = starts[c + 1] - s;
+                        if (cnt <= 0) continue;
+                        var acc = info.Chunk.GetUntypedBufferAccessor(ref *entryHandle);
+                        var len = acc.GetBufferLength(info.IndexInChunk);
+                        acc.ResizeUninitialized(info.IndexInChunk, len + cnt);
+                        var dstBase = (byte*)acc.GetUnsafePtr(info.IndexInChunk) + (long)len * stride;
+                        var src = pv->Data + (long)s * vbytes;
+                        for (var p = 0; p < cnt; p++)
+                        {
+                            var dst = dstBase + (long)p * stride;
+                            UnsafeUtility.MemClear(dst, stride);
+                            ((global::Tl.KindEntry*)dst)->Flags = global::Tl.KindEntryFlags.Pulse;
+                            UnsafeUtility.MemCpy(dst + 8, src + (long)p * vbytes, vbytes);
+                        }
+                        if (len == 0) info.Chunk.SetComponentEnabled(ref *activeHandle, info.IndexInChunk, true);
+                    }
+                    lane->Count = 0;
+                }
+            }
+            else
+            {
+                for (var th = 0; th < Index.ThreadCount; th++) baseLane[th].Count = 0;
+            }
+        }
+    }
+
+    [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
     public unsafe partial struct KindTickJob : IJobChunk
     {
         [NativeDisableUnsafePtrRestriction] public KindIndex Index;
+        [ReadOnly] public EntityTypeHandle EntityHandle;
+        [NativeSetThreadIndex] internal int ThreadIndex;
         public BufferTypeHandle<Playback> PlaybackHandle;
         public BufferTypeHandle<TimelineRequest> RequestHandle;
         public ComponentTypeHandle<TimelinePlaying> PlayingHandle;
@@ -44,10 +142,6 @@ namespace Tl.Unity
             byte* horizons = null;
             ushort* clocks = null;
             var dues = default(BufferAccessor<PlaybackDue>);
-            var buffers = stackalloc UnsafeUntypedBufferAccessor[Index.KindCount];
-            var masks = stackalloc EnabledMask[Index.KindCount];
-            var ctx = new KindCursor { Index = Index, Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers, Masks = masks, Counters = Counters };
-            ctx.Bind(in chunk);
             if (chunk.Has(ref ClockHandle))
             {
                 if (chunk.Has(ref DueHandle))
@@ -56,7 +150,7 @@ namespace Tl.Unity
                     dues = chunk.GetBufferAccessor(ref DueHandle);
                 }
                 else
-                    Unclock(in chunk, ref ctx, count);
+                    Unclock(in chunk, count);
             }
             if (HorizonLimit > 0 && chunk.Has(ref HorizonHandle))
             {
@@ -85,14 +179,24 @@ namespace Tl.Unity
                 clocks = null;
             }
             var requested = chunk.Has(ref RequestHandle) && chunk.DidChange(ref RequestHandle, LastSystemVersion);
-            if (!requested)
-            {
-                var idle = chunk.GetEnableableBits(ref PlayingHandle);
-                if (idle.ULong0 == 0 && (count <= 64 || idle.ULong1 == 0)) return;
-            }
+            var playing = chunk.GetEnableableBits(ref PlayingHandle);
+            if (!requested && playing.ULong0 == 0 && (count <= 64 || playing.ULong1 == 0)) return;
+            var buffers = stackalloc UnsafeUntypedBufferAccessor[Index.KindCount];
+            var masks = stackalloc EnabledMask[Index.KindCount];
+            var tables = Index.Tables;
             var playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
-            ctx.Playbacks = playbacks;
-            ctx.Copies = (TimelinePlaying*)chunk.GetRequiredComponentDataPtrRW(ref PlayingHandle);
+            var ctx = new KindCursor
+            {
+                Index = (KindIndex*)UnsafeUtility.AddressOf(ref Index),
+                Tables = &tables,
+                Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles),
+                Buffers = buffers,
+                Masks = masks,
+                Counters = Counters,
+                PlayingHandlePtr = (ComponentTypeHandle<TimelinePlaying>*)UnsafeUtility.AddressOf(ref PlayingHandle),
+                Playbacks = playbacks,
+            };
+            ctx.Bind(in chunk);
             if (requested)
             {
                 var requests = chunk.GetBufferAccessor(ref RequestHandle);
@@ -113,12 +217,65 @@ namespace Tl.Unity
                     }
                     ctx.SetPlaying(ref PlayingHandle, row, true);
                 }
+                playing = chunk.GetEnableableBits(ref PlayingHandle);
             }
-            var playing = chunk.GetEnableableBits(ref PlayingHandle);
             if (playing.ULong0 != 0 || (count > 64 && playing.ULong1 != 0))
             {
-                var tables = ctx.Tables;
                 var reverse = global::Tl.SlotWord.WorldReverse(StepDir > 0);
+                var hadSampled = Index.PrevSampledCount == null || *Index.PrevSampledCount != 0;
+                var copiesRo = hadSampled ? (TimelinePlaying*)chunk.GetRequiredComponentDataPtrRO(ref PlayingHandle) : null;
+                ctx.CopiesRO = copiesRo;
+                var anyClosed = (ctx.Closed0 | ctx.Closed1) != 0;
+                var sink = new UnityPulseSink { Cursor = (KindCursor*)UnsafeUtility.AddressOf(ref ctx), EntityHandle = EntityHandle, Entities = null, ThreadIndex = ThreadIndex, IsActive = true };
+                if (clocks == null && horizons == null)
+                {
+                    var allPlaying = count <= 64
+                        ? playing.ULong0 == (count == 64 ? ~0ul : (1ul << count) - 1)
+                        : playing.ULong0 == ~0ul && playing.ULong1 == (count == 128 ? ~0ul : (1ul << (count - 64)) - 1);
+                    if (allPlaying)
+                    {
+                        if (copiesRo == null && !anyClosed)
+                        {
+                            for (var row = 0; row < count; row++)
+                            {
+                                var slots = playbacks[row];
+                                if (!global::Tl.KindRules.TickEntity(in tables, (global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, ref ctx, row, StepDir, ref sink))
+                                    ctx.SetPlaying(ref PlayingHandle, row, false);
+                            }
+                        }
+                        else
+                        {
+                            for (var row = 0; row < count; row++)
+                            {
+                                if (copiesRo != null && copiesRo[row].Copies != 0) ctx.Sampled(row, 0);
+                                sink.IsActive = !anyClosed || !ctx.IsClosed(row);
+                                var slots = playbacks[row];
+                                if (!global::Tl.KindRules.TickEntity(in tables, (global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, ref ctx, row, StepDir, ref sink))
+                                    ctx.SetPlaying(ref PlayingHandle, row, false);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        for (var kw = 0; kw < 2; kw++)
+                        {
+                            if (kw == 1 && count <= 64) break;
+                            var kb = kw == 0 ? playing.ULong0 : playing.ULong1;
+                            while (kb != 0)
+                            {
+                                var row = (kw << 6) + (int)global::Unity.Mathematics.math.tzcnt(kb);
+                                kb &= kb - 1;
+                                if (row >= count) break;
+                                if (copiesRo != null && copiesRo[row].Copies != 0) ctx.Sampled(row, 0);
+                                sink.IsActive = !anyClosed || !ctx.IsClosed(row);
+                                var slots = playbacks[row];
+                                if (!global::Tl.KindRules.TickEntity(in tables, (global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, ref ctx, row, StepDir, ref sink))
+                                    ctx.SetPlaying(ref PlayingHandle, row, false);
+                            }
+                        }
+                    }
+                    return;
+                }
                 for (var kw = 0; kw < 2; kw++)
                 {
                     if (kw == 1 && count <= 64) break;
@@ -128,7 +285,8 @@ namespace Tl.Unity
                         var row = (kw << 6) + (int)global::Unity.Mathematics.math.tzcnt(kb);
                         kb &= kb - 1;
                         if (row >= count) break;
-                        ctx.Sampled(row, 0);
+                        if (copiesRo != null && copiesRo[row].Copies != 0) ctx.Sampled(row, 0);
+                        sink.IsActive = !anyClosed || !ctx.IsClosed(row);
                         if (clocks != null)
                         {
                             if (horizons[row] != 0)
@@ -136,17 +294,11 @@ namespace Tl.Unity
                                 horizons[row]--;
                                 clocks[row] = (ushort)(clocks[row] + StepDir);
                             }
-                            else if (!TickLazy(in tables, ref ctx, playbacks[row], dues[row], ref clocks[row], ref horizons[row], row, reverse))
+                            else if (!TickLazy(in tables, ref ctx, playbacks[row], dues[row], ref clocks[row], ref horizons[row], row, reverse, ref sink))
                                 ctx.SetPlaying(ref PlayingHandle, row, false);
                             continue;
                         }
                         var slots = playbacks[row];
-                        if (horizons == null)
-                        {
-                            if (!global::Tl.KindRules.TickEntity(in tables, (global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, ref ctx, row, StepDir))
-                                ctx.SetPlaying(ref PlayingHandle, row, false);
-                            continue;
-                        }
                         var steps = horizons[row];
                         if (steps != 0)
                         {
@@ -154,7 +306,7 @@ namespace Tl.Unity
                             global::Tl.GlideKernel.RunScalar((ulong*)slots.GetUnsafePtr(), slots.Length, reverse);
                             continue;
                         }
-                        if (global::Tl.KindRules.TickEntity(in tables, (global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, ref ctx, row, StepDir))
+                        if (global::Tl.KindRules.TickEntity(in tables, (global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, ref ctx, row, StepDir, ref sink))
                             horizons[row] = global::Tl.Horizon.OfKindRun((global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, in tables, in Index.Calm, reverse, HorizonLimit);
                         else
                             ctx.SetPlaying(ref PlayingHandle, row, false);
@@ -166,7 +318,7 @@ namespace Tl.Unity
 
     public unsafe partial struct KindTickJob
     {
-        void Unclock(in ArchetypeChunk chunk, ref KindCursor ctx, int count)
+        void Unclock(in ArchetypeChunk chunk, int count)
         {
             var clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle);
             var ticking = false;
@@ -193,7 +345,7 @@ namespace Tl.Unity
         }
 
         [global::Unity.Burst.CompilerServices.SkipLocalsInit]
-        bool TickLazy(in global::Tl.KindTables tables, ref KindCursor ctx, DynamicBuffer<Playback> buffer, DynamicBuffer<PlaybackDue> dueBuffer, ref ushort clock, ref byte horizon, int row, ulong reverse)
+        bool TickLazy(in global::Tl.KindTables tables, ref KindCursor ctx, DynamicBuffer<Playback> buffer, DynamicBuffer<PlaybackDue> dueBuffer, ref ushort clock, ref byte horizon, int row, ulong reverse, ref UnityPulseSink sink)
         {
             var before = clock;
             var after = (ushort)(clock + StepDir);
@@ -213,7 +365,7 @@ namespace Tl.Unity
             if (rated)
             {
                 TimelineTicks.Decode(pb, n, before);
-                live = global::Tl.KindRules.TickEntity(in tables, pb, n, ref ctx, row, StepDir);
+                live = global::Tl.KindRules.TickEntity(in tables, pb, n, ref ctx, row, StepDir, ref sink);
                 pb = (global::Tl.Playback*)buffer.GetUnsafePtr();
                 for (var i = 0; i < n; i++)
                 {
@@ -288,28 +440,39 @@ namespace Tl.Unity
 
         public bool Admit(ushort timeline)
         {
-            if (_cursor->Tables.Reaches(timeline, _cursor->Reach)) return true;
+            _cursor->EnsureReach();
+            if (_cursor->Tables->Reaches(timeline, _cursor->Reach)) return true;
             _cursor->Counters[KindCounter.DroppedStarts]++;
             return false;
         }
 
-        public void Close(int index) => global::Tl.KindRules.Close(in _cursor->Tables, ref *_cursor, _row, ref _items[index], index);
+        public void Close(int index)
+        {
+            _cursor->MarkClosed(_row);
+            global::Tl.KindRules.Close(in *_cursor->Tables, ref *_cursor, _row, ref _items[index], index);
+        }
 
         public void Purge(int index) => _cursor->Purge(_row, (byte)index, _items[index].Timeline);
     }
 
     public unsafe struct KindCursor : global::Tl.IKindRows
     {
-        public KindIndex Index;
-        public global::Tl.KindTables Tables;
+        public KindIndex* Index;
+        public global::Tl.KindTables* Tables;
         public ArchetypeChunk Chunk;
         public KindHandleSet* Handles;
         public UnsafeUntypedBufferAccessor* Buffers;
         public int* Counters;
         public ulong Reach;
+        public bool HasReach;
         public ulong Taken;
         public EnabledMask* Masks;
         public ulong Masked;
+        public ulong SlowMarked;
+        public ulong Closed0;
+        public ulong Closed1;
+        public bool SampledMarked;
+        public ComponentTypeHandle<TimelinePlaying>* PlayingHandlePtr;
         public EnabledMask Playing;
         public bool HasPlaying;
         public BufferAccessor<Playback> Playbacks;
@@ -317,18 +480,43 @@ namespace Tl.Unity
         public void Bind(in ArchetypeChunk chunk)
         {
             Chunk = chunk;
-            Tables = Index.Tables;
             Reach = 0;
+            HasReach = false;
             Taken = 0;
             Masked = 0;
+            SlowMarked = 0;
+            Closed0 = 0;
+            Closed1 = 0;
+            SampledMarked = false;
             HasPlaying = false;
-            for (var k = 0; k < Index.KindCount; k++)
-                if (KindHandleSet.IsMapped(Handles, k) && chunk.Has(ref *KindHandleSet.Entry(Handles, k)))
-                    Reach |= 1ul << k;
+            Copies = null;
+            CopiesRO = null;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        void SetActive(int row, int kind, bool value)
+        public void MarkClosed(int row)
+        {
+            if (row < 64) Closed0 |= 1ul << row;
+            else Closed1 |= 1ul << (row - 64);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool IsClosed(int row) => (((row < 64 ? Closed0 : Closed1) >> (row & 63)) & 1) != 0;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void EnsureReach()
+        {
+            if (HasReach) return;
+            HasReach = true;
+            ulong r = 0;
+            for (var k = 0; k < Index->KindCount; k++)
+                if (KindHandleSet.IsMapped(Handles, k) && Chunk.Has(ref *KindHandleSet.Entry(Handles, k)))
+                    r |= 1ul << k;
+            Reach = r;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void SetActive(int row, int kind, bool value)
         {
             if (Masks == null)
             {
@@ -354,7 +542,7 @@ namespace Tl.Unity
             Playing[row] = value;
         }
 
-        UnsafeUntypedBufferAccessor* Buffer(int kind)
+        internal UnsafeUntypedBufferAccessor* Buffer(int kind)
         {
             if ((Taken & (1ul << kind)) == 0)
             {
@@ -369,7 +557,7 @@ namespace Tl.Unity
         {
             var entry = AppendEntry(row, feeder->Kind);
             if (entry == null) return null;
-            var route = Index.Routes[feeder - Index.Sec.Feeders];
+            var route = Index->Routes[feeder - Index->Sec.Feeders];
             entry->Feeder = (byte)route;
             entry->Owner = (byte)(route >> 8);
             return entry;
@@ -377,23 +565,30 @@ namespace Tl.Unity
 
         public global::Tl.KindEntry* AppendEntry(int row, int kind)
         {
+            EnsureReach();
             if ((Reach & (1ul << kind)) == 0) return null;
-            var stride = Index.EntryStride[kind];
+            var stride = Index->EntryStride[kind];
             var buffer = Buffer(kind);
             var length = buffer->GetBufferLength(row);
             buffer->ResizeUninitialized(row, length + 1);
             var entry = (byte*)buffer->GetUnsafePtr(row) + (long)length * stride;
             UnsafeUtility.MemClear(entry, stride);
             if (length == 0) SetActive(row, kind, true);
+            if ((SlowMarked & (1ul << kind)) == 0 && Index->SlowCount != null)
+            {
+                System.Threading.Interlocked.Increment(ref Index->SlowCount[kind]);
+                SlowMarked |= 1ul << kind;
+            }
             return (global::Tl.KindEntry*)entry;
         }
 
         public void Purge(int row, byte slot, ushort timeline)
         {
-            for (var kind = 0; kind < Index.KindCount; kind++)
+            EnsureReach();
+            for (var kind = 0; kind < Index->KindCount; kind++)
             {
                 if ((Reach & (1ul << kind)) == 0) continue;
-                var stride = Index.EntryStride[kind];
+                var stride = Index->EntryStride[kind];
                 var buffer = Buffer(kind);
                 var length = buffer->GetBufferLength(row);
                 if (length == 0) continue;
@@ -426,10 +621,52 @@ namespace Tl.Unity
         }
 
         public TimelinePlaying* Copies;
+        public TimelinePlaying* CopiesRO;
 
         public void Sampled(int row, int samples)
         {
-            if (Copies != null) Copies[row].Copies = (byte)samples;
+            if (samples != 0 && !SampledMarked && Index->SampledCount != null)
+            {
+                System.Threading.Interlocked.Increment(ref *Index->SampledCount);
+                SampledMarked = true;
+            }
+            if (Copies == null)
+            {
+                if (samples == 0)
+                {
+                    if (CopiesRO == null) CopiesRO = (TimelinePlaying*)Chunk.GetRequiredComponentDataPtrRO(ref *PlayingHandlePtr);
+                    if (CopiesRO[row].Copies == 0) return;
+                }
+                Copies = (TimelinePlaying*)Chunk.GetRequiredComponentDataPtrRW(ref *PlayingHandlePtr);
+            }
+            if (Copies[row].Copies != (byte)samples) Copies[row].Copies = (byte)samples;
+        }
+    }
+
+    internal unsafe struct UnityPulseSink : global::Tl.IKindPulseSink
+    {
+        public KindCursor* Cursor;
+        public EntityTypeHandle EntityHandle;
+        public Entity* Entities;
+        public int ThreadIndex;
+        public bool IsActive;
+
+        public bool Active => IsActive;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Push(in global::Tl.KindTables t, int kind, int row, int cell)
+        {
+            Cursor->EnsureReach();
+            if ((Cursor->Reach & (1ul << kind)) == 0) return;
+            if (Entities == null) Entities = (Entity*)Cursor->Chunk.GetNativeArray(EntityHandle).GetUnsafeReadOnlyPtr();
+            Cursor->Index->PushPulse(kind, ThreadIndex, in Cursor->Chunk, Entities[row], row, cell);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Rewind(in global::Tl.KindTables t, int kind, int row)
+        {
+            if (Entities == null) return;
+            Cursor->Index->RewindPulse(kind, ThreadIndex, Entities[row]);
         }
     }
 }

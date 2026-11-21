@@ -44,6 +44,9 @@ namespace Tl
         uint _manifestOff;
         int _manifestCount;
 
+        static uint U32(ReadOnlySpan<byte> s, int o = 0) => LibraryLayout.U32(s, o);
+        static uint U32(byte* p, int o = 0) => LibraryLayout.U32(new ReadOnlySpan<byte>(p + o, 4));
+
         public ushort Find(string name)
         {
             var lo = 0;
@@ -52,7 +55,7 @@ namespace Tl
             {
                 var mid = (lo + hi) >> 1;
                 var at = _base + _manifestOff + mid * 32;
-                var found = Encoding.UTF8.GetString(_base + BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(at + 8, 4)), (int)BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(at + 12, 4)));
+                var found = Encoding.UTF8.GetString(_base + U32(at, 8), (int)U32(at, 12));
                 var order = string.CompareOrdinal(found, name);
                 if (order == 0) return (ushort)(mid + 1);
                 if (order < 0) lo = mid + 1;
@@ -117,6 +120,13 @@ namespace Tl
             return p;
         }
 
+        static void* TrackZero(nuint size)
+        {
+            var p = TrackAlloc(size);
+            NativeMemory.Clear(p, size);
+            return p;
+        }
+
         static void TrackFree(void* p)
         {
             if (p == null) return;
@@ -176,12 +186,12 @@ namespace Tl
                                 if (tl->Stages[s].Steps != null) { TrackFree(tl->Stages[s].Steps); break; }
                             TrackFree(tl->Stages);
                         }
-                        if (tl->Events != null) TrackFree(tl->Events);
-                        if (tl->EventTickBits != null) TrackFree(tl->EventTickBits);
+                        TrackFree(tl->Events);
+                        TrackFree(tl->EventTickBits);
                     }
                     TrackFree(_view.Timelines);
                 }
-                if (_base != null) TrackFree(_base);
+                TrackFree(_base);
                 foreach (var arena in _arenas) TrackFree((void*)arena);
                 _arenas.Clear();
                 _ownsView = false;
@@ -196,228 +206,105 @@ namespace Tl
             _generation++;
         }
 
-        internal static LibraryError Check(ReadOnlySpan<byte> library, out int offset)
+        internal static LibraryError Check(ReadOnlySpan<byte> library, out int offset) => Check(library, out offset, out _);
+
+        internal static LibraryError Check(ReadOnlySpan<byte> library, out int offset, out string message)
         {
-            offset = -1;
-            if (library.Length < 96) { offset = 0; return LibraryError.Truncated; }
-            if (BinaryPrimitives.ReadUInt32LittleEndian(library) != LibraryLayout.LibraryMagic) { offset = 0; return LibraryError.BadMagic; }
-            var version = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(4));
-            if (version != 1u && version != 2u) { offset = 4; return LibraryError.BadVersion; }
-            var count = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(8));
-            var manifestOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(12));
-            var blobOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(16));
-            var total = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(20));
-            if (total != (uint)library.Length) { offset = 20; return LibraryError.SizeMismatch; }
-            if (total < 32) { offset = 20; return LibraryError.Truncated; }
-            if (manifestOff < 64 || manifestOff % 8 != 0 || blobOff % 8 != 0) { offset = 12; return LibraryError.BadOffsets; }
-            if (manifestOff + count * 32u > blobOff || blobOff > total - 32u) { offset = 12; return LibraryError.SectionsOutOfBounds; }
-            if (count > 65535) { offset = 8; return LibraryError.TooManyTimelines; }
-            var kindOff = version == 2u ? BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(28)) : 0u;
-            var kindLen = version == 2u ? BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(32)) : 0u;
-            if (version == 2u && (kindOff % 8 != 0 || kindOff < blobOff || kindLen < 64 || (ulong)kindOff + kindLen > total - 32u)) { offset = 28; return LibraryError.KindSectionOutOfBounds; }
+            (var e, offset, message) = CheckCore(library);
+            return e;
+        }
+
+        static (LibraryError, int, string) CheckCore(ReadOnlySpan<byte> library)
+        {
+            if (library.Length < 96) return (LibraryError.Truncated, 0, "game.tlib truncated.");
+            if (U32(library) != LibraryLayout.LibraryMagic) return (LibraryError.BadMagic, 0, "game.tlib magic invalid; rebake with current tl.");
+            var version = U32(library, 4);
+            if (version != 1u && version != 2u) return (LibraryError.BadVersion, 4, "game.tlib version invalid; rebake with current tl.");
+            var count = U32(library, 8);
+            var manifestOff = U32(library, 12);
+            var blobOff = U32(library, 16);
+            var total = U32(library, 20);
+            if (total != (uint)library.Length) return (LibraryError.SizeMismatch, 20, "game.tlib size mismatch.");
+            if (total < 32) return (LibraryError.Truncated, 20, "game.tlib truncated.");
+            if (manifestOff < 64 || manifestOff % 8 != 0 || blobOff % 8 != 0) return (LibraryError.BadOffsets, 12, "game.tlib offsets must be 8-aligned.");
+            if (manifestOff + count * 32u > blobOff || blobOff > total - 32u) return (LibraryError.SectionsOutOfBounds, 12, "game.tlib sections out of bounds.");
+            if (count > 65535) return (LibraryError.TooManyTimelines, 8, "game.tlib declares more than 65535 timelines.");
+            var kindOff = version == 2u ? U32(library, 28) : 0u;
+            var kindLen = version == 2u ? U32(library, 32) : 0u;
+            if (version == 2u && (kindOff % 8 != 0 || kindOff < blobOff || kindLen < 64 || (ulong)kindOff + kindLen > total - 32u))
+                return (LibraryError.KindSectionOutOfBounds, 28, "game.tlib kind section out of bounds; rebake with current tl.");
             var digestAt = (int)(total - 32u);
 #if NET
             Span<byte> calc = stackalloc byte[32];
-            if (!SHA256.TryHashData(library.Slice(0, digestAt), calc, out _)) { offset = digestAt; return LibraryError.DigestFailure; }
+            if (!SHA256.TryHashData(library.Slice(0, digestAt), calc, out _)) return (LibraryError.DigestFailure, digestAt, "game.tlib digest failure.");
             var calcSpan = calc;
 #else
             using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             sha.AppendData(library.Slice(0, digestAt));
             var calcSpan = sha.GetHashAndReset();
 #endif
-            if (!library.Slice(digestAt).SequenceEqual(calcSpan)) { offset = digestAt; return LibraryError.DigestMismatch; }
-            if (count == 0) return LibraryError.None;
+            if (!library.Slice(digestAt).SequenceEqual(calcSpan)) return (LibraryError.DigestMismatch, digestAt, "game.tlib digest mismatch; file is corrupt or truncated.");
+            if (count == 0) return (LibraryError.None, -1, "");
             var durations = new LibraryTimeline[count];
             string? prev = null;
             for (uint i = 0; i < count; i++)
             {
                 var at = (int)(manifestOff + i * 32u);
-                offset = at;
-                var id = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at));
-                var channel = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 4));
-                var nameOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 8));
-                var nameLen = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 12));
-                var tlbOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 16));
-                var tlbLen = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 20));
-                if (id != i + 1) return LibraryError.ManifestIdNotDense;
-                if (nameOff + nameLen > total - 32u) return LibraryError.ManifestNameOutOfBounds;
+                var id = U32(library, at);
+                var channel = U32(library, at + 4);
+                var nameOff = U32(library, at + 8);
+                var nameLen = U32(library, at + 12);
+                var tlbOff = U32(library, at + 16);
+                var tlbLen = U32(library, at + 20);
+                if (id != i + 1) return (LibraryError.ManifestIdNotDense, at, $"game.tlib manifest entry {i} id {id} is not dense manifest order (expected {i + 1}).");
+                if (nameOff + nameLen > total - 32u) return (LibraryError.ManifestNameOutOfBounds, at, $"game.tlib manifest entry {i} name out of bounds.");
                 string name;
                 try { name = Encoding.UTF8.GetString(library.Slice((int)nameOff, (int)nameLen)); }
-                catch { return LibraryError.ManifestNameNotUtf8; }
-                if (prev != null && string.CompareOrdinal(prev, name) >= 0) return LibraryError.ManifestNameOrder;
+                catch { return (LibraryError.ManifestNameNotUtf8, at, $"game.tlib manifest entry {i} name is not valid UTF-8."); }
+                if (prev != null && string.CompareOrdinal(prev, name) >= 0) return (LibraryError.ManifestNameOrder, at, $"game.tlib manifest names must sort ordinally (entry {i} '{name}' breaks order).");
                 prev = name;
-                if (tlbOff % 8 != 0 || (ulong)tlbOff + tlbLen > blobOff + (total - 32u - blobOff) || tlbOff < blobOff || tlbOff + tlbLen > total - 32u) return LibraryError.ManifestBlobOutOfBounds;
-                if (channel > 65535) return LibraryError.ManifestChannelOutOfRange;
+                if (tlbOff % 8 != 0 || tlbOff < blobOff || (ulong)tlbOff + tlbLen > total - 32u)
+                    return (LibraryError.ManifestBlobOutOfBounds, at, $"game.tlib manifest entry {i} '{name}' blob out of bounds.");
+                if (channel > 65535) return (LibraryError.ManifestChannelOutOfRange, at, $"game.tlib manifest entry {i} channel out of range.");
                 var blob = library.Slice((int)tlbOff, (int)tlbLen);
                 try { TimelineRef.Validate(blob); }
-                catch { offset = (int)tlbOff; return LibraryError.TimelineInvalid; }
-                durations[i].Duration = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(12));
-                var blobVersion = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(4));
-                uint blobChannel = 0;
-                uint blobNext = 0;
-                if (blobVersion == 6)
-                {
-                    blobNext = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(52));
-                    blobChannel = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(56));
-                }
-                if (channel != blobChannel) { offset = (int)tlbOff; return LibraryError.ChannelMismatch; }
-                if (blobNext > count) { offset = (int)tlbOff; return LibraryError.UnknownNext; }
+                catch (ArgumentException ex) { return (LibraryError.TimelineInvalid, (int)tlbOff, $"game.tlib timeline '{name}': {ex.Message}"); }
+                catch { return (LibraryError.TimelineInvalid, (int)tlbOff, $"game.tlib timeline '{name}' is invalid."); }
+                durations[i].Duration = U32(blob, 12);
+                var blobVersion = U32(blob, 4);
+                var blobChannel = blobVersion == 6 ? U32(blob, 56) : 0u;
+                var blobNext = blobVersion == 6 ? U32(blob, 52) : 0u;
+                if (channel != blobChannel) return (LibraryError.ChannelMismatch, (int)tlbOff, $"game.tlib manifest entry '{name}' channel {channel} does not match timeline channel {blobChannel}.");
+                if (blobNext > count) return (LibraryError.UnknownNext, (int)tlbOff, "game.tlib timeline has unknown next id; file is corrupt or truncated.");
             }
             if (version == 2u)
             {
                 try
                 {
                     fixed (byte* libPtr = library)
-                    {
-                        fixed (LibraryTimeline* tlsPtr = durations)
-                        {
-                            KindSectionReader.Create(libPtr + kindOff, kindLen, (int)count, tlsPtr);
-                        }
-                    }
+                    fixed (LibraryTimeline* tlsPtr = durations)
+                        KindSectionReader.Create(libPtr + kindOff, kindLen, (int)count, tlsPtr);
                 }
-                catch { offset = (int)kindOff; return LibraryError.KindSection; }
+                catch (ArgumentException ex) { return (LibraryError.KindSection, (int)kindOff, ex.Message); }
+                catch { return (LibraryError.KindSection, (int)kindOff, "game.tlib kind section invalid; rebake with current tl."); }
             }
-            offset = -1;
-            return LibraryError.None;
-        }
-
-        static string Describe(LibraryError error, ReadOnlySpan<byte> library, int offset)
-        {
-            switch (error)
-            {
-                case LibraryError.Truncated: return "game.tlib truncated.";
-                case LibraryError.BadMagic: return "game.tlib magic invalid; rebake with current tl.";
-                case LibraryError.BadVersion: return "game.tlib version invalid; rebake with current tl.";
-                case LibraryError.SizeMismatch: return "game.tlib size mismatch.";
-                case LibraryError.BadOffsets: return "game.tlib offsets must be 8-aligned.";
-                case LibraryError.SectionsOutOfBounds: return "game.tlib sections out of bounds.";
-                case LibraryError.TooManyTimelines: return "game.tlib declares more than 65535 timelines.";
-                case LibraryError.KindSectionOutOfBounds: return "game.tlib kind section out of bounds; rebake with current tl.";
-                case LibraryError.DigestFailure: return "game.tlib digest failure.";
-                case LibraryError.DigestMismatch: return "game.tlib digest mismatch; file is corrupt or truncated.";
-                case LibraryError.UnknownNext: return "game.tlib timeline has unknown next id; file is corrupt or truncated.";
-                case LibraryError.ManifestIdNotDense:
-                case LibraryError.ManifestNameOutOfBounds:
-                case LibraryError.ManifestNameNotUtf8:
-                case LibraryError.ManifestNameOrder:
-                case LibraryError.ManifestBlobOutOfBounds:
-                case LibraryError.ManifestChannelOutOfRange:
-                {
-                    var manifestOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(12));
-                    var i = (uint)((offset - (int)manifestOff) / 32);
-                    var at = offset;
-                    var id = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at));
-                    var nameOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 8));
-                    var nameLen = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 12));
-                    string name = "";
-                    if (error != LibraryError.ManifestIdNotDense && error != LibraryError.ManifestNameOutOfBounds && error != LibraryError.ManifestNameNotUtf8)
-                    {
-                        try { name = Encoding.UTF8.GetString(library.Slice((int)nameOff, (int)nameLen)); } catch { name = ""; }
-                    }
-                    if (error == LibraryError.ManifestIdNotDense) return $"game.tlib manifest entry {i} id {id} is not dense manifest order (expected {i + 1}).";
-                    if (error == LibraryError.ManifestNameOutOfBounds) return $"game.tlib manifest entry {i} name out of bounds.";
-                    if (error == LibraryError.ManifestNameNotUtf8) return $"game.tlib manifest entry {i} name is not valid UTF-8.";
-                    if (error == LibraryError.ManifestNameOrder) return $"game.tlib manifest names must sort ordinally (entry {i} '{name}' breaks order).";
-                    if (error == LibraryError.ManifestBlobOutOfBounds) return $"game.tlib manifest entry {i} '{name}' blob out of bounds.";
-                    return $"game.tlib manifest entry {i} channel out of range.";
-                }
-                case LibraryError.TimelineInvalid:
-                {
-                    var count = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(8));
-                    var manifestOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(12));
-                    string name = "";
-                    uint tlbLen = 0;
-                    for (uint i = 0; i < count; i++)
-                    {
-                        var at = (int)(manifestOff + i * 32u);
-                        if (BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 16)) == (uint)offset)
-                        {
-                            var nameOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 8));
-                            var nameLen = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 12));
-                            tlbLen = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 20));
-                            try { name = Encoding.UTF8.GetString(library.Slice((int)nameOff, (int)nameLen)); } catch { name = ""; }
-                            break;
-                        }
-                    }
-                    var blob = library.Slice(offset, (int)tlbLen);
-                    string inner = "";
-                    try { TimelineRef.Validate(blob); } catch (ArgumentException ex) { inner = ex.Message; }
-                    return $"game.tlib timeline '{name}': {inner}";
-                }
-                case LibraryError.ChannelMismatch:
-                {
-                    var count = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(8));
-                    var manifestOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(12));
-                    string name = "";
-                    uint manifestChannel = 0;
-                    uint channel = 0;
-                    for (uint i = 0; i < count; i++)
-                    {
-                        var at = (int)(manifestOff + i * 32u);
-                        if (BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 16)) != (uint)offset) continue;
-                        var mc = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 4));
-                        var tlbLen = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 20));
-                        var blob = library.Slice(offset, (int)tlbLen);
-                        var bv = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(4));
-                        uint bc = 0;
-                        if (bv == 6) bc = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(56));
-                        if (mc == bc) continue;
-                        manifestChannel = mc;
-                        channel = bc;
-                        var nameOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 8));
-                        var nameLen = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 12));
-                        try { name = Encoding.UTF8.GetString(library.Slice((int)nameOff, (int)nameLen)); } catch { name = ""; }
-                        break;
-                    }
-                    return $"game.tlib manifest entry '{name}' channel {manifestChannel} does not match timeline channel {channel}.";
-                }
-                case LibraryError.KindSection:
-                {
-                    var count = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(8));
-                    var manifestOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(12));
-                    var kindOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(28));
-                    var kindLen = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(32));
-                    var durations = new LibraryTimeline[count];
-                    for (uint i = 0; i < count; i++)
-                    {
-                        var at = (int)(manifestOff + i * 32u);
-                        var tlbOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 16));
-                        var tlbLen = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 20));
-                        var blob = library.Slice((int)tlbOff, (int)tlbLen);
-                        durations[i].Duration = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(12));
-                    }
-                    try
-                    {
-                        fixed (byte* libPtr = library)
-                        {
-                            fixed (LibraryTimeline* tlsPtr = durations)
-                            {
-                                KindSectionReader.Create(libPtr + kindOff, kindLen, (int)count, tlsPtr);
-                            }
-                        }
-                    }
-                    catch (ArgumentException ex) { return ex.Message; }
-                    return "game.tlib kind section invalid; rebake with current tl.";
-                }
-                default: return "game.tlib invalid.";
-            }
+            return (LibraryError.None, -1, "");
         }
 
         static void Validate(ReadOnlySpan<byte> library)
         {
-            var error = Check(library, out var offset);
-            if (error != LibraryError.None) throw new ArgumentException(Describe(error, library, offset));
+            if (Check(library, out _, out var msg) != LibraryError.None) throw new ArgumentException(msg);
         }
 
         unsafe void LoadLibrary(ReadOnlySpan<byte> library)
         {
             Validate(library);
-            var version = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(4));
-            var count = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(8));
-            var manifestOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(12));
-            var total = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(20));
-            var kindOff = version == 2u ? BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(28)) : 0u;
-            var kindLen = version == 2u ? BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(32)) : 0u;
+            var version = U32(library, 4);
+            var count = U32(library, 8);
+            var manifestOff = U32(library, 12);
+            var total = U32(library, 20);
+            var kindOff = version == 2u ? U32(library, 28) : 0u;
+            var kindLen = version == 2u ? U32(library, 32) : 0u;
             _base = (byte*)TrackAlloc((nuint)library.Length);
             _ownsView = true;
             _byteCount = library.Length;
@@ -429,61 +316,47 @@ namespace Tl
             _manifestOff = manifestOff;
             _manifestCount = (int)count;
             if (count == 0) { _view.Timelines = null; return; }
-            var timelines = (LibraryTimeline*)TrackAlloc((nuint)(count * (uint)sizeof(LibraryTimeline)));
-            NativeMemory.Clear(timelines, (nuint)(count * (uint)sizeof(LibraryTimeline)));
+            var timelines = (LibraryTimeline*)TrackZero((nuint)(count * (uint)sizeof(LibraryTimeline)));
             _view.Timelines = timelines;
             for (uint i = 0; i < count; i++)
             {
                 var at = (int)(manifestOff + i * 32u);
-                var id = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at));
-                var channel = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 4));
-                var nameOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 8));
-                var nameLen = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 12));
-                var tlbOff = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 16));
-                var tlbLen = BinaryPrimitives.ReadUInt32LittleEndian(library.Slice(at + 20));
-                var name = Encoding.UTF8.GetString(_base + nameOff, (int)nameLen);
+                var id = U32(library, at);
+                var tlbOff = U32(library, at + 16);
+                var tlbLen = U32(library, at + 20);
                 var blob = new ReadOnlySpan<byte>(_base + tlbOff, (int)tlbLen);
-                BuildTimeline(timelines + i, (ushort)id, blob, tlbOff, name, i, channel);
+                BuildTimeline(timelines + i, (ushort)id, blob, tlbOff);
             }
             if (version == 2u) _view.Kinds = KindSectionReader.CreateView(_base + kindOff, kindLen, (int)count, timelines);
         }
 
-        unsafe void BuildTimeline(LibraryTimeline* tl, ushort id, ReadOnlySpan<byte> blob, uint tlbOff, string name, uint index, uint manifestChannel)
+        unsafe void BuildTimeline(LibraryTimeline* tl, ushort id, ReadOnlySpan<byte> blob, uint tlbOff)
         {
-            var version = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(4));
-            var loops = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(8));
-            var duration = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(12));
-            var trackCount = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(16));
-            var stageCount = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(20));
-            var pairCount = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(24));
-            var pairOff = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(28));
-            var stageOff = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(32));
-            var frameOff = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(40));
+            var version = U32(blob, 4);
+            var loops = U32(blob, 8);
+            var duration = U32(blob, 12);
+            var stageCount = U32(blob, 20);
+            var pairCount = U32(blob, 24);
+            var pairOff = U32(blob, 28);
+            var stageOff = U32(blob, 32);
             uint next = 0, channel = 0, flags = 0, markerOff = 0, markerCount = 0;
             if (version == 6)
             {
-                next = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(52));
-                channel = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(56));
-                flags = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(60));
-                markerOff = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(64));
-                markerCount = BinaryPrimitives.ReadUInt32LittleEndian(blob.Slice(68));
+                next = U32(blob, 52);
+                channel = U32(blob, 56);
+                flags = U32(blob, 60);
+                markerOff = U32(blob, 64);
+                markerCount = U32(blob, 68);
             }
-            _ = manifestChannel;
             tl->Id = id;
             tl->Channel = (ushort)channel;
             tl->Next = (ushort)next;
-            _ = next;
             tl->Loop = (byte)(loops != 0 ? 1 : 0);
             tl->Hold = (byte)((flags & 1u) != 0 ? 1 : 0);
             tl->Duration = duration;
             tl->StageCount = (int)stageCount;
-            tl->EventCount = 0;
-            tl->Events = null;
-            tl->EventTickBits = null;
-            tl->Stages = null;
             if (stageCount == 0) return;
-            var stages = (LibraryStage*)TrackAlloc((nuint)(stageCount * (uint)sizeof(LibraryStage)));
-            NativeMemory.Clear(stages, (nuint)(stageCount * (uint)sizeof(LibraryStage)));
+            var stages = (LibraryStage*)TrackZero((nuint)(stageCount * (uint)sizeof(LibraryStage)));
             tl->Stages = stages;
             var tlbBase = _base + tlbOff;
             var pairs = (NativePair*)(tlbBase + pairOff);
@@ -493,29 +366,27 @@ namespace Tl
             for (uint s = 0; s < stageCount; s++)
             {
                 var at = tlbBase + stageOff + s * 16u;
-                var start = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(at, 4));
-                var end = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(at + 4, 4));
-                var prog = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(at + 8, 4));
-                var progCount = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(at + 12, 4));
+                var start = U32(at);
+                var end = U32(at, 4);
+                var progCount = U32(at, 12);
                 stages[s].Start = start;
                 stages[s].End = end;
                 stages[s].StepCount = (int)progCount;
                 totalSteps += (int)progCount;
             }
-            var flat = totalSteps > 0 ? (LibraryStep*)TrackAlloc((nuint)(totalSteps * (uint)sizeof(LibraryStep))) : null;
-            if (flat != null) NativeMemory.Clear(flat, (nuint)(totalSteps * (uint)sizeof(LibraryStep)));
+            var flat = totalSteps > 0 ? (LibraryStep*)TrackZero((nuint)(totalSteps * (uint)sizeof(LibraryStep))) : null;
             var cursor = 0;
             for (uint s = 0; s < stageCount; s++)
             {
                 var at = tlbBase + stageOff + s * 16u;
-                var prog = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(at + 8, 4));
-                var progCount = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(at + 12, 4));
+                var prog = U32(at, 8);
+                var progCount = U32(at, 12);
                 stages[s].Steps = progCount > 0 ? flat + cursor : null;
                 for (uint k = 0; k < progCount; k++)
                 {
                     var stepAt = tlbBase + prog + k * 8u;
-                    var slot = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(stepAt, 4));
-                    var pair = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(stepAt + 4, 4));
+                    var slot = U32(stepAt);
+                    var pair = U32(stepAt, 4);
                     var row = (SlotRow*)(tlbBase + slot);
                     var dst = flat + cursor;
                     dst->Pair = pair;
@@ -528,15 +399,12 @@ namespace Tl
                     dst->TrackValueIndex = row->TrackValueIndex;
                     dst->FirstValueIndex = row->FirstValueIndex;
                     dst->SecondValueIndex = row->SecondValueIndex;
-                    dst->FoldLane = null;
                     dst->FrameRow = row;
                     cursor++;
                 }
             }
             BuildEvents(tl, tlbBase, markerOff, markerCount, totalSteps, flat);
             MaterializeSteps(tl, tlbBase, pairs, pairCount, flat, totalSteps, duration, markerOff, markerCount);
-            _ = trackCount;
-            _ = frameOff;
         }
         static nuint Align16(nuint v) => (v + 15u) & ~(nuint)15u;
 
@@ -567,7 +435,7 @@ namespace Tl
                 var off = 0u;
                 for (uint m = 0; m < markerCount; m++)
                 {
-                    var size = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(mp + off + 4, 4));
+                    var size = U32(mp + off, 4);
                     if (size > strideMax) strideMax = size;
                     off += 16u + ((size + 3u) & ~3u);
                 }
@@ -626,7 +494,7 @@ namespace Tl
                 var off = 0u;
                 for (uint m = 0; m < markerCount; m++)
                 {
-                    var size = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(mp + off + 4, 4));
+                    var size = U32(mp + off, 4);
                     new ReadOnlySpan<byte>(mp + off + 16, (int)size).CopyTo(new Span<byte>(table + m * stride, (int)size));
                     off += 16u + ((size + 3u) & ~3u);
                 }
@@ -666,9 +534,9 @@ namespace Tl
             for (uint m = 0; m < markerCount; m++)
             {
                 if (mp == tlbBase) break;
-                var tick = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(mp + off, 4));
+                var tick = U32(mp + off);
                 tmp[n++] = new LibraryEvent { Tick = tick, Kind = 2, StepIndex = -1, Marker = m };
-                var size = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(mp + off + 4, 4));
+                var size = U32(mp + off, 4);
                 off += 16u + ((size + 3u) & ~3u);
             }
             SortEvents(tmp, n);

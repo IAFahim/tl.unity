@@ -92,7 +92,7 @@ namespace Tl.Unity
         public void Execute()
         {
             var buffers = stackalloc UnsafeUntypedBufferAccessor[64];
-            var cursor = new KindCursor { Index = Index, Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers, Counters = Counters };
+            var cursor = new KindCursor { Index = (KindIndex*)UnsafeUtility.AddressOf(ref Index), Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers, Counters = Counters };
             var last = default(ArchetypeChunk);
             var lastValid = false;
             for (var f = 0; f < ForEachCount; f++)
@@ -105,7 +105,7 @@ namespace Tl.Unity
                     var target = Reader.Read<Entity>();
                     var value = Reader.ReadUnsafePtr(bytes);
                     var kind = Index.KindOf(id);
-                    if (kind < 0 || bytes != (int)Index.Sec.Kinds[kind].ValueBytes || !Storage.Exists(target))
+                    if (kind < 0 || Index.Sec.Kinds[kind].Accepts == 0 || bytes != (int)Index.Sec.Kinds[kind].ValueBytes || !Storage.Exists(target))
                     {
                         Counters[KindCounter.DroppedPulses]++;
                         continue;

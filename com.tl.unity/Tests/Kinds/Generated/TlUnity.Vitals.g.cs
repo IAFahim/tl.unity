@@ -19,29 +19,36 @@ public ComponentTypeHandle<Vitals_HealthData> HealthHandle;
 public BufferTypeHandle<global::KindGame.DamageEntry> DamageEntryHandle;
 public ComponentTypeHandle<global::KindGame.DamageActive> DamageActiveHandle;
 [ReadOnly] public ComponentTypeHandle<global::KindGame.DamageEnabled> DamageEnabledHandle;
+public int KindId_0;
 public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in global::Unity.Burst.Intrinsics.v128 chunkEnabledMask)
 {
+var __count = chunk.Count;
 var __l0 = false;
-if (chunk.Has(ref DamageEntryHandle))
+var __a0 = default(global::Unity.Burst.Intrinsics.v128);
+var __e0 = default(global::Unity.Burst.Intrinsics.v128);
+if (KindId_0 >= 0 && Index.NeedsBufferScan(KindId_0) && chunk.Has(ref DamageEntryHandle))
 {
-var __a0 = chunk.GetEnableableBits(ref DamageActiveHandle);
-var __e0 = chunk.GetEnableableBits(ref DamageEnabledHandle);
-var __p0 = chunk.Has(ref PlayingHandle) ? chunk.GetEnableableBits(ref PlayingHandle) : default;
-__l0 = (((__a0.ULong0 | __p0.ULong0) & __e0.ULong0) | ((__a0.ULong1 | __p0.ULong1) & __e0.ULong1)) != 0;
+__a0 = chunk.GetEnableableBits(ref DamageActiveHandle);
+__e0 = chunk.GetEnableableBits(ref DamageEnabledHandle);
+var __m0 = __count >= 64 ? ~0ul : (1ul << __count) - 1;
+var __m1 = __count <= 64 ? 0ul : (__count >= 128 ? ~0ul : (1ul << (__count - 64)) - 1);
+if (((__a0.ULong0 & ~__e0.ULong0 & __m0) | (__a0.ULong1 & ~__e0.ULong1 & __m1)) != 0) global::System.Threading.Interlocked.Increment(ref Index.HeldSeen[KindId_0]);
+__l0 = ((__a0.ULong0 & __e0.ULong0 & __m0) | (__a0.ULong1 & __e0.ULong1 & __m1)) != 0;
 }
 if (!__l0) return;
-var __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
-var __c0 = chunk.Has(ref HealthHandle) ? (global::KindGame.Health*)chunk.GetRequiredComponentDataPtrRW(ref HealthHandle) : null;
-if (__l0 && __c0 != null) Kind_0(chunk, __playbacks, __c0);
+var __c0 = (__l0) && chunk.Has(ref HealthHandle) ? (global::KindGame.Health*)chunk.GetRequiredComponentDataPtrRW(ref HealthHandle) : null;
+if (__l0 && (__c0 == null)) global::System.Threading.Interlocked.Increment(ref Index.HeldSeen[KindId_0]);
+if (__l0 && __c0 != null) Kind_0(chunk, __c0);
 }
-void Kind_0(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Health* __c0)
+void Kind_0(in ArchetypeChunk chunk, global::KindGame.Health* __c0)
 {
-var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;
+var __pbReady = false;
+var __playbacks = default(BufferAccessor<global::Tl.Unity.Playback>);
+ushort* __clocks = null;
 if (!chunk.Has(ref DamageEntryHandle)) return;
-var __kid = Index.KindOf(804387256);
+var __kid = KindId_0;
 if (__kid < 0) return;
 var __copies = chunk.Has(ref PlayingHandle) ? (global::Tl.Unity.TimelinePlaying*)chunk.GetRequiredComponentDataPtrRO(ref PlayingHandle) : null;
-var __epl = chunk.Has(ref PlayingHandle) ? chunk.GetEnableableBits(ref PlayingHandle) : default;
 var __acc = chunk.GetBufferAccessor(ref DamageEntryHandle);
 var __ema = chunk.GetEnableableBits(ref DamageActiveHandle);
 var __eme = chunk.GetEnableableBits(ref DamageEnabledHandle);
@@ -60,14 +67,14 @@ if (__row >= __count) break;
 var __buf = __acc[__row];
 var __len = __buf.Length;
 byte* __data = (byte*)__buf.GetUnsafePtr();
-var __pbuf = __playbacks[__row];
-var __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr();
-var __cnt = __pbuf.Length;
+global::Tl.Playback* __run = null; var __cnt = 0; ushort __clock = 0; var __rowInit = false;
 var __smp = __copies == null ? 0 : (int)__copies[__row].Copies;
-if (__cnt + __smp > __pbuf.Capacity) __smp = 0;
-var __clock = __clocks == null ? (ushort)0 : __clocks[__row];
-var __listed = false;
 var __sampled = __smp != 0;
+if (__sampled)
+{
+if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null; __pbReady = true; }
+var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; if (__cnt + __smp > __pbuf.Capacity) __smp = 0; __sampled = __smp != 0; __clock = __clocks == null ? (ushort)0 : __clocks[__row]; __rowInit = true;
+}
 var __sk = __sampled ? global::Tl.KindRules.Depth(__run + __cnt, __smp) : 1;
 for (var __sj = 0; __sj < __sk; __sj++)
 {
@@ -88,6 +95,7 @@ __en->Flags &= ~global::Tl.KindEntryFlags.Ready;
 }
 else
 {
+if (!__rowInit) { if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null; __pbReady = true; } var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; __clock = __clocks == null ? (ushort)0 : __clocks[__row]; __rowInit = true; }
 var __pb = __run + __en->Slot;
 var __tl = Index.Timelines + (__en->Timeline - 1);
 ushort __tick = __en->Slot < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;
@@ -124,23 +132,270 @@ else { __total = __v; __has = true; }
 }
 if (__has) global::KindGame.Damage.Apply(in __total, ref __c0[__row]);
 }
-if (__len != 0)
+if (__len != 0) __buf.ResizeUninitialized(0);
+__active[__row] = false;
+if (__buf.Capacity > global::KindGame.KindCapacity.Damage) __buf.TrimExcess();
+}
+}
+}
+public struct KindPulses_0 : global::Tl.IKindSpanValues<int>
 {
-var __kept = 0;
-for (var __j = 0; __j < __len; __j++)
+public bool Evaluate(int __r, global::Tl.LibraryStep* __def, global::Tl.LibraryTimeline* __tl, ushort __tick, bool __backward, out int __v)
 {
-var __en = (global::Tl.KindEntry*)(__data + (long)__j * __stride);
-if ((__en->Flags & global::Tl.KindEntryFlags.Pulse) != 0 || __en->Timeline == 0) continue;
-if (__kept != __j) global::Unity.Collections.LowLevel.Unsafe.UnsafeUtility.MemCpy(__data + (long)__kept * __stride, __en, __stride);
-__kept++;
+__v = default;
+if (__tick < __def->WindowStart || __tick >= __def->WindowEnd) return false;
+var __kflags = __backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None;
+if (__tick == 0) __kflags |= global::Tl.FrameFlags.TimelineStart;
+if (__tick == (ushort)(__tl->Duration - 1)) __kflags |= global::Tl.FrameFlags.TimelineEnd;
+var __ok = false;
+switch (__r)
+{
+case 0:
+{
+byte* __row0 = (byte*)__def->FrameRow;
+byte* __first0 = __row0 + sizeof(global::KindGame.HitTrack);
+byte* __second0 = __def->FactorSpan == 0 ? null : __first0 + sizeof(global::KindGame.HitClip);
+float __blend0 = __def->FactorSpan == 0 ? 0f : (__def->FactorSpan <= 1 ? 0.5f : (__tick - __def->FactorStart) / (float)(__def->FactorSpan - 1));
+ushort __len0 = (ushort)(__def->WindowEnd - __def->WindowStart);
+ushort __within0 = (ushort)(__tick - __def->WindowStart);
+sbyte __dir0 = __backward ? (sbyte)-1 : (sbyte)1;
+global::TlUnityGenerated.TlUnityFrames.Frame_1_0(__row0, __first0, __second0, __blend0, __tick, __len0, __within0, (ushort)__def->TrackIndex, (ushort)__tl->Duration, __dir0, __kflags, out var __t0, out var __cc0, out var __f0);
+__v = global::KindGame.Hit.Start(in __f0);
+__ok = true;
+break;
 }
-__buf.ResizeUninitialized(__kept);
-__listed |= __kept != 0;
 }
-__active[__row] = __listed;
-if (__buf.Capacity > global::KindGame.KindCapacity.Damage && __buf.Length <= global::KindGame.KindCapacity.Damage) __buf.TrimExcess();
+if (!__ok) return false;
+return true;
+}
+public void Combine(ref int total, in int next) { }
 }
 }
+[BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
+public unsafe struct VitalsPulseJob_0 : IJobParallelFor
+{
+[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public global::Tl.Unity.KindIndex Index;
+public int Kind;
+public int OrderVersion;
+[ReadOnly] [global::Unity.Collections.LowLevel.Unsafe.NativeDisableContainerSafetyRestriction] public ComponentTypeHandle<global::KindGame.DamageEnabled> EnabledHandle;
+[global::Unity.Collections.LowLevel.Unsafe.NativeDisableContainerSafetyRestriction] public ComponentTypeHandle<Vitals_HealthData> HealthHandle;
+public void Execute(int threadIndex)
+{
+if (Kind < 0 || Index.TickFastPulses == null || (*Index.TickFastPulses >> Kind & 1) == 0) return;
+if (Index.TickOrderVersion == null || *Index.TickOrderVersion != OrderVersion) return;
+var lane = Index.PulseLanes + (Kind * Index.ThreadCount + threadIndex);
+var n = lane->Count;
+if (n == 0) return;
+var items = lane->Items;
+var pv = Index.PulseValuesTable + Kind;
+var starts = pv->Start;
+var vals = (int*)pv->Data;
+var lastChunk = default(ArchetypeChunk);
+var lastValid = false;
+var lastHasEn = false;
+var lastEn = default(global::Unity.Burst.Intrinsics.v128);
+global::KindGame.Health* __c0 = null;
+var kept = 0;
+var i = 0;
+while (i < n)
+{
+var e = items[i].Entity;
+var end = i + 1;
+while (end < n && items[end].Entity == e) end++;
+var chunk = items[i].Chunk;
+var __row = items[i].Row;
+if (!lastValid || !chunk.Equals(lastChunk))
+{
+lastChunk = chunk;
+lastValid = true;
+lastHasEn = lastChunk.Has(ref EnabledHandle);
+lastEn = lastHasEn ? lastChunk.GetEnableableBits(ref EnabledHandle) : default;
+__c0 = lastChunk.Has(ref HealthHandle) ? (global::KindGame.Health*)lastChunk.GetRequiredComponentDataPtrRW(ref HealthHandle) : null;
+}
+var enBit = lastHasEn && (((__row < 64 ? lastEn.ULong0 : lastEn.ULong1) >> (__row & 63)) & 1) != 0;
+if (!enBit)
+{
+for (var j = i; j < end; j++) items[kept++] = items[j];
+i = end;
+continue;
+}
+if (__c0 != null)
+{
+int __total = default;
+var __has = false;
+for (var j = i; j < end; j++)
+{
+var c = items[j].Cell;
+for (var p = starts[c]; p < starts[c + 1]; p++)
+{
+if (__has) global::KindGame.Damage.Combine(ref __total, in vals[p]);
+else { __total = vals[p]; __has = true; }
+}
+}
+if (__has) global::KindGame.Damage.Apply(in __total, ref __c0[__row]);
+}
+else
+{
+for (var j = i; j < end; j++) items[kept++] = items[j];
+}
+i = end;
+}
+lane->Count = kept;
+if (kept > 0) global::System.Threading.Interlocked.Increment(ref Index.SpillCount[Kind]);
+}
+}
+[BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
+public unsafe struct VitalsFinishJob_0 : IJob
+{
+[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public global::Tl.Unity.KindIndex Index;
+public int Kind;
+public int OrderVersion;
+[ReadOnly] public EntityStorageInfoLookup Storage;
+public BufferTypeHandle<global::KindGame.DamageEntry> EntryHandle;
+public ComponentTypeHandle<global::KindGame.DamageActive> ActiveHandle;
+[ReadOnly] public ComponentTypeHandle<global::KindGame.DamageEnabled> EnabledHandle;
+public ComponentTypeHandle<Vitals_HealthData> HealthHandle;
+public void Execute()
+{
+if (Kind < 0 || Index.HeldBufferKinds == null) return;
+var fast = Index.TickFastPulses != null && (*Index.TickFastPulses >> Kind & 1) != 0;
+var direct = Index.TickOrderVersion != null && *Index.TickOrderVersion == OrderVersion;
+var spilled = false;
+if (fast && !direct)
+{
+var pv = Index.PulseValuesTable + Kind;
+var starts = pv->Start;
+var vbytes = pv->Stride;
+var stride = sizeof(global::KindGame.DamageEntry);
+var vals = (int*)pv->Data;
+var lastChunk = default(ArchetypeChunk);
+var lastValid = false;
+var lastHasEn = false;
+var lastEn = default(global::Unity.Burst.Intrinsics.v128);
+global::KindGame.Health* __c0 = null;
+for (var th = 0; th < Index.ThreadCount; th++)
+{
+var lane = Index.PulseLanes + (Kind * Index.ThreadCount + th);
+var n = lane->Count;
+if (n == 0) continue;
+var items = lane->Items;
+var i = 0;
+while (i < n)
+{
+var e = items[i].Entity;
+var end = i + 1;
+while (end < n && items[end].Entity == e) end++;
+if (!Storage.Exists(e)) { i = end; continue; }
+var info = Storage[e];
+var chunk = info.Chunk;
+var __row = info.IndexInChunk;
+if (!lastValid || !chunk.Equals(lastChunk))
+{
+lastChunk = chunk;
+lastValid = true;
+lastHasEn = lastChunk.Has(ref EnabledHandle);
+lastEn = lastHasEn ? lastChunk.GetEnableableBits(ref EnabledHandle) : default;
+__c0 = lastChunk.Has(ref HealthHandle) ? (global::KindGame.Health*)lastChunk.GetRequiredComponentDataPtrRW(ref HealthHandle) : null;
+}
+if (lastHasEn && (((__row < 64 ? lastEn.ULong0 : lastEn.ULong1) >> (__row & 63)) & 1) != 0 && __c0 != null)
+{
+int __total = default;
+var __has = false;
+for (var j = i; j < end; j++)
+{
+var c = items[j].Cell;
+for (var p = starts[c]; p < starts[c + 1]; p++)
+{
+if (__has) global::KindGame.Damage.Combine(ref __total, in vals[p]);
+else { __total = vals[p]; __has = true; }
+}
+}
+if (__has) global::KindGame.Damage.Apply(in __total, ref __c0[__row]);
+}
+else if (chunk.Has(ref EntryHandle))
+{
+var added = 0;
+for (var j = i; j < end; j++) { var c = items[j].Cell; var cnt = starts[c + 1] - starts[c]; if (cnt > 0) added += cnt; }
+if (added > 0)
+{
+var acc = chunk.GetBufferAccessor(ref EntryHandle);
+var buf = acc[__row];
+var len = buf.Length;
+buf.ResizeUninitialized(len + added);
+var dstBase = (byte*)buf.GetUnsafePtr() + (long)len * stride;
+var at = 0;
+for (var j = i; j < end; j++)
+{
+var c = items[j].Cell;
+var s = starts[c];
+var cnt = starts[c + 1] - s;
+if (cnt <= 0) continue;
+var src = pv->Data + (long)s * vbytes;
+for (var p = 0; p < cnt; p++)
+{
+var dst = dstBase + (long)at * stride;
+global::Unity.Collections.LowLevel.Unsafe.UnsafeUtility.MemClear(dst, stride);
+((global::Tl.KindEntry*)dst)->Flags = global::Tl.KindEntryFlags.Pulse;
+global::Unity.Collections.LowLevel.Unsafe.UnsafeUtility.MemCpy(dst + 8, src + (long)p * vbytes, vbytes);
+at++;
+}
+}
+if (len == 0) chunk.SetComponentEnabled(ref ActiveHandle, __row, true);
+spilled = true;
+}
+}
+i = end;
+}
+lane->Count = 0;
+}
+Index.SpillCount[Kind] = 0;
+}
+else if (Index.SpillCount[Kind] > 0)
+{
+var pv = Index.PulseValuesTable + Kind;
+var starts = pv->Start;
+var vbytes = pv->Stride;
+var stride = sizeof(global::KindGame.DamageEntry);
+for (var th = 0; th < Index.ThreadCount; th++)
+{
+var lane = Index.PulseLanes + (Kind * Index.ThreadCount + th);
+var n = lane->Count;
+if (n == 0) continue;
+var items = lane->Items;
+for (var i = 0; i < n; i++)
+{
+var e = items[i].Entity;
+if (!Storage.Exists(e)) continue;
+var info = Storage[e];
+if (!info.Chunk.Has(ref EntryHandle)) continue;
+var c = items[i].Cell;
+var s = starts[c];
+var cnt = starts[c + 1] - s;
+if (cnt <= 0) continue;
+var acc = info.Chunk.GetBufferAccessor(ref EntryHandle);
+var buf = acc[info.IndexInChunk];
+var len = buf.Length;
+buf.ResizeUninitialized(len + cnt);
+var dstBase = (byte*)buf.GetUnsafePtr() + (long)len * stride;
+var src = pv->Data + (long)s * vbytes;
+for (var p = 0; p < cnt; p++)
+{
+var dst = dstBase + (long)p * stride;
+global::Unity.Collections.LowLevel.Unsafe.UnsafeUtility.MemClear(dst, stride);
+((global::Tl.KindEntry*)dst)->Flags = global::Tl.KindEntryFlags.Pulse;
+global::Unity.Collections.LowLevel.Unsafe.UnsafeUtility.MemCpy(dst + 8, src + (long)p * vbytes, vbytes);
+}
+if (len == 0) info.Chunk.SetComponentEnabled(ref ActiveHandle, info.IndexInChunk, true);
+spilled = true;
+}
+lane->Count = 0;
+}
+Index.SpillCount[Kind] = 0;
+}
+if (spilled) Index.HeldBufferKinds[Kind] = 1;
+else if (Index.NeedsBufferScan(Kind)) Index.HeldBufferKinds[Kind] = (byte)(Index.HeldSeen[Kind] != 0 ? 1 : 0);
+Index.HeldSeen[Kind] = 0;
+Index.SlowCount[Kind] = 0;
 }
 }
 public static partial class TimelineJobs
@@ -148,6 +403,7 @@ public static partial class TimelineJobs
 public struct Vitals
 {
 EntityQuery _query;
+EntityStorageInfoLookup _Storage;
 BufferTypeHandle<global::Tl.Unity.Playback> _PlaybackHandle;
 ComponentTypeHandle<global::Tl.Unity.TimelineClock> _ClockHandle;
 ComponentTypeHandle<global::Tl.Unity.TimelinePlaying> _PlayingHandle;
@@ -158,6 +414,7 @@ ComponentTypeHandle<global::KindGame.DamageEnabled> _DamageEnabledHandle;
 public static Vitals Create(ref SystemState state)
 {
 var jobs = default(Vitals);
+jobs._Storage = state.GetEntityStorageInfoLookup();
 var builder = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.Playback>();
 var any = new NativeList<ComponentType>(1, Allocator.Temp);
 any.Add(ComponentType.ReadWrite<global::KindGame.DamageEntry>());
@@ -183,7 +440,11 @@ _HealthHandle.Update(ref state);
 _DamageEntryHandle.Update(ref state);
 _DamageActiveHandle.Update(ref state);
 _DamageEnabledHandle.Update(ref state);
+_Storage.Update(ref state);
+var __id0 = index.KindOf(804387256);
+if (index.NeedsPulseValues(__id0)) { dependsOn.Complete(); var __kp0 = default(VitalsChunkJob.KindPulses_0); index.PulseValues<int, VitalsChunkJob.KindPulses_0>(__id0, ref __kp0); }
 var job = new VitalsChunkJob { View = view, Index = index, Forward = forward
+, KindId_0 = __id0
 , PlaybackHandle = _PlaybackHandle
 , ClockHandle = _ClockHandle
 , PlayingHandle = _PlayingHandle
@@ -192,7 +453,11 @@ var job = new VitalsChunkJob { View = view, Index = index, Forward = forward
 , DamageActiveHandle = _DamageActiveHandle
 , DamageEnabledHandle = _DamageEnabledHandle
  };
-return job.ScheduleParallel(_query, dependsOn);
+var __dep = job.ScheduleParallel(_query, dependsOn);
+var __orderVer = state.EntityManager.GetComponentOrderVersion<global::Tl.Unity.Playback>();
+__dep = new VitalsPulseJob_0 { Index = index, Kind = __id0, OrderVersion = __orderVer, EnabledHandle = _DamageEnabledHandle, HealthHandle = _HealthHandle }.Schedule(index.ThreadCount, 1, __dep);
+__dep = new VitalsFinishJob_0 { Index = index, Kind = __id0, OrderVersion = __orderVer, Storage = _Storage, EntryHandle = _DamageEntryHandle, ActiveHandle = _DamageActiveHandle, EnabledHandle = _DamageEnabledHandle, HealthHandle = _HealthHandle }.Schedule(__dep);
+return __dep;
 }
 }
 }

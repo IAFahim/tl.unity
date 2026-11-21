@@ -79,6 +79,7 @@ namespace Tl.Unity
         ComponentTypeHandle<TimelineHorizon> _horizonHandle;
         ComponentTypeHandle<TimelineClock> _clockHandle;
         BufferTypeHandle<PlaybackDue> _dueHandle;
+        EntityTypeHandle _entityHandle;
         ushort _now;
         EntityStorageInfoLookup _storage;
         KindHandleSet _handles;
@@ -108,6 +109,7 @@ namespace Tl.Unity
             _horizonHandle = state.GetComponentTypeHandle<TimelineHorizon>(false);
             _clockHandle = state.GetComponentTypeHandle<TimelineClock>(false);
             _dueHandle = state.GetBufferTypeHandle<PlaybackDue>(false);
+            _entityHandle = state.GetEntityTypeHandle();
             _storage = state.GetEntityStorageInfoLookup();
             state.RequireForUpdate<TimelineLibrary>();
             state.RequireForUpdate<TimelineStep>();
@@ -152,6 +154,7 @@ namespace Tl.Unity
             _horizonHandle.Update(ref state);
             _clockHandle.Update(ref state);
             _dueHandle.Update(ref state);
+            _entityHandle.Update(ref state);
             _now = (ushort)((_now + 1) & TimelineTicks.Mask);
             var stepDir = SystemAPI.GetSingleton<TimelineStep>().Forward ? 1 : -1;
             var limit = (int)state.EntityManager.GetComponentData<TimelineGlide>(state.SystemHandle).Limit;
@@ -167,9 +170,14 @@ namespace Tl.Unity
             for (var i = 0; i < writers->Length; i++)
                 dependency = JobHandle.CombineDependencies(dependency, (*writers)[i]);
             writers->Clear();
+            var senders = _tick.Senders;
+            _storage.Update(ref state);
+            var orderVer = state.EntityManager.GetComponentOrderVersion<Playback>();
+            dependency = new KindPulseClearJob { Index = index, AllowFastPulses = senders->Length == 0, OrderVersion = orderVer, Storage = _storage, Handles = handles }.Schedule(dependency);
             var tick = new KindTickJob
             {
                 Index = index,
+                EntityHandle = _entityHandle,
                 PlaybackHandle = _playbackHandle,
                 RequestHandle = _requestHandle,
                 PlayingHandle = _playingHandle,
@@ -185,10 +193,8 @@ namespace Tl.Unity
                 ForgetHorizons = forget,
             };
             dependency = tick.ScheduleParallel(_query, dependency);
-            var senders = _tick.Senders;
             if (senders->Length != 0)
             {
-                _storage.Update(ref state);
                 var storage = _storage;
                 for (var i = 0; i < senders->Length; i++)
                 {
