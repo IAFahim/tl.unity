@@ -186,6 +186,7 @@ namespace Tl.Unity
                 DueHandle = _dueHandle,
                 Now = _now,
                 Handles = handles,
+                Tables = index.Tables,
                 Counters = counters,
                 StepDir = stepDir,
                 LastSystemVersion = state.LastSystemVersion,

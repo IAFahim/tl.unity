@@ -28,6 +28,9 @@ namespace Tl.Unity
 
         public void Execute()
         {
+            if (Index.WorkerCache != null)
+                for (var t = 0; t < Index.ThreadCount; t++)
+                    Index.WorkerCache[t].Flags = 0;
             if (Index.TickOrderVersion != null) *Index.TickOrderVersion = OrderVersion;
             if (Index.PrevSampledCount != null && Index.SampledCount != null)
             {
@@ -116,6 +119,7 @@ namespace Tl.Unity
     public unsafe partial struct KindTickJob : IJobChunk
     {
         [NativeDisableUnsafePtrRestriction] public KindIndex Index;
+        [NativeDisableUnsafePtrRestriction] public global::Tl.KindTables Tables;
         [ReadOnly] public EntityTypeHandle EntityHandle;
         [NativeSetThreadIndex] internal int ThreadIndex;
         public BufferTypeHandle<Playback> PlaybackHandle;
@@ -139,12 +143,36 @@ namespace Tl.Unity
         {
             CountManagedRun(Counters);
             var count = chunk.Count;
+            var cache = Index.WorkerCache != null && (uint)ThreadIndex < (uint)Index.ThreadCount ? Index.WorkerCache + ThreadIndex : null;
+            var arch = chunk.Archetype;
+            bool hasClock, hasDue, hasHorizon, hasRequest;
+            if (cache != null && (cache->Flags & 1) != 0 && cache->Archetype.Equals(arch))
+            {
+                var cf = cache->Flags;
+                hasClock = (cf & 2) != 0;
+                hasDue = (cf & 4) != 0;
+                hasHorizon = (cf & 8) != 0;
+                hasRequest = (cf & 16) != 0;
+            }
+            else
+            {
+                hasClock = chunk.Has(ref ClockHandle);
+                hasDue = hasClock && chunk.Has(ref DueHandle);
+                hasHorizon = chunk.Has(ref HorizonHandle);
+                hasRequest = chunk.Has(ref RequestHandle);
+                if (cache != null)
+                {
+                    cache->Archetype = arch;
+                    cache->Reach = 0;
+                    cache->Flags = (byte)(1 | (hasClock ? 2 : 0) | (hasDue ? 4 : 0) | (hasHorizon ? 8 : 0) | (hasRequest ? 16 : 0));
+                }
+            }
             byte* horizons = null;
             ushort* clocks = null;
             var dues = default(BufferAccessor<PlaybackDue>);
-            if (chunk.Has(ref ClockHandle))
+            if (hasClock)
             {
-                if (chunk.Has(ref DueHandle))
+                if (hasDue)
                 {
                     clocks = (ushort*)chunk.GetNativeArray(ref ClockHandle).GetUnsafePtr();
                     dues = chunk.GetBufferAccessor(ref DueHandle);
@@ -152,7 +180,7 @@ namespace Tl.Unity
                 else
                     Unclock(in chunk, count);
             }
-            if (HorizonLimit > 0 && chunk.Has(ref HorizonHandle))
+            if (HorizonLimit > 0 && hasHorizon)
             {
                 horizons = (byte*)chunk.GetNativeArray(ref HorizonHandle).GetUnsafePtr();
                 if (ForgetHorizons || chunk.DidChange(ref PlaybackHandle, LastSystemVersion))
@@ -178,12 +206,13 @@ namespace Tl.Unity
                 }
                 clocks = null;
             }
-            var requested = chunk.Has(ref RequestHandle) && chunk.DidChange(ref RequestHandle, LastSystemVersion);
+            var requested = hasRequest && chunk.DidChange(ref RequestHandle, LastSystemVersion);
             var playing = chunk.GetEnableableBits(ref PlayingHandle);
             if (!requested && playing.ULong0 == 0 && (count <= 64 || playing.ULong1 == 0)) return;
-            var buffers = stackalloc UnsafeUntypedBufferAccessor[Index.KindCount];
-            var masks = stackalloc EnabledMask[Index.KindCount];
-            var tables = Index.Tables;
+            var buffers = Index.WorkerBuffers != null && (uint)ThreadIndex < (uint)Index.ThreadCount && Index.KindCount > 0 ? Index.WorkerBuffers + ThreadIndex * Index.KindCount : null;
+            var masks = Index.WorkerMasks != null && (uint)ThreadIndex < (uint)Index.ThreadCount && Index.KindCount > 0 ? Index.WorkerMasks + ThreadIndex * Index.KindCount : null;
+            var tables = Tables.Timelines != null || Tables.Closure != null ? Tables : Index.Tables;
+            tables.FastPulseMask = Index.TickFastPulses != null ? *Index.TickFastPulses : 0ul;
             var playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
             var ctx = new KindCursor
             {
@@ -197,6 +226,15 @@ namespace Tl.Unity
                 Playbacks = playbacks,
             };
             ctx.Bind(in chunk);
+            if (cache != null)
+            {
+                ctx.Cache = cache;
+                if ((cache->Flags & 32) != 0)
+                {
+                    ctx.Reach = cache->Reach;
+                    ctx.HasReach = true;
+                }
+            }
             if (requested)
             {
                 var requests = chunk.GetBufferAccessor(ref RequestHandle);
@@ -476,6 +514,7 @@ namespace Tl.Unity
         public EnabledMask Playing;
         public bool HasPlaying;
         public BufferAccessor<Playback> Playbacks;
+        public KindWorkerCache* Cache;
 
         public void Bind(in ArchetypeChunk chunk)
         {
@@ -491,6 +530,7 @@ namespace Tl.Unity
             HasPlaying = false;
             Copies = null;
             CopiesRO = null;
+            Cache = null;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -513,6 +553,11 @@ namespace Tl.Unity
                 if (KindHandleSet.IsMapped(Handles, k) && Chunk.Has(ref *KindHandleSet.Entry(Handles, k)))
                     r |= 1ul << k;
             Reach = r;
+            if (Cache != null)
+            {
+                Cache->Reach = r;
+                Cache->Flags |= 32;
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
