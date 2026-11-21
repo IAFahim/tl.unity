@@ -106,6 +106,8 @@ namespace Tl.Gen.Unity
                     if (member is IFieldSymbol { IsConst: true })
                         return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + kind.Name;
             }
+            if (kind.Precombined || kind.PrecombinedPulses)
+                return "0";
             var computed = InlineBudgetBytes / entryBytes;
             return (computed < 1 ? 1 : computed).ToString(System.Globalization.CultureInfo.InvariantCulture);
         }

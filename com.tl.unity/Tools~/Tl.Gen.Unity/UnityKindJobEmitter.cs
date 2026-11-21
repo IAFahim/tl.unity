@@ -284,7 +284,7 @@ namespace Tl.Gen.Unity
                 W(writer, "public BufferTypeHandle<" + kind.Entry + "> " + kind.Name + "EntryHandle;");
                 W(writer, "public ComponentTypeHandle<" + kind.Active + "> " + kind.Name + "ActiveHandle;");
                 W(writer, "[ReadOnly] public ComponentTypeHandle<" + kind.Enabled + "> " + kind.Name + "EnabledHandle;");
-                W(writer, "public int KindId_" + k + ";");
+                W(writer, "public int KindSlot_" + k + ";");
             }
             var values = new List<int>();
             for (var k = 0; k < kinds.Count && values.Count < 10; k++)
@@ -326,10 +326,7 @@ namespace Tl.Gen.Unity
             for (var k = 0; k < kinds.Count; k++)
                 if (kinds[k].Decl.Accepts != 1) { hasNonSpanless = true; break; }
             if (hasNonSpanless)
-            {
-                W(writer, "var __hasPl = chunk.Has(ref PlayingHandle);");
-                W(writer, "var __epl = __hasPl ? chunk.GetEnableableBits(ref PlayingHandle) : default;");
-            }
+                W(writer, "var __epl = chunk.GetEnableableBits(ref PlayingHandle);");
             var live = new StringBuilder();
             for (var k = 0; k < kinds.Count; k++)
             {
@@ -344,13 +341,14 @@ namespace Tl.Gen.Unity
                 }
                 if (pulseFast.Contains(k))
                 {
-                    W(writer, "if (KindId_" + k + " >= 0 && Index.NeedsBufferScan(KindId_" + k + ") && " + (fusedKinds.Contains(k) ? "__has" + k : "chunk.Has(ref " + name + "EntryHandle)") + ")");
+                    W(writer, "var __kid" + k + " = KindSlot_" + k + " != 0 ? KindSlot_" + k + " - 2 : Index.KindOf(" + KindId(kinds[k].Key) + ");");
+                    W(writer, "if (__kid" + k + " >= 0 && Index.NeedsBufferScan(__kid" + k + ") && " + (fusedKinds.Contains(k) ? "__has" + k : "chunk.Has(ref " + name + "EntryHandle)") + ")");
                     W(writer, "{");
                     W(writer, "__a" + k + " = chunk.GetEnableableBits(ref " + name + "ActiveHandle);");
                     W(writer, "__e" + k + " = chunk.GetEnableableBits(ref " + name + "EnabledHandle);");
                     W(writer, "var __m0 = __count >= 64 ? ~0ul : (1ul << __count) - 1;");
                     W(writer, "var __m1 = __count <= 64 ? 0ul : (__count >= 128 ? ~0ul : (1ul << (__count - 64)) - 1);");
-                    W(writer, "if (((__a" + k + ".ULong0 & ~__e" + k + ".ULong0 & __m0) | (__a" + k + ".ULong1 & ~__e" + k + ".ULong1 & __m1)) != 0) global::System.Threading.Interlocked.Increment(ref Index.HeldSeen[KindId_" + k + "]);");
+                    W(writer, "if (((__a" + k + ".ULong0 & ~__e" + k + ".ULong0 & __m0) | (__a" + k + ".ULong1 & ~__e" + k + ".ULong1 & __m1)) != 0) global::System.Threading.Interlocked.Increment(ref Index.HeldSeen[__kid" + k + "]);");
                     W(writer, "__l" + k + " = ((__a" + k + ".ULong0 & __e" + k + ".ULong0 & __m0) | (__a" + k + ".ULong1 & __e" + k + ".ULong1 & __m1)) != 0;");
                     W(writer, "}");
                 }
@@ -409,7 +407,7 @@ namespace Tl.Gen.Unity
                 var needTerms = new List<string>();
                 foreach (var k in colKinds[i]) needTerms.Add("__l" + k);
                 var needExpr = needTerms.Count == 0 ? "false" : string.Join(" || ", needTerms);
-                W(writer, "var __c" + i + " = (" + needExpr + ") && chunk.Has(ref " + column.Name + "Handle) ? (" + column.ElementTypeName + "*)chunk.GetRequiredComponentDataPtr" + (column.ReadOnly ? "RO" : "RW") + "(ref " + column.Name + "Handle) : null;");
+                W(writer, "var __c" + i + " = (" + needExpr + ") ? (" + column.ElementTypeName + "*)chunk.GetComponentDataPtr" + (column.ReadOnly ? "RO" : "RW") + "(ref " + column.Name + "Handle) : null;");
             }
             foreach (var k in pulseFast)
             {
@@ -418,7 +416,7 @@ namespace Tl.Gen.Unity
                     if (shape.UsedColumns[i])
                         reqCols.Add("__c" + i + " == null");
                 if (reqCols.Count != 0)
-                    W(writer, "if (__l" + k + " && (" + string.Join(" || ", reqCols) + ")) global::System.Threading.Interlocked.Increment(ref Index.HeldSeen[KindId_" + k + "]);");
+                    W(writer, "if (__l" + k + " && __kid" + k + " >= 0 && (" + string.Join(" || ", reqCols) + ")) global::System.Threading.Interlocked.Increment(ref Index.HeldSeen[__kid" + k + "]);");
             }
             var rAt = 0;
             for (var k = 0; k < kinds.Count; k++)
@@ -429,7 +427,7 @@ namespace Tl.Gen.Unity
                     var fName = runs.Count == 1 ? "Fused" : "Fused_" + rAt;
                     var allHas = new List<string>();
                     var anyLive = new List<string>();
-                    var extraArgs = new List<string> { "__hasPl", "__epl" };
+                    var extraArgs = new List<string> { "__epl" };
                     var allCols = new SortedSet<int>();
                     foreach (var fk in cur)
                     {
@@ -537,7 +535,6 @@ namespace Tl.Gen.Unity
             W(writer, "var vals = (" + value + "*)pv->Data;");
             W(writer, "var lastChunk = default(ArchetypeChunk);");
             W(writer, "var lastValid = false;");
-            W(writer, "var lastHasEn = false;");
             W(writer, "var lastEn = default(global::Unity.Burst.Intrinsics.v128);");
             foreach (var ci in applyCols)
                 W(writer, shape.Columns[ci].ElementTypeName + "* __c" + ci + " = null;");
@@ -554,15 +551,14 @@ namespace Tl.Gen.Unity
             W(writer, "{");
             W(writer, "lastChunk = chunk;");
             W(writer, "lastValid = true;");
-            W(writer, "lastHasEn = lastChunk.Has(ref EnabledHandle);");
-            W(writer, "lastEn = lastHasEn ? lastChunk.GetEnableableBits(ref EnabledHandle) : default;");
+            W(writer, "lastEn = lastChunk.GetEnableableBits(ref EnabledHandle);");
             foreach (var ci in applyCols)
             {
                 var col = shape.Columns[ci];
-                W(writer, "__c" + ci + " = lastChunk.Has(ref " + col.Name + "Handle) ? (" + col.ElementTypeName + "*)lastChunk.GetRequiredComponentDataPtr" + (col.ReadOnly ? "RO" : "RW") + "(ref " + col.Name + "Handle) : null;");
+                W(writer, "__c" + ci + " = (" + col.ElementTypeName + "*)lastChunk.GetComponentDataPtr" + (col.ReadOnly ? "RO" : "RW") + "(ref " + col.Name + "Handle);");
             }
             W(writer, "}");
-            W(writer, "var enBit = lastHasEn && (((__row < 64 ? lastEn.ULong0 : lastEn.ULong1) >> (__row & 63)) & 1) != 0;");
+            W(writer, "var enBit = (((__row < 64 ? lastEn.ULong0 : lastEn.ULong1) >> (__row & 63)) & 1) != 0;");
             W(writer, "if (!enBit)");
             W(writer, "{");
             W(writer, "for (var j = i; j < end; j++) items[kept++] = items[j];");
@@ -658,7 +654,6 @@ namespace Tl.Gen.Unity
             W(writer, "var vals = (" + value + "*)pv->Data;");
             W(writer, "var lastChunk = default(ArchetypeChunk);");
             W(writer, "var lastValid = false;");
-            W(writer, "var lastHasEn = false;");
             W(writer, "var lastEn = default(global::Unity.Burst.Intrinsics.v128);");
             foreach (var ci in applyCols)
                 W(writer, shape.Columns[ci].ElementTypeName + "* __c" + ci + " = null;");
@@ -682,15 +677,14 @@ namespace Tl.Gen.Unity
             W(writer, "{");
             W(writer, "lastChunk = chunk;");
             W(writer, "lastValid = true;");
-            W(writer, "lastHasEn = lastChunk.Has(ref EnabledHandle);");
-            W(writer, "lastEn = lastHasEn ? lastChunk.GetEnableableBits(ref EnabledHandle) : default;");
+            W(writer, "lastEn = lastChunk.GetEnableableBits(ref EnabledHandle);");
             foreach (var ci in applyCols)
             {
                 var col = shape.Columns[ci];
-                W(writer, "__c" + ci + " = lastChunk.Has(ref " + col.Name + "Handle) ? (" + col.ElementTypeName + "*)lastChunk.GetRequiredComponentDataPtr" + (col.ReadOnly ? "RO" : "RW") + "(ref " + col.Name + "Handle) : null;");
+                W(writer, "__c" + ci + " = (" + col.ElementTypeName + "*)lastChunk.GetComponentDataPtr" + (col.ReadOnly ? "RO" : "RW") + "(ref " + col.Name + "Handle);");
             }
             W(writer, "}");
-            var checks2 = new List<string> { "lastHasEn && (((__row < 64 ? lastEn.ULong0 : lastEn.ULong1) >> (__row & 63)) & 1) != 0" };
+            var checks2 = new List<string> { "(((__row < 64 ? lastEn.ULong0 : lastEn.ULong1) >> (__row & 63)) & 1) != 0" };
             foreach (var ci in applyCols) checks2.Add("__c" + ci + " != null");
             W(writer, "if (" + string.Join(" && ", checks2) + ")");
             W(writer, "{");
@@ -837,16 +831,25 @@ namespace Tl.Gen.Unity
             W(writer, "var jobs = default(" + name + ");");
             if (pulseFast.Count > 0)
                 W(writer, "jobs._Storage = state.GetEntityStorageInfoLookup();");
-            W(writer, "var builder = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.Playback>();");
-            W(writer, "var any = new NativeList<ComponentType>(" + (kinds.Count + events.Count) + ", Allocator.Temp);");
-            foreach (var kind in kinds)
-                W(writer, "any.Add(ComponentType.ReadWrite<" + kind.Entry + ">());");
-            foreach (var evented in events)
-                W(writer, "any.Add(ComponentType.ReadWrite<global::Tl.Unity.TimelineEvent<" + evented.TypeName + ">>());");
-            W(writer, "builder.WithAny(ref any);");
-            W(writer, "jobs._query = builder.Build(ref state);");
-            W(writer, "any.Dispose();");
-            W(writer, "builder.Dispose();");
+            if (kinds.Count == 1 && kinds[0].Decl.Accepts == 1 && kinds[0].Decl.IdleParams is null && events.Count == 0 && !pulseFast.Contains(0))
+            {
+                W(writer, "var builder = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.Playback>().WithAllRW<" + kinds[0].Entry + ">().WithAllRW<" + kinds[0].Active + ">();");
+                W(writer, "jobs._query = builder.Build(ref state);");
+                W(writer, "builder.Dispose();");
+            }
+            else
+            {
+                W(writer, "var builder = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.Playback>();");
+                W(writer, "var any = new NativeList<ComponentType>(" + (kinds.Count + events.Count) + ", Allocator.Temp);");
+                foreach (var kind in kinds)
+                    W(writer, "any.Add(ComponentType.ReadWrite<" + kind.Entry + ">());");
+                foreach (var evented in events)
+                    W(writer, "any.Add(ComponentType.ReadWrite<global::Tl.Unity.TimelineEvent<" + evented.TypeName + ">>());");
+                W(writer, "builder.WithAny(ref any);");
+                W(writer, "jobs._query = builder.Build(ref state);");
+                W(writer, "any.Dispose();");
+                W(writer, "builder.Dispose();");
+            }
             foreach (var handle in handles)
                 W(writer, "jobs._" + handle.field + " = state." + handle.getter + "(" + (handle.readOnly ? "true" : "false") + ");");
             W(writer, "return jobs;");
@@ -871,7 +874,7 @@ namespace Tl.Gen.Unity
                     W(writer, "if (index.NeedsPulseValues(__id" + k + ")) { dependsOn.Complete(); var __kp" + k + " = default(" + name + "ChunkJob.KindPulses_" + k + "); index.PulseValues<" + kinds[k].Decl.ValueTypeName + ", " + name + "ChunkJob.KindPulses_" + k + ">(__id" + k + ", ref __kp" + k + "); }");
             W(writer, "var job = new " + name + "ChunkJob { View = view, Index = index, Forward = forward");
             for (var k = 0; k < kinds.Count; k++)
-                W(writer, ", KindId_" + k + " = __id" + k);
+                W(writer, ", KindSlot_" + k + " = __id" + k + " + 2");
             for (var k = 0; k < kinds.Count; k++)
                 if (fusedKinds.Contains(k))
                     W(writer, ", NoEnt_" + k + (kinds[k].Decl.Accepts == 0 ? " = __id" + k + " >= 0 && !index.HasForeign(__id" + k + ")" : " = false"));
@@ -1126,7 +1129,7 @@ namespace Tl.Gen.Unity
             W(writer, "else");
             W(writer, "{");
             if (lazyRow)
-                W(writer, "if (!__rowInit) { if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null; __pbReady = true; } var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; __clock = __clocks == null ? (ushort)0 : __clocks[__row]; __rowInit = true; }");
+                W(writer, "if (!__rowInit) { if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle); __pbReady = true; } var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; __clock = __clocks == null ? (ushort)0 : __clocks[__row]; __rowInit = true; }");
             W(writer, "var __pb = __run + __en->Slot;");
             W(writer, "var __tl = Index.Timelines + (__en->Timeline - 1);");
             W(writer, "ushort __tick = __en->Slot < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;");
@@ -1152,14 +1155,14 @@ namespace Tl.Gen.Unity
         static void EmitFused(StringBuilder writer, Shape shape, SystemAssignment assignment, int assignmentIndex, IReadOnlyList<UnityKindInfo> kinds, List<int> fused, string name)
         {
             var f0 = fused[0];
-            var bitParams = new StringBuilder(", bool __hasPl, global::Unity.Burst.Intrinsics.v128 __epl");
+            var bitParams = new StringBuilder(", global::Unity.Burst.Intrinsics.v128 __epl");
             foreach (var i in fused)
                 bitParams.Append(", global::Unity.Burst.Intrinsics.v128 __ema" + i + ", global::Unity.Burst.Intrinsics.v128 __eme" + i);
             W(writer, "bool " + name + "(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks" + bitParams + ColumnArgs(shape, true) + ")");
             W(writer, "{");
             foreach (var i in fused)
             {
-                W(writer, "var __kid" + i + " = KindId_" + i + ";");
+                W(writer, "var __kid" + i + " = KindSlot_" + i + " != 0 ? KindSlot_" + i + " - 2 : Index.KindOf(" + KindId(kinds[i].Key) + ");");
                 W(writer, "if (__kid" + i + " < 0) return false;");
                 W(writer, "var __kv" + i + " = Index.Values + __kid" + i + ";");
                 W(writer, "if (__kv" + i + "->Data == null || __kv" + i + "->Data != __kv" + f0 + "->Data) return false;");
@@ -1171,11 +1174,11 @@ namespace Tl.Gen.Unity
                 W(writer, "var __noEnt" + i + " = NoEnt_" + i + ";");
             }
             W(writer, "var __anySampled = Index.SampledCount == null || *Index.SampledCount != 0;");
-            W(writer, "var __hasClk = chunk.Has(ref ClockHandle);");
+            W(writer, "var __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle);");
             W(writer, "var __count = chunk.Count;");
             W(writer, "var __m0 = __count >= 64 ? ~0ul : (1ul << __count) - 1;");
             W(writer, "var __m1 = __count <= 64 ? 0ul : (__count >= 128 ? ~0ul : (1ul << (__count - 64)) - 1);");
-            var fastCond = new List<string> { "!__anySampled", "!__hasClk" };
+            var fastCond = new List<string> { "!__anySampled", "__clocks == null" };
             foreach (var i in fused)
             {
                 fastCond.Add("__noEnt" + i);
@@ -1244,8 +1247,7 @@ namespace Tl.Gen.Unity
             }
             W(writer, "return true;");
             W(writer, "}");
-            W(writer, "var __clocks = __hasClk ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;");
-            W(writer, "var __copies = (__hasPl && __anySampled) ? (global::Tl.Unity.TimelinePlaying*)chunk.GetRequiredComponentDataPtrRO(ref PlayingHandle) : null;");
+            W(writer, "var __copies = __anySampled ? (global::Tl.Unity.TimelinePlaying*)chunk.GetComponentDataPtrRO(ref PlayingHandle) : null;");
             foreach (var i in fused)
             {
                 var info = kinds[i];
@@ -1424,15 +1426,15 @@ namespace Tl.Gen.Unity
             }
             else
             {
-                W(writer, "var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;");
+                W(writer, "var __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle);");
             }
             W(writer, "if (!chunk.Has(ref " + info.Name + "EntryHandle)) return;");
-            W(writer, "var __kid = KindId_" + ordinal + ";");
+            W(writer, "var __kid = KindSlot_" + ordinal + " != 0 ? KindSlot_" + ordinal + " - 2 : Index.KindOf(" + KindId(info.Key) + ");");
             W(writer, "if (__kid < 0) return;");
             if (useValues)
                 W(writer, "var __kv = Index.Values + __kid;");
-            W(writer, "var __copies = chunk.Has(ref PlayingHandle) ? (global::Tl.Unity.TimelinePlaying*)chunk.GetRequiredComponentDataPtrRO(ref PlayingHandle) : null;");
-            if (!spanless) W(writer, "var __epl = chunk.Has(ref PlayingHandle) ? chunk.GetEnableableBits(ref PlayingHandle) : default;");
+            W(writer, "var __copies = (global::Tl.Unity.TimelinePlaying*)chunk.GetComponentDataPtrRO(ref PlayingHandle);");
+            if (!spanless) W(writer, "var __epl = chunk.GetEnableableBits(ref PlayingHandle);");
             W(writer, "var __acc = chunk.GetBufferAccessor(ref " + info.Name + "EntryHandle);");
             W(writer, "var __ema = chunk.GetEnableableBits(ref " + info.Name + "ActiveHandle);");
             W(writer, "var __eme = chunk.GetEnableableBits(ref " + info.Name + "EnabledHandle);");
@@ -1458,7 +1460,7 @@ namespace Tl.Gen.Unity
                 W(writer, "var __sampled = __smp != 0;");
                 W(writer, "if (__sampled)");
                 W(writer, "{");
-                W(writer, "if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null; __pbReady = true; }");
+                W(writer, "if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle); __pbReady = true; }");
                 W(writer, "var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; if (__cnt + __smp > __pbuf.Capacity) __smp = 0; __sampled = __smp != 0; __clock = __clocks == null ? (ushort)0 : __clocks[__row]; __rowInit = true;");
                 W(writer, "}");
                 W(writer, "var __sk = __sampled ? global::Tl.KindRules.Depth(__run + __cnt, __smp) : 1;");
@@ -1676,7 +1678,7 @@ namespace Tl.Gen.Unity
                 closes |= EventMethod(consumer, ConsumerMethodKind.OnClipEnd) != null;
             W(writer, "void Events(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks)");
             W(writer, "{");
-            W(writer, "var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;");
+            W(writer, "var __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle);");
             for (var e = 0; e < events.Count; e++)
             {
                 var type = events[e].TypeName;

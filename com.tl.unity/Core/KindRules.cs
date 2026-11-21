@@ -162,7 +162,7 @@ public static unsafe class KindRules
 
     public static bool TickEntity<TRows, TPulse>(in KindTables t, Playback* slots, int count, ref TRows rows, int row, int stepDir, ref TPulse pulse) where TRows : struct, IKindRows where TPulse : struct, IKindPulseSink
     {
-        if (t.SpanMeta == null) return TickEntitySlow(in t, slots, count, ref rows, row, stepDir);
+        if (t.SpanMeta == null || t.PulseBase == null || t.PulseBits == null || t.PulseMasks == null) return TickEntitySlow(in t, slots, count, ref rows, row, stepDir);
         var ep = t.EntryPulse;
         var fastMask = !pulse.Active || (ep != null && (ep[row >> 6] >> (row & 63) & 1) != 0) ? 0ul : t.FastPulseMask;
         var hitFast = 0ul;
@@ -202,6 +202,7 @@ public static unsafe class KindRules
         slow:
             live |= TickSlotCore(in t, slots, i, ref rows, row, s, stepDir, ref fastMask, ref hitFast, ref pulse);
         }
+        rows.Sampled(row, 0);
         return live;
     }
 
@@ -237,7 +238,7 @@ public static unsafe class KindRules
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    internal static bool TickRatedFrom<TRows>(in KindTables t, Playback* slots, int count, ref TRows rows, int row, int from, int stepDir, bool live) where TRows : struct, IKindRows
+    static bool TickRatedFrom<TRows>(in KindTables t, Playback* slots, int count, ref TRows rows, int row, int from, int stepDir, bool live) where TRows : struct, IKindRows
     {
         var samples = 0;
         for (var i = from; i < count; i++)
@@ -331,7 +332,7 @@ public static unsafe class KindRules
         {
             case PlaybackMotion.Stepped:
             case PlaybackMotion.Wrapped:
-                if (t.PulseBase != null) PulseAt(in t, ref rows, row, i, before.Timeline, s->Tick, dir, fastMask, ref hitFast, ref pulse);
+                if (t.PulseBase != null && t.PulseBits != null && t.PulseMasks != null) PulseAt(in t, ref rows, row, i, before.Timeline, s->Tick, dir, fastMask, ref hitFast, ref pulse);
                 else Events(in t, ref rows, row, i, before.Timeline, s->Tick, dir);
                 return true;
             case PlaybackMotion.Handed:
@@ -441,7 +442,7 @@ public static unsafe class KindRules
         }
     }
 
-    internal static void ApplyEventsFiltered<TRows>(in KindTables t, ref TRows rows, int row, int i, ushort id, int tick, int dir, ulong kindMask = ~0ul) where TRows : struct, IKindRows
+    static void ApplyEventsFiltered<TRows>(in KindTables t, ref TRows rows, int row, int i, ushort id, int tick, int dir, ulong kindMask = ~0ul) where TRows : struct, IKindRows
     {
         var tk = t.Sec.Timelines + (id - 1);
         var events = t.Sec.Events(tk);

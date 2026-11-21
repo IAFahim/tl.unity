@@ -19,25 +19,26 @@ public ComponentTypeHandle<Vitals_HealthData> HealthHandle;
 public BufferTypeHandle<global::KindGame.DamageEntry> DamageEntryHandle;
 public ComponentTypeHandle<global::KindGame.DamageActive> DamageActiveHandle;
 [ReadOnly] public ComponentTypeHandle<global::KindGame.DamageEnabled> DamageEnabledHandle;
-public int KindId_0;
+public int KindSlot_0;
 public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in global::Unity.Burst.Intrinsics.v128 chunkEnabledMask)
 {
 var __count = chunk.Count;
 var __l0 = false;
 var __a0 = default(global::Unity.Burst.Intrinsics.v128);
 var __e0 = default(global::Unity.Burst.Intrinsics.v128);
-if (KindId_0 >= 0 && Index.NeedsBufferScan(KindId_0) && chunk.Has(ref DamageEntryHandle))
+var __kid0 = KindSlot_0 != 0 ? KindSlot_0 - 2 : Index.KindOf(804387256);
+if (__kid0 >= 0 && Index.NeedsBufferScan(__kid0) && chunk.Has(ref DamageEntryHandle))
 {
 __a0 = chunk.GetEnableableBits(ref DamageActiveHandle);
 __e0 = chunk.GetEnableableBits(ref DamageEnabledHandle);
 var __m0 = __count >= 64 ? ~0ul : (1ul << __count) - 1;
 var __m1 = __count <= 64 ? 0ul : (__count >= 128 ? ~0ul : (1ul << (__count - 64)) - 1);
-if (((__a0.ULong0 & ~__e0.ULong0 & __m0) | (__a0.ULong1 & ~__e0.ULong1 & __m1)) != 0) global::System.Threading.Interlocked.Increment(ref Index.HeldSeen[KindId_0]);
+if (((__a0.ULong0 & ~__e0.ULong0 & __m0) | (__a0.ULong1 & ~__e0.ULong1 & __m1)) != 0) global::System.Threading.Interlocked.Increment(ref Index.HeldSeen[__kid0]);
 __l0 = ((__a0.ULong0 & __e0.ULong0 & __m0) | (__a0.ULong1 & __e0.ULong1 & __m1)) != 0;
 }
 if (!__l0) return;
-var __c0 = (__l0) && chunk.Has(ref HealthHandle) ? (global::KindGame.Health*)chunk.GetRequiredComponentDataPtrRW(ref HealthHandle) : null;
-if (__l0 && (__c0 == null)) global::System.Threading.Interlocked.Increment(ref Index.HeldSeen[KindId_0]);
+var __c0 = (__l0) ? (global::KindGame.Health*)chunk.GetComponentDataPtrRW(ref HealthHandle) : null;
+if (__l0 && __kid0 >= 0 && (__c0 == null)) global::System.Threading.Interlocked.Increment(ref Index.HeldSeen[__kid0]);
 if (__l0 && __c0 != null) Kind_0(chunk, __c0);
 }
 void Kind_0(in ArchetypeChunk chunk, global::KindGame.Health* __c0)
@@ -46,9 +47,9 @@ var __pbReady = false;
 var __playbacks = default(BufferAccessor<global::Tl.Unity.Playback>);
 ushort* __clocks = null;
 if (!chunk.Has(ref DamageEntryHandle)) return;
-var __kid = KindId_0;
+var __kid = KindSlot_0 != 0 ? KindSlot_0 - 2 : Index.KindOf(804387256);
 if (__kid < 0) return;
-var __copies = chunk.Has(ref PlayingHandle) ? (global::Tl.Unity.TimelinePlaying*)chunk.GetRequiredComponentDataPtrRO(ref PlayingHandle) : null;
+var __copies = (global::Tl.Unity.TimelinePlaying*)chunk.GetComponentDataPtrRO(ref PlayingHandle);
 var __acc = chunk.GetBufferAccessor(ref DamageEntryHandle);
 var __ema = chunk.GetEnableableBits(ref DamageActiveHandle);
 var __eme = chunk.GetEnableableBits(ref DamageEnabledHandle);
@@ -72,7 +73,7 @@ var __smp = __copies == null ? 0 : (int)__copies[__row].Copies;
 var __sampled = __smp != 0;
 if (__sampled)
 {
-if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null; __pbReady = true; }
+if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle); __pbReady = true; }
 var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; if (__cnt + __smp > __pbuf.Capacity) __smp = 0; __sampled = __smp != 0; __clock = __clocks == null ? (ushort)0 : __clocks[__row]; __rowInit = true;
 }
 var __sk = __sampled ? global::Tl.KindRules.Depth(__run + __cnt, __smp) : 1;
@@ -95,7 +96,7 @@ __en->Flags &= ~global::Tl.KindEntryFlags.Ready;
 }
 else
 {
-if (!__rowInit) { if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null; __pbReady = true; } var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; __clock = __clocks == null ? (ushort)0 : __clocks[__row]; __rowInit = true; }
+if (!__rowInit) { if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle); __pbReady = true; } var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; __clock = __clocks == null ? (ushort)0 : __clocks[__row]; __rowInit = true; }
 var __pb = __run + __en->Slot;
 var __tl = Index.Timelines + (__en->Timeline - 1);
 ushort __tick = __en->Slot < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;
@@ -192,7 +193,6 @@ var starts = pv->Start;
 var vals = (int*)pv->Data;
 var lastChunk = default(ArchetypeChunk);
 var lastValid = false;
-var lastHasEn = false;
 var lastEn = default(global::Unity.Burst.Intrinsics.v128);
 global::KindGame.Health* __c0 = null;
 var kept = 0;
@@ -208,11 +208,10 @@ if (!lastValid || !chunk.Equals(lastChunk))
 {
 lastChunk = chunk;
 lastValid = true;
-lastHasEn = lastChunk.Has(ref EnabledHandle);
-lastEn = lastHasEn ? lastChunk.GetEnableableBits(ref EnabledHandle) : default;
-__c0 = lastChunk.Has(ref HealthHandle) ? (global::KindGame.Health*)lastChunk.GetRequiredComponentDataPtrRW(ref HealthHandle) : null;
+lastEn = lastChunk.GetEnableableBits(ref EnabledHandle);
+__c0 = (global::KindGame.Health*)lastChunk.GetComponentDataPtrRW(ref HealthHandle);
 }
-var enBit = lastHasEn && (((__row < 64 ? lastEn.ULong0 : lastEn.ULong1) >> (__row & 63)) & 1) != 0;
+var enBit = (((__row < 64 ? lastEn.ULong0 : lastEn.ULong1) >> (__row & 63)) & 1) != 0;
 if (!enBit)
 {
 for (var j = i; j < end; j++) items[kept++] = items[j];
@@ -270,7 +269,6 @@ var stride = sizeof(global::KindGame.DamageEntry);
 var vals = (int*)pv->Data;
 var lastChunk = default(ArchetypeChunk);
 var lastValid = false;
-var lastHasEn = false;
 var lastEn = default(global::Unity.Burst.Intrinsics.v128);
 global::KindGame.Health* __c0 = null;
 for (var th = 0; th < Index.ThreadCount; th++)
@@ -293,11 +291,10 @@ if (!lastValid || !chunk.Equals(lastChunk))
 {
 lastChunk = chunk;
 lastValid = true;
-lastHasEn = lastChunk.Has(ref EnabledHandle);
-lastEn = lastHasEn ? lastChunk.GetEnableableBits(ref EnabledHandle) : default;
-__c0 = lastChunk.Has(ref HealthHandle) ? (global::KindGame.Health*)lastChunk.GetRequiredComponentDataPtrRW(ref HealthHandle) : null;
+lastEn = lastChunk.GetEnableableBits(ref EnabledHandle);
+__c0 = (global::KindGame.Health*)lastChunk.GetComponentDataPtrRW(ref HealthHandle);
 }
-if (lastHasEn && (((__row < 64 ? lastEn.ULong0 : lastEn.ULong1) >> (__row & 63)) & 1) != 0 && __c0 != null)
+if ((((__row < 64 ? lastEn.ULong0 : lastEn.ULong1) >> (__row & 63)) & 1) != 0 && __c0 != null)
 {
 int __total = default;
 var __has = false;
@@ -444,7 +441,7 @@ _Storage.Update(ref state);
 var __id0 = index.KindOf(804387256);
 if (index.NeedsPulseValues(__id0)) { dependsOn.Complete(); var __kp0 = default(VitalsChunkJob.KindPulses_0); index.PulseValues<int, VitalsChunkJob.KindPulses_0>(__id0, ref __kp0); }
 var job = new VitalsChunkJob { View = view, Index = index, Forward = forward
-, KindId_0 = __id0
+, KindSlot_0 = __id0 + 2
 , PlaybackHandle = _PlaybackHandle
 , ClockHandle = _ClockHandle
 , PlayingHandle = _PlayingHandle

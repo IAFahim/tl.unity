@@ -533,6 +533,7 @@ public sealed unsafe class KindStore : IDisposable
         public byte* Samples;
         public int EntityCount;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Sampled(int entity, int samples)
         {
             if (samples != 0)

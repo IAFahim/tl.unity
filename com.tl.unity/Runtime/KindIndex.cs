@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Entities.LowLevel.Unsafe;
 
 namespace Tl.Unity
 {
@@ -54,6 +55,14 @@ namespace Tl.Unity
         {
             while (Count > 0 && Items[Count - 1].Entity == entity) Count--;
         }
+    }
+
+    [StructLayout(LayoutKind.Sequential, Size = 64)]
+    public struct KindWorkerCache
+    {
+        public EntityArchetype Archetype;
+        public ulong Reach;
+        public byte Flags;
     }
 
     public unsafe struct KindIndex
@@ -106,6 +115,9 @@ namespace Tl.Unity
         public int* TickOrderVersion;
         public int* SampledCount;
         public int* PrevSampledCount;
+        public KindWorkerCache* WorkerCache;
+        public UnsafeUntypedBufferAccessor* WorkerBuffers;
+        public EnabledMask* WorkerMasks;
 
         public bool IsCreated => Timelines != null || KindCount == 0 && Closure != null;
 
@@ -446,6 +458,11 @@ namespace Tl.Unity
                 if (laneCount > int.MaxValue || laneCount * UnsafeUtility.SizeOf<KindPulseLane>() > int.MaxValue)
                     throw new InvalidOperationException("Tl: pulse lane table would exceed 2 GB.");
                 index.PulseLanes = Zeroed<KindPulseLane>(Math.Max(1, (int)laneCount));
+                index.WorkerCache = Zeroed<KindWorkerCache>(Math.Max(1, index.ThreadCount));
+                if (laneCount > 0 && (laneCount * UnsafeUtility.SizeOf<UnsafeUntypedBufferAccessor>() > int.MaxValue || laneCount * UnsafeUtility.SizeOf<EnabledMask>() > int.MaxValue))
+                    throw new InvalidOperationException("Tl: worker scratch table would exceed 2 GB.");
+                index.WorkerBuffers = Zeroed<UnsafeUntypedBufferAccessor>(Math.Max(1, (int)laneCount));
+                index.WorkerMasks = Zeroed<EnabledMask>(Math.Max(1, (int)laneCount));
                 index.TickFastPulses = Zeroed<ulong>(1);
                 index.HeldBufferKinds = Zeroed<byte>(Math.Max(1, index.KindCount));
                 for (var k = 0; k < index.KindCount; k++) index.HeldBufferKinds[k] = 1;
@@ -713,6 +730,9 @@ namespace Tl.Unity
                 for (var i = 0; i < total; i++) Free(PulseLanes[i].Items);
                 Free(PulseLanes);
             }
+            Free(WorkerCache);
+            Free(WorkerBuffers);
+            Free(WorkerMasks);
             Free(TickFastPulses);
             Free(HeldBufferKinds);
             Free(SlowCount);
