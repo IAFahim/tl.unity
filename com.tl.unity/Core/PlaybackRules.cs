@@ -168,24 +168,18 @@ public static unsafe class PlaybackRules
 
     public static bool Stop<TSlots>(ref TSlots slots, ushort timeline) where TSlots : struct, IPlaybackSlots
     {
-        for (var i = 0; i < slots.Length; i++)
-            if (slots[i].Timeline == timeline && IsLive(in slots[i]))
-            {
-                slots.Close(i);
-                return true;
-            }
-        return false;
+        var i = Find(ref slots, timeline);
+        if (i < 0) return false;
+        slots.Close(i);
+        return true;
     }
 
     public static bool StopChannel<TSlots>(ref TSlots slots, byte channel) where TSlots : struct, IPlaybackSlots
     {
-        for (var i = 0; i < slots.Length; i++)
-            if (IsLive(in slots[i]) && slots[i].Channel == channel)
-            {
-                slots.Close(i);
-                return true;
-            }
-        return false;
+        var i = FindChannel(ref slots, channel);
+        if (i < 0) return false;
+        slots.Close(i);
+        return true;
     }
 
     public static void StopAll<TSlots>(ref TSlots slots) where TSlots : struct, IPlaybackSlots
@@ -288,16 +282,7 @@ public static unsafe class PlaybackRules
     }
 
     public static bool Pause<TSlots>(ref TSlots slots, ushort timeline, bool pause) where TSlots : struct, IPlaybackSlots
-    {
-        for (var i = 0; i < slots.Length; i++)
-        {
-            ref var slot = ref slots[i];
-            if (slot.Timeline != timeline || !IsLive(in slot)) continue;
-            slot.Flags = pause ? slot.Flags | PlaybackFlags.Paused : slot.Flags & ~PlaybackFlags.Paused;
-            return true;
-        }
-        return false;
-    }
+        => PauseAt(ref slots, Find(ref slots, timeline), pause);
 
     internal static PlaybackMotion Move(ref Playback slot, LibraryTimeline* timelines, int timelineCount, bool forward)
     {
@@ -414,13 +399,8 @@ public static unsafe class PlaybackRules
 
     public static bool Find<TSlots>(ref TSlots slots, byte channel, out Playback playback) where TSlots : struct, IPlaybackSlots
     {
-        if (channel != 0)
-            for (var i = 0; i < slots.Length; i++)
-                if (IsLive(in slots[i]) && slots[i].Channel == channel)
-                {
-                    playback = slots[i];
-                    return true;
-                }
+        var i = FindChannel(ref slots, channel);
+        if (i >= 0) { playback = slots[i]; return true; }
         playback = default;
         return false;
     }

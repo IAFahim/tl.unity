@@ -65,6 +65,12 @@ public sealed unsafe class TlWorkers : IDisposable
         if (chunks == 0) return;
         _next = 0; _d = 0; _error = null; _body = body; _state = state; _ends = ends; _chunks = chunks;
         if (_w > 1) _gate.Release(_w - 1);
+        ClaimChunks(body, state, ends, chunks);
+        if (_w > 1) _done.Wait();
+        if (_error != null) ExceptionDispatchInfo.Capture(_error).Throw();
+    }
+    void ClaimChunks(delegate*<void*, int, int, int, void> body, void* state, int* ends, int chunks)
+    {
         while (true)
         {
             var c = Interlocked.Increment(ref _next) - 1;
@@ -72,8 +78,6 @@ public sealed unsafe class TlWorkers : IDisposable
             try { body(state, c == 0 ? 0 : ends[c - 1], ends[c], c); }
             catch (Exception ex) { Interlocked.CompareExchange(ref _error, ex, null); }
         }
-        if (_w > 1) _done.Wait();
-        if (_error != null) ExceptionDispatchInfo.Capture(_error).Throw();
     }
     void WorkerLoop()
     {
@@ -81,17 +85,7 @@ public sealed unsafe class TlWorkers : IDisposable
         {
             try { _gate.Wait(); } catch (ObjectDisposedException) { return; }
             if (_disposed) return;
-            var body = _body;
-            var state = _state;
-            var ends = _ends;
-            var n = _chunks;
-            while (true)
-            {
-                var c = Interlocked.Increment(ref _next) - 1;
-                if (c >= n) break;
-                try { body(state, c == 0 ? 0 : ends[c - 1], ends[c], c); }
-                catch (Exception ex) { Interlocked.CompareExchange(ref _error, ex, null); }
-            }
+            ClaimChunks(_body, _state, _ends, _chunks);
             if (Interlocked.Increment(ref _d) == _w - 1) _done.Release();
         }
     }

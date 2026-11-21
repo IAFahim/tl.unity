@@ -44,7 +44,7 @@ public unsafe struct KindTable
 
     internal static KindTable* Create(int kind, ReadOnlySpan<int> entities, int inlineCapacity, int entryBytes, bool grouped = false)
     {
-        var t = (KindTable*)Zeroed((nuint)sizeof(KindTable));
+        var t = (KindTable*)KindStore.Zeroed((nuint)sizeof(KindTable));
         t->Kind = kind;
         t->Grouped = grouped;
         t->ValueAt = grouped ? 12 : 8;
@@ -52,14 +52,14 @@ public unsafe struct KindTable
         t->Inline = inlineCapacity;
         t->Stride = entryBytes;
         t->Words = (t->Rows + 63) >> 6;
-        t->Entity = (int*)Zeroed((nuint)t->Rows * 4);
+        t->Entity = (int*)KindStore.Zeroed((nuint)t->Rows * 4);
         for (var r = 0; r < t->Rows; r++) t->Entity[r] = entities[r];
-        t->_inline = (byte*)Zeroed((nuint)t->Rows * (nuint)inlineCapacity * (nuint)entryBytes);
-        t->Length = (ushort*)Zeroed((nuint)t->Rows * 2);
-        t->Spilled = (ulong*)Zeroed((nuint)t->Words * 8);
-        if (inlineCapacity == 0) t->_heap = (byte**)Zeroed((nuint)t->Rows * (nuint)sizeof(nint));
-        t->Active = (ulong*)Zeroed((nuint)t->Words * 8);
-        t->Enabled = (ulong*)Zeroed((nuint)t->Words * 8);
+        t->_inline = (byte*)KindStore.Zeroed((nuint)t->Rows * (nuint)inlineCapacity * (nuint)entryBytes);
+        t->Length = (ushort*)KindStore.Zeroed((nuint)t->Rows * 2);
+        t->Spilled = (ulong*)KindStore.Zeroed((nuint)t->Words * 8);
+        if (inlineCapacity == 0) t->_heap = (byte**)KindStore.Zeroed((nuint)t->Rows * (nuint)sizeof(nint));
+        t->Active = (ulong*)KindStore.Zeroed((nuint)t->Words * 8);
+        t->Enabled = (ulong*)KindStore.Zeroed((nuint)t->Words * 8);
         for (var w = 0; w < t->Words; w++) t->Enabled[w] = ~0ul;
         if ((t->Rows & 63) != 0) t->Enabled[t->Words - 1] = (1ul << (t->Rows & 63)) - 1;
         return t;
@@ -84,13 +84,6 @@ public unsafe struct KindTable
         NativeMemory.AlignedFree(t->Active);
         NativeMemory.AlignedFree(t->Enabled);
         NativeMemory.AlignedFree(t);
-    }
-
-    static void* Zeroed(nuint bytes)
-    {
-        var p = NativeMemory.AlignedAlloc(bytes == 0 ? 1 : bytes, 64);
-        NativeMemory.Clear(p, bytes);
-        return p;
     }
 
     public long StorageBytesPerRow => 6 + (long)Inline * Stride;
@@ -131,8 +124,7 @@ public unsafe struct KindTable
     {
         var capacity = Math.Min(Math.Max(4, Capacity(row) * 2), ushort.MaxValue);
         if (capacity == Capacity(row)) throw new InvalidOperationException($"kind {Kind} row {row} holds more than 65,535 entries.");
-        var raw = (byte*)NativeMemory.AlignedAlloc(8u + (nuint)capacity * (nuint)Stride, 64);
-        NativeMemory.Clear(raw, 8u + (nuint)capacity * (nuint)Stride);
+        var raw = (byte*)KindStore.Zeroed(8u + (nuint)capacity * (nuint)Stride);
         *(int*)raw = capacity;
         var length = Length[row];
         if (length > 0)

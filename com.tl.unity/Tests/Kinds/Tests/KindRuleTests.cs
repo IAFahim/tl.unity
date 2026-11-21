@@ -410,5 +410,104 @@ namespace KindGame
             Assert.AreEqual(2, _game.Slots(0)[0].Tick);
             Assert.AreEqual(21f, _game.Motion(0).X);
         }
+
+        [Test]
+        public void DirectPulseToSpansOnlyKindIsDropped()
+        {
+            _game.Step();
+            var before = _game.Motion(0);
+            var sender = _game.Tick.BeginPulses(1);
+            var writer = sender.Writer;
+            writer.Begin(0);
+            new KindPulses<Speed>(writer, LocomotionKind.Id).To(_game.Rows[0], new Speed { Value = 9f, Priority = 1 });
+            writer.End();
+            _game.Step();
+            Assert.AreEqual(1, _game.Tick.DroppedPulses);
+            Assert.AreEqual(before.X, _game.Motion(0).X);
+        }
+
+        [Test]
+        public void FastPulsesSurviveStructuralChangeBetweenTickAndVitals()
+        {
+            _game.Step();
+            _game.Step();
+            _game.Start(0, KindWorld.Stomp);
+            _game.Start(1, KindWorld.Stomp);
+            _game.Start(2, KindWorld.Stomp);
+            _game.Step();
+            _game.Step();
+            _game.Entities.SetComponentEnabled<DamageEnabled>(_game.Rows[2], false);
+            _game.TickHandle.Update(_game.World.Unmanaged);
+            _game.Entities.AddComponentData(_game.Rows[0], new Aim { Target = _game.Rows[1] });
+            _game.Entities.DestroyEntity(_game.Rows[3]);
+            _game.MovementHandle.Update(_game.World.Unmanaged);
+            _game.VitalsHandle.Update(_game.World.Unmanaged);
+            _game.Entities.CompleteAllTrackedJobs();
+            Assert.AreEqual(975, _game.Health(0));
+            Assert.AreEqual(975, _game.Health(1));
+            Assert.AreEqual(1000, _game.Health(2));
+            _game.Entities.SetComponentEnabled<DamageEnabled>(_game.Rows[2], true);
+            _game.Step();
+            Assert.AreEqual(975, _game.Health(0));
+            Assert.AreEqual(975, _game.Health(1));
+            Assert.AreEqual(975, _game.Health(2));
+        }
+
+        [Test]
+        public void BackToBackTicksWithoutVitalsPreserveFastPulses()
+        {
+            _game.Step();
+            _game.Step();
+            _game.Start(0, KindWorld.Stomp);
+            for (var i = 0; i < 6; i++)
+                _game.TickHandle.Update(_game.World.Unmanaged);
+            _game.VitalsHandle.Update(_game.World.Unmanaged);
+            _game.Entities.CompleteAllTrackedJobs();
+            Assert.AreEqual(965, _game.Health(0));
+        }
+
+        [Test]
+        public void StopAndSteppingSlotOnSameEntityStayConsistent()
+        {
+            _game.Step();
+            _game.Step();
+            _game.Start(0, KindWorld.Jump);
+            _game.Start(0, KindWorld.Stomp);
+            _game.Start(1, KindWorld.Run);
+            _game.Start(1, KindWorld.Stomp);
+            _game.Step();
+            _game.Step();
+            _game.Stop(0, KindWorld.Jump);
+            _game.Start(1, KindWorld.Jump);
+            _game.Step();
+            Assert.AreEqual(975, _game.Health(0));
+            Assert.AreEqual(12f, _game.Motion(0).Y);
+            Assert.AreEqual(-1, _game.Stamina(0));
+            Assert.AreEqual(975, _game.Health(1));
+            Assert.AreEqual(5f, _game.Motion(1).X);
+            Assert.AreEqual(6f, _game.Motion(1).Y);
+        }
+
+        [Test]
+        public void DisabledHeldPulseSurvivesLibraryRepublish()
+        {
+            _game.Step();
+            _game.Step();
+            _game.Entities.SetComponentEnabled<DamageEnabled>(_game.Rows[0], false);
+            _game.Damage(0, 17);
+            _game.Step();
+            _game.Entities.CompleteAllTrackedJobs();
+            using var next = TlLibrary.FromBytes(KindLibraryBytes.Bytes());
+            using var query = _game.Entities.CreateEntityQuery(typeof(TimelineLibrary));
+            var published = query.GetSingleton<TimelineLibrary>();
+            var component = next.Component;
+            component.Generation = published.Generation + 1;
+            query.SetSingleton(component);
+            _game.Step();
+            Assert.AreEqual(1000, _game.Health(0));
+            _game.Entities.SetComponentEnabled<DamageEnabled>(_game.Rows[0], true);
+            _game.Step();
+            Assert.AreEqual(983, _game.Health(0));
+        }
     }
 }

@@ -45,21 +45,106 @@ namespace Tl.Gen.Unity
             return false;
         }
 
-        static Func<ITypeSymbol, bool> StateRule(Compilation compilation)
+        static void CollectStatesAndInline(CSharpCompilation compilation, List<INamedTypeSymbol> states, Dictionary<string, int> inline)
         {
-            var component = compilation.GetTypeByMetadataName("Unity.Entities.IComponentData");
-            var state = compilation.GetTypeByMetadataName("Tl.TlStateAttribute");
-            return type =>
+            var tlState = compilation.GetTypeByMetadataName("Tl.TlStateAttribute");
+            foreach (var tree in compilation.SyntaxTrees)
             {
-                if (NewStyle.IsStateType(type, state))
-                    return true;
-                if (component is null || type.TypeKind != TypeKind.Struct)
+                var model = compilation.GetSemanticModel(tree);
+                foreach (var node in tree.GetRoot().DescendantNodes().OfType<TypeDeclarationSyntax>())
+                {
+                    if (model.GetDeclaredSymbol(node) is not INamedTypeSymbol type)
+                        continue;
+                    if (tlState is not null && type.TypeKind == TypeKind.Struct && !states.Contains(type, SymbolEqualityComparer.Default))
+                        foreach (var a in type.GetAttributes())
+                            if (SymbolEqualityComparer.Default.Equals(a.AttributeClass, tlState)) { states.Add(type); break; }
+                    foreach (var a in type.GetAttributes())
+                        if (NewStyle.IsKindAttribute(a.AttributeClass))
+                            foreach (var pair in a.NamedArguments)
+                                if (pair.Key == "Inline" && pair.Value.Value is int value && value > 0)
+                                    inline[type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)] = value;
+                }
+            }
+        }
+
+        static ImmutableArray<SystemTypeModel> FilterUnityStates(ImmutableArray<SystemTypeModel> models, CSharpCompilation compilation)
+        {
+            var tlState = compilation.GetTypeByMetadataName("Tl.TlStateAttribute");
+            var component = compilation.GetTypeByMetadataName("Unity.Entities.IComponentData");
+            var contextTypes = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var model in models)
+                if (model.Kind == SystemModelKind.System && model.System is not null)
+                    foreach (var field in model.System.Fields)
+                        if (field.Kind == SystemFieldKind.Context)
+                        {
+                            contextTypes.Add(field.ElementTypeName);
+                            contextTypes.Add(field.TypeName);
+                        }
+            bool IsUnityStateName(string typeName)
+            {
+                if (contextTypes.Contains(typeName))
                     return false;
-                foreach (var face in type.AllInterfaces)
-                    if (SymbolEqualityComparer.Default.Equals(face, component))
-                        return true;
+                var sym = UnityLayout.Resolve(compilation, typeName);
+                if (sym is null || sym.TypeKind != TypeKind.Struct)
+                    return false;
+                if (tlState is not null)
+                    foreach (var a in sym.GetAttributes())
+                        if (SymbolEqualityComparer.Default.Equals(a.AttributeClass, tlState))
+                            return true;
+                if (component is not null)
+                    foreach (var face in sym.AllInterfaces)
+                        if (SymbolEqualityComparer.Default.Equals(face, component))
+                            return true;
                 return false;
-            };
+            }
+            var result = ImmutableArray.CreateBuilder<SystemTypeModel>(models.Length);
+            foreach (var model in models)
+            {
+                if (model.Kind == SystemModelKind.Kind && model.KindDecl is not null)
+                {
+                    var applyPlain = new List<bool>(model.KindDecl.ApplyParams.Count);
+                    for (var i = 0; i < model.KindDecl.ApplyParams.Count; i++)
+                    {
+                        var isPlain = model.ApplyPlain is not null && i < model.ApplyPlain.Count && model.ApplyPlain[i];
+                        applyPlain.Add(isPlain && IsUnityStateName(model.KindDecl.ApplyParams[i].TypeName));
+                    }
+                    List<bool>? idlePlain = null;
+                    if (model.KindDecl.IdleParams is not null)
+                    {
+                        idlePlain = new List<bool>(model.KindDecl.IdleParams.Count);
+                        for (var i = 0; i < model.KindDecl.IdleParams.Count; i++)
+                        {
+                            var isPlain = model.IdlePlain is not null && i < model.IdlePlain.Count && model.IdlePlain[i];
+                            idlePlain.Add(isPlain && IsUnityStateName(model.KindDecl.IdleParams[i].TypeName));
+                        }
+                    }
+                    result.Add(model with { ApplyPlain = applyPlain, IdlePlain = idlePlain });
+                }
+                else if (model.Kind == SystemModelKind.Feeder)
+                {
+                    IReadOnlyList<string>? filteredFacts = model.Facts;
+                    if (model.Facts is { Count: > 1 })
+                    {
+                        var nextFacts = new List<string>(model.Facts.Count) { model.Facts[0] };
+                        for (var i = 1; i < model.Facts.Count; i++)
+                        {
+                            var parts = model.Facts[i].Split('\0');
+                            if (parts.Length == 3 && parts[1] == "1" && !IsUnityStateName(parts[0]))
+                                nextFacts.Add(parts[0] + "\00\0" + parts[2]);
+                            else
+                                nextFacts.Add(model.Facts[i]);
+                        }
+                        filteredFacts = nextFacts;
+                    }
+                    var filteredDerived = model.DerivedColumn is not null && IsUnityStateName(model.DerivedColumn) ? model.DerivedColumn : null;
+                    result.Add(model with { Facts = filteredFacts, DerivedColumn = filteredDerived });
+                }
+                else
+                {
+                    result.Add(model);
+                }
+            }
+            return result.ToImmutable();
         }
 
         static void Generate(SourceProductionContext context, ImmutableArray<UnitySystemModel?> found, Compilation compilation)
@@ -69,25 +154,36 @@ namespace Tl.Gen.Unity
             var id = Sanitize(compilation.AssemblyName ?? "Game");
             var key = NewStyle.FeedKey(compilation.AssemblyName ?? "");
             UnityMirrorEmitter.Emit(context, csharp);
-            var analysis = NewStyle.Prepare(csharp, id, StateRule(csharp));
-            var states = UnityStateEmitter.Emit(context, analysis.States, csharp);
+            var rawStates = new List<INamedTypeSymbol>();
+            var inline = new Dictionary<string, int>(StringComparer.Ordinal);
+            CollectStatesAndInline(csharp, rawStates, inline);
+            var states = UnityStateEmitter.Emit(context, rawStates, csharp);
             var models = new List<UnitySystemModel?>(found);
+            var collected = SystemReader.Order(SystemReader.CollectModels(csharp), csharp, default);
+            var read = SystemReader.AssignModels(FilterUnityStates(collected, csharp), id);
+            var diagnostics = new List<DeclarationDiagnostic>(read.Diagnostics);
+            Connections.Warn(csharp, diagnostics);
             UnitySystemModel? auto = null;
-            if (analysis.HasAuto)
+            if (read.AutoSource.Length > 0)
             {
-                var columns = new List<UnityColumn>();
-                foreach (var column in analysis.AutoColumns)
-                    columns.Add(new UnityColumn(column.Name, column.TypeName, !column.Writable, true));
-                var autoEvents = new List<UnityContext>();
-                foreach (var evented in analysis.AutoEvents)
-                    autoEvents.Add(new UnityContext(evented.Name, evented.TypeName));
-                auto = new UnitySystemModel(AutoNamespace, analysis.AutoName, columns, new List<UnityContext>(), autoEvents, new List<UnityDiagnostic>(), false);
-                models.Add(auto);
+                var autoName = NewStyle.AutoNameOf(id);
+                SystemDecl? autoDecl = null;
+                foreach (var s in read.Systems)
+                    if (s.TypeName == AutoNamespace + "." + autoName) { autoDecl = s; break; }
+                if (autoDecl is not null)
+                {
+                    var columns = new List<UnityColumn>();
+                    var autoEvents = new List<UnityContext>();
+                    foreach (var f in autoDecl.Fields)
+                        if (f.Kind == SystemFieldKind.Events) autoEvents.Add(new UnityContext(f.Name, f.ElementTypeName));
+                        else if (f.Kind is SystemFieldKind.Column or SystemFieldKind.ColumnReadOnly) columns.Add(new UnityColumn(f.Name, f.ElementTypeName, f.Kind == SystemFieldKind.ColumnReadOnly, true));
+                    auto = new UnitySystemModel(AutoNamespace, autoName, columns, new List<UnityContext>(), autoEvents, new List<UnityDiagnostic>(), false);
+                    models.Add(auto);
+                }
             }
-            var read = SystemReader.Read(analysis.Compilation, analysis.HasAuto ? AutoSystem(analysis) : null, analysis.Members);
-            var assignments = read.Item2;
+            var assignments = read.Assignments;
             var failed = false;
-            foreach (var diagnostic in read.Item3)
+            foreach (var diagnostic in diagnostics)
             {
                 if (diagnostic.Code == "TLGEN107")
                     continue;
@@ -117,7 +213,7 @@ namespace Tl.Gen.Unity
                         derived.Add(kind);
             if (derived.Count != 0)
                 context.AddSource("TlDerivedKinds.g.cs", SourceText.From(Tl.Gen.CSharp.DerivedKindsEmitter.Emit(derived), System.Text.Encoding.UTF8));
-            var kinds = UnityKindPlan.Plan(compilation, assignments, models, analysis.Inline, context);
+            var kinds = UnityKindPlan.Plan(compilation, assignments, models, inline, context);
             var events = new SortedSet<string>(StringComparer.Ordinal);
             foreach (var model in models)
             {
@@ -185,17 +281,6 @@ namespace Tl.Gen.Unity
                     context.AddSource(UnityFeedJobEmitter.FileName, SourceText.From(UnityFeedJobEmitter.Emit(model, assignments[index], index, fed, key), System.Text.Encoding.UTF8));
                 }
             }
-        }
-
-        static SystemDecl AutoSystem(NewStyleAnalysis analysis)
-        {
-            var fields = new List<SystemField>();
-            foreach (var column in analysis.AutoColumns)
-                fields.Add(new SystemField(column.Name, column.Writable ? "global::System.Span<" + column.TypeName + ">" : "global::System.ReadOnlySpan<" + column.TypeName + ">",
-                    column.Writable ? SystemFieldKind.Column : SystemFieldKind.ColumnReadOnly, column.TypeName));
-            foreach (var property in analysis.AutoEvents)
-                fields.Add(new SystemField(property.Name, "global::Tl.Events<" + property.TypeName + ">", SystemFieldKind.Events, property.TypeName));
-            return new SystemDecl(AutoNamespace + "." + analysis.AutoName, true, SystemReader.StableKey("Tl.Generated." + analysis.AutoName), fields);
         }
 
         static string Sanitize(string name)

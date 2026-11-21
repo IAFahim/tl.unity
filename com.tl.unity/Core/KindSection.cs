@@ -133,19 +133,7 @@ internal static unsafe class KindSectionReader
         var dataAt = timelineAt + 48u * (uint)timelineCount;
         if (u[5] != 64u || u[6] != feederAt || u[7] != timelineAt) throw Fail("table offsets invalid");
         if (feederAt < 64u || dataAt < timelineAt || dataAt > length || u[8] < dataAt || (ulong)u[8] + u[9] > length) throw Fail("tables out of bounds");
-        var view = new KindSectionView
-        {
-            Base = section,
-            Bytes = length,
-            KindCount = (int)kinds,
-            FeederCount = (int)feeders,
-            TimelineCount = timelineCount,
-            Kinds = (LibraryKind*)(section + 64),
-            Feeders = (LibraryFeeder*)(section + feederAt),
-            Timelines = (LibraryKindTimeline*)(section + timelineAt),
-            Strings = section + u[8],
-            StringsLength = u[9],
-        };
+        var view = CreateView(section, length, timelineCount, timelines);
         for (var k = 0; k < view.KindCount; k++)
         {
             var kind = view.Kinds[k];

@@ -17,6 +17,8 @@
 
   <ItemGroup>
     <Compile Include="$(TlGenSource)/Analysis/SystemReader.cs" LinkBase="Linked" />
+    <Compile Include="$(TlGenSource)/Analysis/SystemModels.cs" LinkBase="Linked" />
+    <Compile Include="$(TlGenSource)/Analysis/SystemReader.Models.cs" LinkBase="Linked" />
     <Compile Include="$(TlGenSource)/Analysis/NewStyle.cs" LinkBase="Linked" />
     <Compile Include="$(TlGenSource)/Analysis/DerivedKinds.cs" LinkBase="Linked" />
     <Compile Include="$(TlGenSource)/Analysis/Connections.cs" LinkBase="Linked" />
