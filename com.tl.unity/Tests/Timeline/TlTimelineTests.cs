@@ -447,6 +447,71 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
+        public void RecordReadsEveryTickOfThePlayableAndTheStateAfterItEnds()
+        {
+            var director = Director("Recorded", GlowTimeline("Sky", 1f));
+            var ticks = new List<uint>();
+            var glows = new List<float>();
+            var recorded = TlPreview.Record(director, (entities, entity, tick) =>
+            {
+                ticks.Add(tick);
+                glows.Add(entities.GetComponentData<AutoKinds.Glow>(entity).Value);
+            });
+            TlPreview.Clear();
+            Assert.IsTrue(recorded, "the director plays its Playable");
+            Assert.AreEqual(61, ticks.Count, "60 ticks of the 1 s clip at 60 Hz, then once more for the state after the end");
+            for (var tick = 0; tick < 60; tick++)
+            {
+                Assert.AreEqual((uint)tick, ticks[tick]);
+                Assert.AreEqual(tick + 1, glows[tick], 1e-4f, "tick " + tick + ": Glow adds the clip's Amount once per tick");
+            }
+            Assert.AreEqual(60u, ticks[60], "the state after the end comes as the tick after the last");
+            Assert.AreEqual(60f, glows[60], 1e-4f, "after the end nothing feeds Glow, so it keeps its last value");
+        }
+
+        [Test]
+        public void TheVersionChangesWhenAClipMoves()
+        {
+            var timeline = GlowTimeline("Sky", 1f);
+            var director = Director("Versioned", timeline);
+            var before = TlPreview.Version(director);
+            Assert.AreEqual(before, TlPreview.Version(director), "nothing changed, so the version is the same");
+            timeline.GetOutputTracks().OfType<TlTrack>().Single().GetClips().Single().start = 0.5;
+            Assert.AreNotEqual(before, TlPreview.Version(director), "moving a clip changes the version, so a package knows to record again");
+        }
+
+        [Test]
+        public void EvaluatedIsRaisedForADirectorTheTimelineWindowPreviews()
+        {
+            var director = Director("Previewed", GlowTimeline("Sky", 1f));
+            var raised = new List<PlayableDirector>();
+            Action<PlayableDirector> onEvaluated = previewed => raised.Add(previewed);
+            TlPreview.Evaluated += onEvaluated;
+            AnimationMode.StartAnimationMode();
+            try
+            {
+                director.time = 0.5;
+                director.Evaluate();
+            }
+            finally
+            {
+                AnimationMode.StopAnimationMode();
+                TlPreview.Evaluated -= onEvaluated;
+                TlPreview.Clear();
+            }
+            CollectionAssert.Contains(raised, director, "a Tl track's mixer raises Evaluated for its director while preview is on");
+        }
+
+        [Test]
+        public void AnAssemblyThatOptsInGetsTimelineMenuStubsForItsClips()
+        {
+            var wanted = TlMenuStubFiles.Wanted();
+            Assert.IsTrue(wanted.ContainsKey("MenuEntries_BeepClip_TlMenu.cs"), "an assembly with [assembly: TlMenuEntries] gets a + menu stub for each clip, wherever its sources live");
+            StringAssert.Contains("MenuEntries/Beep", wanted["MenuEntries_BeepClip_TlMenu.cs"]);
+            Assert.IsFalse(wanted.ContainsKey("AutoKinds_GlowClip_TlMenu.cs"), "a package assembly that does not opt in still gets none");
+        }
+
+        [Test]
         public void ADirectorWithoutTlTracksBakesNothingOfTl()
         {
             var timeline = Timeline("Plain");
