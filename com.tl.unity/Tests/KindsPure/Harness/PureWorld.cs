@@ -60,6 +60,7 @@ namespace KindPure
         ComponentTypeHandle<StatChangeEnabled> _statChangeEnabled;
         ComponentTypeHandle<PlaybackDense> _dense;
         BufferTypeHandle<PlaybackOrigin> _origin;
+        ComponentTypeHandle<DenseOrigins> _denseOrigins;
         EntityQuery _denseClock;
         global::Tl.KindValues* _noTables;
 
@@ -87,6 +88,7 @@ namespace KindPure
             _statChangeEnabled = state.GetComponentTypeHandle<StatChangeEnabled>(true);
             _dense = state.GetComponentTypeHandle<PlaybackDense>(true);
             _origin = state.GetBufferTypeHandle<PlaybackOrigin>(true);
+            _denseOrigins = state.GetComponentTypeHandle<DenseOrigins>(true);
             _denseClock = TimelineTicks.DenseQuery(ref state);
             var bytes = MostKinds * sizeof(global::Tl.KindValues);
             _noTables = (global::Tl.KindValues*)UnsafeUtility.Malloc(bytes, 16, Allocator.Persistent);
@@ -122,6 +124,7 @@ namespace KindPure
             _statChangeEnabled.Update(ref state);
             _dense.Update(ref state);
             _origin.Update(ref state);
+            _denseOrigins.Update(ref state);
             var indexWithoutTables = library.Kinds;
             indexWithoutTables.Values = _noTables;
             var job = new MovementChunkJob
@@ -147,6 +150,7 @@ namespace KindPure
                 StatChangeEnabledHandle = _statChangeEnabled,
                 DenseHandle = _dense,
                 OriginHandle = _origin,
+                DenseOriginsHandle = _denseOrigins,
                 DenseClock = TimelineTicks.DenseClock(_denseClock),
             };
             state.Dependency = job.ScheduleParallel(_query, state.Dependency);
@@ -350,10 +354,7 @@ namespace KindPure
                 types.Add(typeof(PlaybackDue));
             }
             if (dense)
-            {
-                types.Add(typeof(PlaybackDense));
-                types.Add(typeof(PlaybackOrigin));
-            }
+                types.AddRange(PlaybackDense.Types);
             var entity = Entities.CreateEntity(types.ToArray());
             Entities.SetComponentEnabled<TimelinePlaying>(entity, false);
             if (dense)

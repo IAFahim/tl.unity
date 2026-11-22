@@ -81,6 +81,8 @@ namespace Tl.Unity
         BufferTypeHandle<PlaybackDue> _dueHandle;
         ComponentTypeHandle<PlaybackDense> _denseHandle;
         BufferTypeHandle<PlaybackOrigin> _originHandle;
+        ComponentTypeHandle<DenseOrigins> _denseOriginsHandle;
+        ComponentTypeHandle<DenseDues> _denseDuesHandle;
         EntityTypeHandle _entityHandle;
         ushort _now;
         EntityStorageInfoLookup _storage;
@@ -114,6 +116,8 @@ namespace Tl.Unity
             _dueHandle = state.GetBufferTypeHandle<PlaybackDue>(false);
             _denseHandle = state.GetComponentTypeHandle<PlaybackDense>(false);
             _originHandle = state.GetBufferTypeHandle<PlaybackOrigin>(false);
+            _denseOriginsHandle = state.GetComponentTypeHandle<DenseOrigins>(false);
+            _denseDuesHandle = state.GetComponentTypeHandle<DenseDues>(false);
             _entityHandle = state.GetEntityTypeHandle();
             _storage = state.GetEntityStorageInfoLookup();
             state.RequireForUpdate<TimelineLibrary>();
@@ -161,6 +165,8 @@ namespace Tl.Unity
             _dueHandle.Update(ref state);
             _denseHandle.Update(ref state);
             _originHandle.Update(ref state);
+            _denseOriginsHandle.Update(ref state);
+            _denseDuesHandle.Update(ref state);
             _entityHandle.Update(ref state);
             _now = (ushort)((_now + 1) & TimelineTicks.Mask);
             var stepDir = SystemAPI.GetSingleton<TimelineStep>().Forward ? 1 : -1;
@@ -209,6 +215,8 @@ namespace Tl.Unity
                 ForgetHorizons = forget,
                 DenseHandle = _denseHandle,
                 OriginHandle = _originHandle,
+                DenseOriginsHandle = _denseOriginsHandle,
+                DenseDuesHandle = _denseDuesHandle,
                 DenseFrom = dense.Clock,
                 DenseReady = index.Dense != null && index.Dense->Ready,
                 DenseForget = denseForget,
