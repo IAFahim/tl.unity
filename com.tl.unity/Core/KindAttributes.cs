@@ -4,6 +4,8 @@ public enum KindEntries : byte { Spans, Pulses, Both }
 
 public enum KindMode : byte { Combine, Each }
 
+public enum KindCombine : byte { Custom, Sum, Max, Min, Or, Pick }
+
 public enum ClipEvent : byte { Start, End, Marker }
 
 [AttributeUsage(AttributeTargets.Struct)]
@@ -15,6 +17,8 @@ public sealed class TimelineKindAttribute : Attribute
     public string? Group { get; set; }
     public bool FoldsPulses { get; set; }
     public bool Associative { get; set; }
+    public KindCombine Combine { get; set; }
+    public string? Priority { get; set; }
 }
 
 public interface IPulseFold<T> where T : unmanaged

@@ -169,6 +169,7 @@ public sealed partial class TimelineWorld
         RequestQueue.SortStable(queue);
         for (var i = 0; i < queue->Count; i++) ApplyRecord(players, queue->Item(i));
         RequestQueue.Clear(queue);
+        RequestQueue.Trim(queue);
     }
 
     unsafe void SyncPlaybacks(PlaybackTable players)

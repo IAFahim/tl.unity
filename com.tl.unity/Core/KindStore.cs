@@ -46,7 +46,7 @@ internal unsafe struct PulseQueue
     public int Stride;
 }
 
-public sealed unsafe class KindStore : IDisposable
+public sealed unsafe partial class KindStore : IDisposable
 {
     readonly TimelineWorld _world;
     readonly PlaybackTable _players;
@@ -255,7 +255,7 @@ public sealed unsafe class KindStore : IDisposable
                     var committed = false;
                     try
                     {
-                        var b = KindBuild.Of(in _score, _tls, views, row, false, ref fill);
+                        var b = KindBuild.Of(in _score, _tls, views, row, false, ref fill, true);
                         if (b.Kinds != 0)
                         {
                             var valid = _kindCount == 64 ? ~0ul : (1ul << _kindCount) - 1;
@@ -263,8 +263,10 @@ public sealed unsafe class KindStore : IDisposable
                             for (var k = 0; k < _kindCount; k++)
                                 if ((b.Kinds >> k & 1) != 0 && _values[k].Data != null)
                                     throw new InvalidOperationException("Tl: overlapping span table.");
-                            data = (byte*)Zeroed((nuint)b.Rows * (nuint)b.Stride);
+                            var half = (nuint)b.Rows * (nuint)b.Stride;
+                            data = (byte*)Zeroed(half * (b.Split ? 2u : 1u) + 64);
                             b.Fill(data, ref fill);
+                            for (var r = 0; b.Split && r < b.Rows; r++) *(uint*)(data + half + (nuint)r * (nuint)b.Stride) = *(uint*)(data + (nuint)r * (nuint)b.Stride);
                             for (var k = 0; k < _kindCount; k++)
                                 if ((b.Kinds >> k & 1) != 0)
                                 {
@@ -273,6 +275,7 @@ public sealed unsafe class KindStore : IDisposable
                                     Volatile.Write(ref *(nint*)&_values[k].Data, (nint)data);
                                 }
                             committed = true;
+                            _denseEpoch++;
                         }
                     }
                     finally
@@ -427,6 +430,7 @@ public sealed unsafe class KindStore : IDisposable
             parts.Add(key);
             for (var i = 0; i < lines.Count; i++) routes[ordinals[at[i]]] = (ushort)((part << 8) | i);
             if (key != 0) { _feeding.Add(kind); _tablePulses &= ~(1ul << k); }
+            _denseEpoch++;
             _joined[(kind, key)] = ((nint)routes, part);
             return routes;
         }
@@ -644,7 +648,9 @@ public sealed unsafe class KindStore : IDisposable
         }
         _tickTablePulses = fast;
         _t.FastPulseMask = fast;
+        DenseBegin(forward ? 1 : -1);
         TickPassRange(forward ? 1 : -1, 0, words);
+        DenseEnd(forward ? 1 : -1);
         if (_hasClosed)
         {
             NativeMemory.Clear(_closedEntity, (nuint)words * 8);
@@ -658,6 +664,7 @@ public sealed unsafe class KindStore : IDisposable
     {
         var playing = _players.PlayingBits;
         if (firstWord < 0) firstWord = 0; if (endWord > _players.PlayingWords) endWord = _players.PlayingWords;
+        if (_denseReady) { DenseRange(stepDir, firstWord, endWord); return; }
         var p = _players.RawView;
         var slots = p.Slots;
         var counts = p.Counts;
@@ -922,6 +929,7 @@ public sealed unsafe class KindStore : IDisposable
                 }
             }
         }
+        BuildRows();
         _samples = (byte*)Zeroed((nuint)entities + 1);
         _listed = (ulong**)Zeroed((nuint)Math.Max(1, _kindCount) * (nuint)sizeof(nint));
         for (var k = 0; k < _kindCount; k++) _listed[k] = (ulong*)Zeroed((nuint)(_tables[k] == null ? 1 : _tables[k]->Words) * 8);
@@ -1008,6 +1016,8 @@ public sealed unsafe class KindStore : IDisposable
 
     void Release()
     {
+        UndenseAll();
+        ReleaseRows();
         if (_tables != null)
             for (var k = 0; k < _kindCount; k++) if (_owner[k] == k) KindTable.Free(_tables[k]);
         if (_queues != null)
