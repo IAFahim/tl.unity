@@ -75,7 +75,7 @@ namespace Tl.Unity
             if (!TryTimeline(out var entity, out var entry))
                 return default;
             var manager = _world.EntityManager;
-            var clock = manager.HasComponent<TimelineClock>(entity) ? manager.GetComponentData<TimelineClock>(entity).Value : (ushort)0;
+            var clock = TimelineTicks.ClockOf(manager, entity);
             foreach (var playback in manager.GetBuffer<Playback>(entity, true))
                 if (playback.Timeline == entry.Id)
                 {
