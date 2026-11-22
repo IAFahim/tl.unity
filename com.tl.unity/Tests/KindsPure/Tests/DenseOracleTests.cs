@@ -9,12 +9,16 @@ namespace KindPure
     {
         byte[] _first;
         byte[] _second;
+        byte[] _shapeFirst;
+        byte[] _shapeSecond;
 
         [OneTimeSetUp]
         public void BakeBothControlLibrariesOnce()
         {
             _first = PureControls.Library(false);
             _second = PureControls.Library(true);
+            _shapeFirst = PureShapeBench.Library(PureShapeBench.LiveTracks);
+            _shapeSecond = PureShapeBench.Library(PureShapeBench.LiveTracks - 1);
         }
 
         sealed class SameRequestsToBothWorlds : IPureRequests
@@ -120,9 +124,9 @@ namespace KindPure
             return state;
         }
 
-        static void RandomControl(IPureRequests both, int row, uint roll)
+        static void RandomControl(IPureRequests both, int row, uint roll, int timelines)
         {
-            var timeline = (ushort)(1 + (roll >> 8) % 5);
+            var timeline = (ushort)(1 + (roll >> 8) % (uint)timelines);
             var at = (ushort)((roll >> 16) % 40);
             switch (roll & 31)
             {
@@ -141,21 +145,23 @@ namespace KindPure
         }
 
         [Test]
-        public void DenseRowsMatchExplicitRowsUnderARandomScriptWithRewindsReloadAndSkippedVitals([Values] PureRows rows, [Values(4, 7)] int slots)
+        public void DenseRowsMatchExplicitRowsUnderARandomScriptWithRewindsReloadAndSkippedVitals([Values] PureRows rows, [Values(4, 7, 24)] int slots)
         {
             const int Rows = 48;
             const int Steps = 600;
             const int Calm = 9;
-            using var dense = new PureWorld(Rows, _first, _second, false, rows, true);
-            using var plain = new PureWorld(Rows, _first, _second, false, rows, false);
+            var wideRows = slots > 16;
+            var timelines = wideRows ? 40 : 5;
+            using var dense = new PureWorld(Rows, wideRows ? _shapeFirst : _first, wideRows ? _shapeSecond : _second, false, rows, true);
+            using var plain = new PureWorld(Rows, wideRows ? _shapeFirst : _first, wideRows ? _shapeSecond : _second, false, rows, false);
             var both = new SameRequestsToBothWorlds { Dense = dense, Explicit = plain };
             var rng = 0xC0FFEE12u;
             for (var r = 0; r < Rows; r++)
                 for (var k = 1 + (int)(Next(ref rng) % (uint)slots); k > 0; k--)
-                    both.Request(r, global::Tl.RequestOp.Start, (ushort)(1 + Next(ref rng) % 5), (ushort)(Next(ref rng) % 40));
+                    both.Request(r, global::Tl.RequestOp.Start, (ushort)(1 + Next(ref rng) % (uint)timelines), (ushort)(Next(ref rng) % 40));
             var forward = true;
             var second = false;
-            int rewinds = 0, controls = 0, skipped = 0, denseRowSteps = 0, spilled = 0;
+            int rewinds = 0, controls = 0, skipped = 0, denseRowSteps = 0, spilled = 0, wide = 0;
             for (var step = 0; step < Steps; step++)
             {
                 if (step % 97 == 41 || Next(ref rng) % 211 == 0)
@@ -172,7 +178,7 @@ namespace KindPure
                 for (var r = 0; r < Rows; r++)
                 {
                     if (Next(ref rng) % Calm != 0) continue;
-                    RandomControl(both, r, Next(ref rng));
+                    RandomControl(both, r, Next(ref rng), timelines);
                     controls++;
                 }
                 var vitals = step % 23 is < 5 or > 10;
@@ -184,14 +190,16 @@ namespace KindPure
                     Assert.Fail(rows + " rows, " + slots + " slots: the dense world left the explicit one at " + differs);
                 denseRowSteps += dense.DenseRows();
                 spilled += dense.SpilledRows();
+                wide += dense.DenseRowsWiderThan(16);
             }
-            UnityEngine.Debug.Log("TlDenseOracle: random " + rows + " slots=" + slots + " denseRowSteps=" + denseRowSteps + " of " + Rows * Steps + " rewinds=" + rewinds + " controls=" + controls + " skippedVitals=" + skipped + " spilledRowSteps=" + spilled);
+            UnityEngine.Debug.Log("TlDenseOracle: random " + rows + " slots=" + slots + " denseRowSteps=" + denseRowSteps + " of " + Rows * Steps + " rewinds=" + rewinds + " controls=" + controls + " skippedVitals=" + skipped + " spilledRowSteps=" + spilled + " denseRowStepsOver16Slots=" + wide);
             Assert.AreEqual(0, plain.DenseRows(), "the explicit world has no dense components and must never run dense");
             Assert.Greater(denseRowSteps * 10, Rows * Steps, "only " + denseRowSteps + " of " + Rows * Steps + " row-steps ran dense");
             Assert.Greater(rewinds, 4, "the script rewound the world too rarely");
             Assert.Greater(controls, Rows * 4, "the script sent too few controls");
             Assert.Greater(skipped, 0, "the script never skipped the Vitals system");
             if (slots > 4) Assert.Greater(spilled, 0, "no row spilled past the four inline playback slots");
+            if (slots > 16) Assert.Greater(wide, 0, "no dense row held more than 16 slots, so the wide due scan never ran");
         }
     }
 }

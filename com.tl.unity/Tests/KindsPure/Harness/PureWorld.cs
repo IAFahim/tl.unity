@@ -370,6 +370,16 @@ namespace KindPure
             if (vitals) VitalsHandle.Update(World.Unmanaged);
         }
 
+        public int DenseRowsWiderThan(int slots)
+        {
+            Entities.CompleteAllTrackedJobs();
+            var wide = 0;
+            foreach (var row in Rows)
+                if (Entities.HasComponent<PlaybackDense>(row) && Entities.IsComponentEnabled<PlaybackDense>(row) && Entities.GetBuffer<Playback>(row, true).Length > slots)
+                    wide++;
+            return wide;
+        }
+
         public int SpilledRows()
         {
             Entities.CompleteAllTrackedJobs();
