@@ -497,7 +497,7 @@ namespace Tl.Unity
                         ctx.SetPlaying(ref PlayingHandle, row, false);
                         continue;
                     }
-                    if (touched) TryDensify(in chunk, ref ctx, ref dense, playbacks[row], origins[row], ref nexts[row].Next, row, to, clocks);
+                    if (touched) TryDensify(in chunk, ref dense, playbacks[row], origins[row], ref nexts[row].Next, row, to, clocks);
                 }
             }
         }
@@ -561,7 +561,7 @@ namespace Tl.Unity
             return false;
         }
 
-        void TryDensify(in ArchetypeChunk chunk, ref KindCursor ctx, ref DenseRows dense, DynamicBuffer<Playback> buffer, DynamicBuffer<PlaybackOrigin> originBuffer, ref ushort next, int row, ushort to, ushort* clocks)
+        void TryDensify(in ArchetypeChunk chunk, ref DenseRows dense, DynamicBuffer<Playback> buffer, DynamicBuffer<PlaybackOrigin> originBuffer, ref ushort next, int row, ushort to, ushort* clocks)
         {
             var copies = (TimelinePlaying*)chunk.GetComponentDataPtrRO(ref PlayingHandle);
             if (copies != null && copies[row].Copies != 0) return;
@@ -578,9 +578,6 @@ namespace Tl.Unity
                 live = true;
             }
             if (!live) return;
-            ctx.EnsureReach();
-            for (var reach = ctx.Reach; reach != 0; reach &= reach - 1)
-                if (ctx.Buffer((int)global::Unity.Mathematics.math.tzcnt(reach))->GetBufferLength(row) != 0) return;
             if (clocks != null && clocks[row] != 0)
             {
                 TimelineTicks.Decode(slots, n, clocks[row]);
