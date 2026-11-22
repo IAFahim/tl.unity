@@ -318,7 +318,10 @@ namespace Tl.Gen.Unity
                 if (fusedKinds.Contains(k))
                     W(writer, "public bool NoEnt_" + k + ";");
             if (runs.Count > 0)
+            {
                 W(writer, "[ReadOnly] public BufferTypeHandle<global::Tl.Unity.PlaybackOrigin> OriginHandle;");
+                W(writer, "[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.DenseOrigins> DenseOriginsHandle;");
+            }
             var pulseFast = new List<int>();
             for (var k = 0; k < kinds.Count; k++)
                 if (kinds[k].Decl.PrecombinedPulses && kinds[k].Decl.IdleParams is null)
@@ -821,7 +824,10 @@ namespace Tl.Gen.Unity
             handles.Add(("PlayingHandle", "ComponentTypeHandle<global::Tl.Unity.TimelinePlaying>", "GetComponentTypeHandle<global::Tl.Unity.TimelinePlaying>", true));
             handles.Add(("DenseHandle", "ComponentTypeHandle<global::Tl.Unity.PlaybackDense>", "GetComponentTypeHandle<global::Tl.Unity.PlaybackDense>", true));
             if (origins)
+            {
                 handles.Add(("OriginHandle", "BufferTypeHandle<global::Tl.Unity.PlaybackOrigin>", "GetBufferTypeHandle<global::Tl.Unity.PlaybackOrigin>", true));
+                handles.Add(("DenseOriginsHandle", "ComponentTypeHandle<global::Tl.Unity.DenseOrigins>", "GetComponentTypeHandle<global::Tl.Unity.DenseOrigins>", true));
+            }
             foreach (var column in model.Columns)
                 handles.Add((column.Name + "Handle", "ComponentTypeHandle<" + ComponentName(model, column) + ">", "GetComponentTypeHandle<" + ComponentName(model, column) + ">", column.ReadOnly));
             foreach (var evented in events)
@@ -1241,7 +1247,8 @@ namespace Tl.Gen.Unity
             W(writer, "var __count = chunk.Count;");
             W(writer, "var __m0 = __count >= 64 ? ~0ul : (1ul << __count) - 1;");
             W(writer, "var __m1 = __count <= 64 ? 0ul : (__count >= 128 ? ~0ul : (1ul << (__count - 64)) - 1);");
-            W(writer, "var __dn0 = __dn.ULong0 & __m0; var __dn1 = __dn.ULong1 & __m1; var __dok = __kv" + f0 + "->Reversed > 0 && (__dn0 | __dn1) != 0;");
+            W(writer, "var __po = (ushort*)chunk.GetComponentDataPtrRO(ref DenseOriginsHandle); var __pd = (global::Tl.Unity.PlaybackDense*)chunk.GetComponentDataPtrRO(ref DenseHandle);");
+            W(writer, "var __dn0 = __dn.ULong0 & __m0; var __dn1 = __dn.ULong1 & __m1; var __dok = __kv" + f0 + "->Reversed > 0 && __po != null && (__dn0 | __dn1) != 0;");
             W(writer, "var __vdh = __vdata + (Forward ? (nuint)0 : (nuint)__kv" + f0 + "->Rows * __vstride);");
             foreach (var i in fused)
                 W(writer, "var __vdv" + i + " = __vdata + __vf" + i + ";");
@@ -1515,7 +1522,7 @@ namespace Tl.Gen.Unity
 
         static void EmitDenseRow(StringBuilder writer, IReadOnlyList<UnityKindInfo> kinds, List<int> fused, string name, bool declare)
         {
-            W(writer, "var __ob = __org[__row]; var __op = (ushort*)__ob.GetUnsafeReadOnlyPtr(); var __dcnt = __ob.Length >> 1;");
+            W(writer, "var __dcnt = (int)__pd[__row].Count; var __op = __dcnt <= global::Tl.Unity.PlaybackDense.Inline ? __po + __row * global::Tl.Unity.PlaybackDense.Inline : (ushort*)__org[__row].GetUnsafeReadOnlyPtr();");
             var outs = new StringBuilder();
             foreach (var i in fused)
             {

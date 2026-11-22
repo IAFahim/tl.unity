@@ -28,10 +28,25 @@ namespace Tl.Unity
 
     public struct PlaybackDense : IComponentData, IEnableableComponent
     {
+        public const int Inline = 4;
+
         public ushort Next;
+        public byte Count;
+
+        public static ComponentType[] Types => new ComponentType[] { typeof(PlaybackDense), typeof(DenseOrigins), typeof(DenseDues), typeof(PlaybackOrigin) };
     }
 
-    [InternalBufferCapacity(8)]
+    public unsafe struct DenseOrigins : IComponentData
+    {
+        public fixed ushort Value[PlaybackDense.Inline];
+    }
+
+    public unsafe struct DenseDues : IComponentData
+    {
+        public fixed ushort Value[PlaybackDense.Inline];
+    }
+
+    [InternalBufferCapacity(0)]
     public struct PlaybackOrigin : IBufferElementData
     {
         public ushort Value;
