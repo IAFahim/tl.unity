@@ -1,0 +1,197 @@
+OriginBench, IAFahim/tl#673 step 5. Unity 7000.0.0a20, Burst on, safety off, 11 workers, Ryzen 5 8500G, Linux.
+Each cell: fresh World, 40 warmup + 16 measured steps, median of 5 runs per process; table = median of 3 processes (final1-3), [min-max] of the 3.
+Command: Unity -batchmode -nographics -quit -projectPath <probe> -executeMethod KindPure.Origins.OriginBench.RunBatch -originLog <file>
+C model: tl exp/row-origins benchmarks/RowOrigins/layouts.c, gcc -O3 -march=native -ffp-contract=off -fno-fast-math -fopenmp; hashes from ./layouts -e E -a A -t 1 -s 46 -k lean (56 steps), floor rows from -k read-only.
+Main: KindPure.PureShapeBench.RunBatch at tl.unity cc7e786 in the same session. C: ./layouts -t 12 -k lean|read-only, median of 3, same session.
+chunkB = 16384 / ChunkCapacity; inChunk = sum of SizeInChunk over the archetype's component types, plus the 8 B Entity column.
+
+main same-session: {(10000, 40): 0.722, (10000, 100): 1.397, (50000, 40): 3.202, (50000, 100): 6.501, (1000000, 2): 6.744, (1000000, 4): 8.708}
+C same-session lean: {(10000, 40): 0.102, (10000, 100): 0.25, (50000, 40): 0.494, (50000, 100): 1.199, (1000000, 2): 1.437, (1000000, 4): 1.815}
+C same-session floor: {(10000, 40): 0.054, (10000, 100): 0.127, (50000, 40): 0.257, (50000, 100): 0.623, (1000000, 2): 0.843, (1000000, 4): 1.044}
+  10000x40  Heap      Chunk          0.131 [0.130-0.141] main   5.5x  C 0.102 (1.28x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  10000x40  Heap      ChunkUnrolled  0.124 [0.123-0.127] main   5.8x  C 0.102 (1.22x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  10000x40  Heap      Entity         0.125 [0.124-0.133] main   5.8x  C 0.102 (1.23x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  10000x40  Heap      Floor          0.077 [0.074-0.077] main   9.4x  C 0.054 (1.43x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  10000x40  Heap      FloorUnrolled  0.075 [0.074-0.080] main   9.6x  C 0.054 (1.39x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  10000x40  Inline2   Chunk          0.134 [0.133-0.141] main   5.4x  C 0.102 (1.31x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+  10000x40  Inline2   ChunkUnrolled  0.134 [0.130-0.143] main   5.4x  C 0.102 (1.31x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+  10000x40  Inline2   Entity         0.137 [0.133-0.139] main   5.3x  C 0.102 (1.34x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+  10000x40  Inline4   Chunk          0.134 [0.132-0.134] main   5.4x  C 0.102 (1.31x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+  10000x40  Inline4   ChunkUnrolled  0.135 [0.131-0.137] main   5.3x  C 0.102 (1.32x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+  10000x40  Inline4   Entity         0.138 [0.137-0.156] main   5.2x  C 0.102 (1.35x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+  10000x40  Inline8   Chunk          0.135 [0.133-0.136] main   5.3x  C 0.102 (1.32x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+  10000x40  Inline8   ChunkUnrolled  0.136 [0.132-0.136] main   5.3x  C 0.102 (1.33x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+  10000x40  Inline8   Entity         0.135 [0.133-0.139] main   5.3x  C 0.102 (1.32x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+  10000x40  Inline100 Chunk          0.138 [0.131-0.138] main   5.2x  C 0.102 (1.35x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  10000x40  Inline100 ChunkUnrolled  0.135 [0.129-0.136] main   5.3x  C 0.102 (1.32x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  10000x40  Inline100 Entity         0.132 [0.132-0.133] main   5.5x  C 0.102 (1.29x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  10000x40  Inline100 Floor          0.067 [0.066-0.075] main  10.8x  C 0.054 (1.24x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  10000x40  Inline100 FloorUnrolled  0.068 [0.067-0.075] main  10.6x  C 0.054 (1.26x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  10000x100 Heap      Chunk          0.304 [0.292-0.313] main   4.6x  C 0.250 (1.22x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  10000x100 Heap      ChunkUnrolled  0.297 [0.293-0.298] main   4.7x  C 0.250 (1.19x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  10000x100 Heap      Entity         0.302 [0.298-0.321] main   4.6x  C 0.250 (1.21x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  10000x100 Heap      Floor          0.153 [0.145-0.163] main   9.1x  C 0.127 (1.20x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  10000x100 Heap      FloorUnrolled  0.155 [0.138-0.158] main   9.0x  C 0.127 (1.22x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  10000x100 Inline2   Chunk          0.269 [0.264-0.275] main   5.2x  C 0.250 (1.08x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+  10000x100 Inline2   ChunkUnrolled  0.267 [0.266-0.267] main   5.2x  C 0.250 (1.07x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+  10000x100 Inline2   Entity         0.274 [0.274-0.276] main   5.1x  C 0.250 (1.10x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+  10000x100 Inline4   Chunk          0.267 [0.266-0.268] main   5.2x  C 0.250 (1.07x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+  10000x100 Inline4   ChunkUnrolled  0.266 [0.266-0.267] main   5.3x  C 0.250 (1.06x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+  10000x100 Inline4   Entity         0.274 [0.272-0.276] main   5.1x  C 0.250 (1.10x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+  10000x100 Inline8   Chunk          0.267 [0.263-0.272] main   5.2x  C 0.250 (1.07x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+  10000x100 Inline8   ChunkUnrolled  0.269 [0.262-0.273] main   5.2x  C 0.250 (1.08x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+  10000x100 Inline8   Entity         0.272 [0.271-0.275] main   5.1x  C 0.250 (1.09x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+  10000x100 Inline100 Chunk          0.258 [0.258-0.266] main   5.4x  C 0.250 (1.03x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  10000x100 Inline100 ChunkUnrolled  0.259 [0.254-0.260] main   5.4x  C 0.250 (1.04x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  10000x100 Inline100 Entity         0.256 [0.255-0.260] main   5.5x  C 0.250 (1.02x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  10000x100 Inline100 Floor          0.132 [0.130-0.138] main  10.6x  C 0.127 (1.04x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  10000x100 Inline100 FloorUnrolled  0.137 [0.133-0.138] main  10.2x  C 0.127 (1.08x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  50000x40  Heap      Chunk          0.537 [0.520-0.550] main   6.0x  C 0.494 (1.09x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  50000x40  Heap      ChunkUnrolled  0.532 [0.530-0.538] main   6.0x  C 0.494 (1.08x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  50000x40  Heap      Entity         0.533 [0.529-0.538] main   6.0x  C 0.494 (1.08x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  50000x40  Heap      Floor          0.291 [0.285-0.292] main  11.0x  C 0.257 (1.13x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  50000x40  Heap      FloorUnrolled  0.286 [0.276-0.287] main  11.2x  C 0.257 (1.11x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  50000x40  Inline2   Chunk          0.535 [0.528-0.535] main   6.0x  C 0.494 (1.08x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+  50000x40  Inline2   ChunkUnrolled  0.531 [0.524-0.534] main   6.0x  C 0.494 (1.07x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+  50000x40  Inline2   Entity         0.553 [0.552-0.556] main   5.8x  C 0.494 (1.12x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+  50000x40  Inline4   Chunk          0.536 [0.534-0.543] main   6.0x  C 0.494 (1.09x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+  50000x40  Inline4   ChunkUnrolled  0.529 [0.527-0.540] main   6.1x  C 0.494 (1.07x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+  50000x40  Inline4   Entity         0.550 [0.543-0.554] main   5.8x  C 0.494 (1.11x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+  50000x40  Inline8   Chunk          0.539 [0.538-0.549] main   5.9x  C 0.494 (1.09x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+  50000x40  Inline8   ChunkUnrolled  0.531 [0.527-0.543] main   6.0x  C 0.494 (1.07x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+  50000x40  Inline8   Entity         0.559 [0.547-0.566] main   5.7x  C 0.494 (1.13x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+  50000x40  Inline100 Chunk          0.543 [0.534-0.549] main   5.9x  C 0.494 (1.10x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  50000x40  Inline100 ChunkUnrolled  0.547 [0.543-0.561] main   5.9x  C 0.494 (1.11x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  50000x40  Inline100 Entity         0.548 [0.543-0.564] main   5.8x  C 0.494 (1.11x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  50000x40  Inline100 Floor          0.298 [0.292-0.313] main  10.7x  C 0.257 (1.16x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  50000x40  Inline100 FloorUnrolled  0.298 [0.292-0.315] main  10.7x  C 0.257 (1.16x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  50000x100 Heap      Chunk          1.230 [1.218-1.247] main   5.3x  C 1.199 (1.03x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  50000x100 Heap      ChunkUnrolled  1.243 [1.226-1.247] main   5.2x  C 1.199 (1.04x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  50000x100 Heap      Entity         1.240 [1.226-1.253] main   5.2x  C 1.199 (1.03x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  50000x100 Heap      Floor          0.629 [0.626-0.634] main  10.3x  C 0.623 (1.01x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  50000x100 Heap      FloorUnrolled  0.620 [0.614-0.636] main  10.5x  C 0.623 (1.00x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+  50000x100 Inline2   Chunk          1.240 [1.236-1.242] main   5.2x  C 1.199 (1.03x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+  50000x100 Inline2   ChunkUnrolled  1.247 [1.237-1.308] main   5.2x  C 1.199 (1.04x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+  50000x100 Inline2   Entity         1.273 [1.264-1.286] main   5.1x  C 1.199 (1.06x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+  50000x100 Inline4   Chunk          1.240 [1.239-1.271] main   5.2x  C 1.199 (1.03x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+  50000x100 Inline4   ChunkUnrolled  1.225 [1.225-1.231] main   5.3x  C 1.199 (1.02x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+  50000x100 Inline4   Entity         1.273 [1.263-1.276] main   5.1x  C 1.199 (1.06x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+  50000x100 Inline8   Chunk          1.226 [1.210-1.230] main   5.3x  C 1.199 (1.02x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+  50000x100 Inline8   ChunkUnrolled  1.240 [1.233-1.250] main   5.2x  C 1.199 (1.03x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+  50000x100 Inline8   Entity         1.276 [1.259-1.276] main   5.1x  C 1.199 (1.06x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+  50000x100 Inline100 Chunk          1.239 [1.203-1.251] main   5.2x  C 1.199 (1.03x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  50000x100 Inline100 ChunkUnrolled  1.213 [1.206-1.251] main   5.4x  C 1.199 (1.01x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  50000x100 Inline100 Entity         1.224 [1.216-1.243] main   5.3x  C 1.199 (1.02x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  50000x100 Inline100 Floor          0.610 [0.602-0.621] main  10.7x  C 0.623 (0.98x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+  50000x100 Inline100 FloorUnrolled  0.601 [0.597-0.635] main  10.8x  C 0.623 (0.96x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+1000000x2   Heap      Chunk          2.761 [2.745-2.941] main   2.4x  C 1.437 (1.92x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+1000000x2   Heap      ChunkUnrolled  2.713 [2.668-2.874] main   2.5x  C 1.437 (1.89x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+1000000x2   Heap      Entity         2.712 [2.710-2.788] main   2.5x  C 1.437 (1.89x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+1000000x2   Heap      Floor          2.724 [2.706-2.909] main   2.5x  C 0.843 (3.23x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+1000000x2   Heap      FloorUnrolled  2.720 [2.708-2.922] main   2.5x  C 0.843 (3.23x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+1000000x2   Inline2   Chunk          1.664 [1.647-1.677] main   4.1x  C 1.437 (1.16x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+1000000x2   Inline2   ChunkUnrolled  1.497 [1.488-1.499] main   4.5x  C 1.437 (1.04x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+1000000x2   Inline2   Entity         1.603 [1.594-1.637] main   4.2x  C 1.437 (1.12x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+1000000x2   Inline4   Chunk          1.669 [1.653-1.689] main   4.0x  C 1.437 (1.16x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+1000000x2   Inline4   ChunkUnrolled  1.496 [1.495-1.496] main   4.5x  C 1.437 (1.04x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+1000000x2   Inline4   Entity         1.630 [1.617-1.630] main   4.1x  C 1.437 (1.13x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+1000000x2   Inline8   Chunk          1.704 [1.682-1.718] main   4.0x  C 1.437 (1.19x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+1000000x2   Inline8   ChunkUnrolled  1.542 [1.532-1.558] main   4.4x  C 1.437 (1.07x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+1000000x2   Inline8   Entity         1.622 [1.615-1.643] main   4.2x  C 1.437 (1.13x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+1000000x2   Inline100 Chunk          3.614 [3.592-3.630] main   1.9x  C 1.437 (2.51x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+1000000x2   Inline100 ChunkUnrolled  3.607 [3.578-3.613] main   1.9x  C 1.437 (2.51x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+1000000x2   Inline100 Entity         3.665 [3.643-3.669] main   1.8x  C 1.437 (2.55x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+1000000x2   Inline100 Floor          2.786 [2.768-2.791] main   2.4x  C 0.843 (3.30x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+1000000x2   Inline100 FloorUnrolled  2.936 [2.928-2.956] main   2.3x  C 0.843 (3.48x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+1000000x2   Fixed2    Chunk          1.386 [1.382-1.391] main   4.9x  C 1.437 (0.96x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=28+8
+1000000x2   Fixed2    ChunkUnrolled  1.174 [1.169-1.191] main   5.7x  C 1.437 (0.82x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=28+8
+1000000x2   Fixed2    Entity         1.167 [1.148-1.177] main   5.8x  C 1.437 (0.81x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=28+8
+1000000x2   Fixed2    Floor          0.912 [0.893-0.936] main   7.4x  C 0.843 (1.08x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=28+8
+1000000x2   Fixed2    FloorUnrolled  0.895 [0.877-0.904] main   7.5x  C 0.843 (1.06x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=28+8
+1000000x4   Heap      Chunk          2.869 [2.869-2.871] main   3.0x  C 1.815 (1.58x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+1000000x4   Heap      ChunkUnrolled  2.936 [2.872-2.967] main   3.0x  C 1.815 (1.62x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+1000000x4   Heap      Entity         2.871 [2.853-2.895] main   3.0x  C 1.815 (1.58x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+1000000x4   Heap      Floor          2.729 [2.723-2.732] main   3.2x  C 1.044 (2.61x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+1000000x4   Heap      FloorUnrolled  2.722 [2.677-2.738] main   3.2x  C 1.044 (2.61x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=40+8
+1000000x4   Inline2   Chunk          2.845 [2.817-2.861] main   3.1x  C 1.815 (1.57x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+1000000x4   Inline2   ChunkUnrolled  2.982 [2.847-2.991] main   2.9x  C 1.815 (1.64x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+1000000x4   Inline2   Entity         2.826 [2.799-2.872] main   3.1x  C 1.815 (1.56x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=44+8
+1000000x4   Inline4   Chunk          2.019 [1.992-2.024] main   4.3x  C 1.815 (1.11x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+1000000x4   Inline4   ChunkUnrolled  1.861 [1.860-1.911] main   4.7x  C 1.815 (1.03x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+1000000x4   Inline4   Entity         2.017 [2.015-2.082] main   4.3x  C 1.815 (1.11x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=48+8
+1000000x4   Inline8   Chunk          2.033 [2.017-2.047] main   4.3x  C 1.815 (1.12x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+1000000x4   Inline8   ChunkUnrolled  1.881 [1.878-1.891] main   4.6x  C 1.815 (1.04x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+1000000x4   Inline8   Entity         2.023 [2.005-2.066] main   4.3x  C 1.815 (1.11x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=56+8
+1000000x4   Inline100 Chunk          3.959 [3.915-3.965] main   2.2x  C 1.815 (2.18x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+1000000x4   Inline100 ChunkUnrolled  3.572 [3.551-3.643] main   2.4x  C 1.815 (1.97x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+1000000x4   Inline100 Entity         3.558 [3.555-3.559] main   2.4x  C 1.815 (1.96x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+1000000x4   Inline100 Floor          3.026 [3.020-3.044] main   2.9x  C 1.044 (2.90x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+1000000x4   Inline100 FloorUnrolled  3.119 [2.943-3.160] main   2.8x  C 1.044 (2.99x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=64 chunkB=256 inChunk=240+8
+1000000x4   Fixed4    Chunk          1.628 [1.600-1.762] main   5.3x  C 1.815 (0.90x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=32+8
+1000000x4   Fixed4    ChunkUnrolled  1.395 [1.379-1.507] main   6.2x  C 1.815 (0.77x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=32+8
+1000000x4   Fixed4    Entity         1.415 [1.381-1.519] main   6.2x  C 1.815 (0.78x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=32+8
+1000000x4   Fixed4    Floor          1.020 [1.012-1.080] main   8.5x  C 1.044 (0.98x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=32+8
+1000000x4   Fixed4    FloorUnrolled  1.091 [1.054-1.150] main   8.0x  C 1.044 (1.05x C)  hashC=True alloc={'0'} burst={'True'} stable={'True'} cap=128 chunkB=128 inChunk=32+8
+
+Main (PureShapeBench) lines:
+cell rows=1000000 active=2 precombined=True stepMs=6.744 minMs=6.630 maxMs=7.044 nsPerActive=3.37 setupMs=2283 alloc=0 hash=AD61E245D6C37375
+cell rows=1000000 active=4 precombined=True stepMs=8.708 minMs=8.555 maxMs=8.751 nsPerActive=2.18 setupMs=2496 alloc=0 hash=57EC4E7C35FF011D
+cell rows=10000 active=40 precombined=True stepMs=0.722 minMs=0.714 maxMs=0.778 nsPerActive=1.80 setupMs=155 alloc=0 hash=9752CB7E647D8CFB
+cell rows=10000 active=100 precombined=True stepMs=1.397 minMs=1.354 maxMs=1.510 nsPerActive=1.40 setupMs=222 alloc=0 hash=D8CA68502B2F64AA
+cell rows=50000 active=40 precombined=True stepMs=3.202 minMs=3.139 maxMs=3.276 nsPerActive=1.60 setupMs=467 alloc=0 hash=8FF47A321DD2CFF5
+cell rows=50000 active=100 precombined=True stepMs=6.501 minMs=6.399 maxMs=8.480 nsPerActive=1.30 setupMs=867 alloc=0 hash=D0A3C452A2732780
+
+C lines (same session):
+2B-lean-simd         entities=10000 active=40 threads=12 stepMs=0.102 minMs=0.102 nsPerSlot=0.256 slotMB=0.8 hash=72cd4a6f26f7e460
+2B-lean-simd         entities=10000 active=40 threads=12 stepMs=0.104 minMs=0.104 nsPerSlot=0.261 slotMB=0.8 hash=72cd4a6f26f7e460
+2B-lean-simd         entities=10000 active=40 threads=12 stepMs=0.102 minMs=0.101 nsPerSlot=0.255 slotMB=0.8 hash=72cd4a6f26f7e460
+2B-lean-simd         entities=10000 active=100 threads=12 stepMs=0.245 minMs=0.243 nsPerSlot=0.245 slotMB=2.0 hash=27fb9bdf95ed2bce
+2B-lean-simd         entities=10000 active=100 threads=12 stepMs=0.257 minMs=0.251 nsPerSlot=0.257 slotMB=2.0 hash=27fb9bdf95ed2bce
+2B-lean-simd         entities=10000 active=100 threads=12 stepMs=0.250 minMs=0.249 nsPerSlot=0.250 slotMB=2.0 hash=27fb9bdf95ed2bce
+2B-lean-simd         entities=50000 active=40 threads=12 stepMs=0.498 minMs=0.490 nsPerSlot=0.249 slotMB=4.0 hash=6ca8479380b04cc7
+2B-lean-simd         entities=50000 active=40 threads=12 stepMs=0.493 minMs=0.485 nsPerSlot=0.247 slotMB=4.0 hash=6ca8479380b04cc7
+2B-lean-simd         entities=50000 active=40 threads=12 stepMs=0.494 minMs=0.484 nsPerSlot=0.247 slotMB=4.0 hash=6ca8479380b04cc7
+2B-lean-simd         entities=50000 active=100 threads=12 stepMs=1.199 minMs=1.158 nsPerSlot=0.240 slotMB=10.0 hash=734fa5636bc5c8e2
+2B-lean-simd         entities=50000 active=100 threads=12 stepMs=1.197 minMs=1.169 nsPerSlot=0.239 slotMB=10.0 hash=734fa5636bc5c8e2
+2B-lean-simd         entities=50000 active=100 threads=12 stepMs=1.261 minMs=1.196 nsPerSlot=0.252 slotMB=10.0 hash=734fa5636bc5c8e2
+2B-lean-simd         entities=1000000 active=2 threads=12 stepMs=1.437 minMs=1.400 nsPerSlot=0.718 slotMB=4.0 hash=4b946a5b328971ed
+2B-lean-simd         entities=1000000 active=2 threads=12 stepMs=1.464 minMs=1.402 nsPerSlot=0.732 slotMB=4.0 hash=4b946a5b328971ed
+2B-lean-simd         entities=1000000 active=2 threads=12 stepMs=1.433 minMs=1.392 nsPerSlot=0.716 slotMB=4.0 hash=4b946a5b328971ed
+2B-lean-simd         entities=1000000 active=4 threads=12 stepMs=1.823 minMs=1.754 nsPerSlot=0.456 slotMB=8.0 hash=adfeea30b8a7db43
+2B-lean-simd         entities=1000000 active=4 threads=12 stepMs=1.788 minMs=1.743 nsPerSlot=0.447 slotMB=8.0 hash=adfeea30b8a7db43
+2B-lean-simd         entities=1000000 active=4 threads=12 stepMs=1.815 minMs=1.744 nsPerSlot=0.454 slotMB=8.0 hash=adfeea30b8a7db43
+2B-read-only-floor   entities=10000 active=40 threads=12 stepMs=0.054 minMs=0.053 nsPerSlot=0.135 slotMB=0.8 hash=9e30277d44893e0a
+2B-read-only-floor   entities=10000 active=40 threads=12 stepMs=0.054 minMs=0.053 nsPerSlot=0.135 slotMB=0.8 hash=9e30277d44893e0a
+2B-read-only-floor   entities=10000 active=40 threads=12 stepMs=0.062 minMs=0.058 nsPerSlot=0.154 slotMB=0.8 hash=9e30277d44893e0a
+2B-read-only-floor   entities=10000 active=100 threads=12 stepMs=0.127 minMs=0.126 nsPerSlot=0.127 slotMB=2.0 hash=7d82268fe4e368af
+2B-read-only-floor   entities=10000 active=100 threads=12 stepMs=0.128 minMs=0.127 nsPerSlot=0.128 slotMB=2.0 hash=7d82268fe4e368af
+2B-read-only-floor   entities=10000 active=100 threads=12 stepMs=0.123 minMs=0.122 nsPerSlot=0.123 slotMB=2.0 hash=7d82268fe4e368af
+2B-read-only-floor   entities=50000 active=40 threads=12 stepMs=0.253 minMs=0.250 nsPerSlot=0.127 slotMB=4.0 hash=325084e5f89b3cf2
+2B-read-only-floor   entities=50000 active=40 threads=12 stepMs=0.262 minMs=0.257 nsPerSlot=0.131 slotMB=4.0 hash=325084e5f89b3cf2
+2B-read-only-floor   entities=50000 active=40 threads=12 stepMs=0.257 minMs=0.252 nsPerSlot=0.129 slotMB=4.0 hash=325084e5f89b3cf2
+2B-read-only-floor   entities=50000 active=100 threads=12 stepMs=0.603 minMs=0.584 nsPerSlot=0.121 slotMB=10.0 hash=e6a29edd448938fa
+2B-read-only-floor   entities=50000 active=100 threads=12 stepMs=0.624 minMs=0.615 nsPerSlot=0.125 slotMB=10.0 hash=e6a29edd448938fa
+2B-read-only-floor   entities=50000 active=100 threads=12 stepMs=0.623 minMs=0.607 nsPerSlot=0.125 slotMB=10.0 hash=e6a29edd448938fa
+2B-read-only-floor   entities=1000000 active=2 threads=12 stepMs=0.837 minMs=0.811 nsPerSlot=0.419 slotMB=4.0 hash=b99b2dbd3ce14196
+2B-read-only-floor   entities=1000000 active=2 threads=12 stepMs=0.850 minMs=0.793 nsPerSlot=0.425 slotMB=4.0 hash=b99b2dbd3ce14196
+2B-read-only-floor   entities=1000000 active=2 threads=12 stepMs=0.843 minMs=0.787 nsPerSlot=0.421 slotMB=4.0 hash=b99b2dbd3ce14196
+2B-read-only-floor   entities=1000000 active=4 threads=12 stepMs=1.020 minMs=0.987 nsPerSlot=0.255 slotMB=8.0 hash=26aa8143c181f695
+2B-read-only-floor   entities=1000000 active=4 threads=12 stepMs=1.044 minMs=0.989 nsPerSlot=0.261 slotMB=8.0 hash=26aa8143c181f695
+2B-read-only-floor   entities=1000000 active=4 threads=12 stepMs=1.061 minMs=1.003 nsPerSlot=0.265 slotMB=8.0 hash=26aa8143c181f695
+
+Burst-off control, run on the chunk job before 81c7ae3 hoisted its fields (BurstCompiler.Options.EnableBurstCompilation = false, scalar twin, burst=False means the managed path ran):
+characters=10000 active=40 layout=Heap shape=ChunkUnrolled chunkCapacity=128 chunkBytesPerCharacter=128 bytesInChunk=40 stepMs=0.344 minMs=0.344 maxMs=0.344 nsPerCharacter=34.43 setupMs=28 alloc=0 burst=False hashStable=True steps=56 hash=eed15f9b2da94a98
+characters=10000 active=40 layout=Heap shape=Entity chunkCapacity=128 chunkBytesPerCharacter=128 bytesInChunk=40 stepMs=0.335 minMs=0.335 maxMs=0.335 nsPerCharacter=33.53 setupMs=27 alloc=0 burst=False hashStable=True steps=56 hash=eed15f9b2da94a98
+characters=10000 active=40 layout=Heap shape=Floor chunkCapacity=128 chunkBytesPerCharacter=128 bytesInChunk=40 stepMs=0.262 minMs=0.262 maxMs=0.262 nsPerCharacter=26.16 setupMs=4 alloc=0 burst=False hashStable=True steps=56 hash=51921ef476ed9ec1
+characters=100000 active=2 layout=Heap shape=ChunkUnrolled chunkCapacity=128 chunkBytesPerCharacter=128 bytesInChunk=40 stepMs=3.307 minMs=3.307 maxMs=3.307 nsPerCharacter=33.07 setupMs=24 alloc=0 burst=False hashStable=True steps=56 hash=dd871f78fbe05652
+characters=100000 active=2 layout=Heap shape=Entity chunkCapacity=128 chunkBytesPerCharacter=128 bytesInChunk=40 stepMs=2.229 minMs=2.229 maxMs=2.229 nsPerCharacter=22.29 setupMs=40 alloc=0 burst=False hashStable=True steps=56 hash=dd871f78fbe05652
+characters=100000 active=2 layout=Heap shape=Floor chunkCapacity=128 chunkBytesPerCharacter=128 bytesInChunk=40 stepMs=3.005 minMs=3.005 maxMs=3.005 nsPerCharacter=30.05 setupMs=36 alloc=0 burst=False hashStable=True steps=56 hash=e4548d13f13ab1b3
+characters=100000 active=2 layout=Fixed2 shape=ChunkUnrolled chunkCapacity=128 chunkBytesPerCharacter=128 bytesInChunk=28 stepMs=1.987 minMs=1.987 maxMs=1.987 nsPerCharacter=19.87 setupMs=15 alloc=0 burst=False hashStable=True steps=56 hash=dd871f78fbe05652
+characters=100000 active=2 layout=Fixed2 shape=Entity chunkCapacity=128 chunkBytesPerCharacter=128 bytesInChunk=28 stepMs=1.472 minMs=1.472 maxMs=1.472 nsPerCharacter=14.72 setupMs=21 alloc=0 burst=False hashStable=True steps=56 hash=dd871f78fbe05652
+characters=100000 active=2 layout=Fixed2 shape=Floor chunkCapacity=128 chunkBytesPerCharacter=128 bytesInChunk=28 stepMs=0.595 minMs=0.595 maxMs=0.595 nsPerCharacter=5.95 setupMs=10 alloc=0 burst=False hashStable=True steps=56 hash=e4548d13f13ab1b3
+
+Profile, 1M x 2, Fixed2 + IJobEntity, 3000 measured steps, perf record -e cycles:u with --control fifo around the measured loop:
+  user cycles: 93.6% job Execute (kernel), 1.6% JobChunkProducer.ExecuteInternal, 2.0% GetRequiredComponentDataPtrRW/RO, 1.8% job queue and work stealing.
+  kernel: 41.9 cycles per character-step (125.8e9 / 3000 / 1e6). C relative_lean._omp_fn.0: 61.5 cycles per character-step (185.1e9 / 3010 / 1e6), libgomp spin 18% of C samples.
+  hottest Burst instructions (skid onto the next instruction): motion.X load 15.7%, row end-lane load 14.0%, vpaddd after the row load 8.4%, origin + frame 6.6%.
+perf stat over the measured loop (all threads, user): Fixed2 Entity 47.4 cycles, 54.6 instructions, 2.85 L1 misses, 0.017 dTLB misses per character-step at 1.215 ms; Fixed2 FloorUnrolled 35.9 cycles, 37.9 instructions at 0.925 ms.
