@@ -35,7 +35,7 @@ public sealed unsafe partial class KindStore
 
     void BuildLeave()
     {
-        _scratch = (ulong*)Zeroed(PlaybackTable.MaxSlots * 17);
+        _scratch = (ulong*)Zeroed((2448 + PlaybackTable.MaxSlots) * 8 + PlaybackTable.MaxSlots);
         _gap = (ushort*)Zeroed((nuint)Math.Max(1, 2 * _rowHalf) * 2);
         for (var t = 0; t < _timelineCount; t++)
         {
@@ -222,39 +222,28 @@ public sealed unsafe partial class KindStore
     }
 
     [MethodImpl(Optimized)]
-    bool DenseStep(int entity, int step, ushort from, ushort to, byte* due, int held, ushort* dues, ulong* records)
+    bool Commit(int entity, int step, ushort to, byte* due, ulong* records, int held, ushort* origins, ushort* dues)
     {
-        var origins = _players.OriginsOf(entity);
-        var leave = _leave + (step > 0 ? 0 : 1 + 2 * _rowHalf);
-        for (var h = 0; h < held; h++) records[h] = leave[(ushort)(origins[due[h]] + from)];
         var ep = _t.EntryPulse;
         var fast = ep != null && (ep[entity >> 6] >> (entity & 63) & 1) != 0 ? 0ul : _t.FastPulseMask;
-        var pushed = 0ul;
+        var kindsOf = _leaveKinds;
         for (var h = 0; h < held; h++)
         {
             var record = records[h];
-            var gap = (ushort)record;
-            if (gap == 0) goto undo;
-            var kinds = _leaveKinds[(byte)(record >> 48)];
-            if (kinds != 0)
-            {
-                if ((kinds & ~fast) != 0) goto undo;
-                pushed |= kinds;
-                var cell = (int)(ushort)(record >> 32);
-                for (; kinds != 0; kinds &= kinds - 1) _pulseHits[Tz(kinds)].Push(entity, cell);
-            }
-            records[h] = (ushort)(origins[due[h]] + (ushort)(record >> 16)) | (ulong)(ushort)(to + step * gap) << 16;
+            if ((ushort)record == 0 || (kindsOf[(byte)(record >> 48)] & ~fast) != 0) return false;
         }
+        var buffers = _pulseHits;
         for (var h = 0; h < held; h++)
         {
-            var origin = (ushort)records[h];
-            if (origins[due[h]] != origin) origins[due[h]] = origin;
-            dues[due[h]] = (ushort)(records[h] >> 16);
+            var record = records[h];
+            var kinds = kindsOf[(byte)(record >> 48)];
+            for (var cell = (int)(ushort)(record >> 32); kinds != 0; kinds &= kinds - 1) buffers[Tz(kinds)].Push(entity, cell);
+            var at = due[h];
+            var origin = (ushort)(origins[at] + (ushort)(record >> 16));
+            if (origins[at] != origin) origins[at] = origin;
+            dues[at] = (ushort)(to + step * (ushort)record);
         }
         return true;
-    undo:
-        for (; pushed != 0; pushed &= pushed - 1) _pulseHits[Tz(pushed)].Rewind(entity);
-        return false;
     }
 
     [MethodImpl(Optimized)]
@@ -266,12 +255,20 @@ public sealed unsafe partial class KindStore
         var spilled = p.Spilled;
         var stride = p.SlotsPerEntity;
         var dense = _players.DenseBits;
+        var orgBase = p.Origins;
         var dueBase = _players.InlineDues;
         var from = _players.DenseClock;
         var to = (ushort)(from + stepDir);
-        var scratch = _scratch;
-        var due = (byte*)(scratch + PlaybackTable.MaxSlots);
-        var map = scratch + PlaybackTable.MaxSlots + PlaybackTable.MaxSlots / 8;
+        var leave = _leave + (stepDir > 0 ? 0 : 1 + 2 * _rowHalf);
+        var kindsOf = _leaveKinds;
+        var buffers = _pulseHits;
+        var ep = _t.EntryPulse;
+        var fastPulse = _t.FastPulseMask;
+        var recs = _scratch;
+        var map = recs + 1024;
+        var pulses = map + 16;
+        var ents = (byte*)(pulses + 1024);
+        var ats = (ushort*)(ents + 1024);
         var magic = (ulong)uint.MaxValue / (ulong)stride + 1;
         for (var w = firstWord; w < endWord; w++)
         {
@@ -280,45 +277,74 @@ public sealed unsafe partial class KindStore
             var baseE = w << 6;
             var fast = stride > 16 ? 0 : dense[w] & bits & ~spilled[w];
             var rest = bits & ~fast;
-            var words = fast == 0 ? 0 : DueMap(dueBase + (nuint)baseE * (nuint)stride, Math.Min(64, p.EntityCount - baseE) * stride, to, map);
-            var cur = -1;
             var held = 0;
+            var bad = 0ul;
+            var closed = ep == null ? 0ul : ep[w];
+            var words = fast == 0 ? 0 : DueMap(dueBase + (nuint)baseE * (nuint)stride, Math.Min(64, p.EntityCount - baseE) * stride, to, map);
+            var org = orgBase + (nuint)baseE * (nuint)stride;
+            var due = dueBase + (nuint)baseE * (nuint)stride;
             for (var m = 0; m < words; m++)
                 for (var hits = map[m]; hits != 0; hits &= hits - 1)
                 {
                     var at = (m << 6) + Tz(hits);
                     var el = (int)((ulong)(uint)at * magic >> 32);
-                    if (el != cur)
-                    {
-                        if (held != 0) Leave(baseE + cur, stepDir, from, to, due, held, scratch, playing, w);
-                        held = 0;
-                        cur = el;
-                        for (var r = rest & ((1ul << el) - 1); r != 0; r &= r - 1) Exact(baseE + Tz(r), stepDir, from, to, due, scratch, playing, w, dense[w], spilled[w], dueBase, stride, counts);
-                        rest &= ~0ul << el;
-                    }
-                    var slot = at - el * stride;
-                    if ((fast >> el & 1) != 0 && slot < counts[baseE + el]) due[held++] = (byte)slot;
+                    if ((fast >> el & 1) == 0 || at - el * stride >= counts[baseE + el]) continue;
+                    var record = leave[(ushort)(org[at] + from)];
+                    var kinds = kindsOf[(byte)(record >> 48)];
+                    if ((ushort)record == 0 || (kinds & ~((closed >> el & 1) != 0 ? 0ul : fastPulse)) != 0) bad |= 1ul << el;
+                    recs[held] = record;
+                    pulses[held] = kinds;
+                    ents[held] = (byte)el;
+                    ats[held++] = (ushort)at;
                 }
-            if (held != 0) Leave(baseE + cur, stepDir, from, to, due, held, scratch, playing, w);
-            for (; rest != 0; rest &= rest - 1) Exact(baseE + Tz(rest), stepDir, from, to, due, scratch, playing, w, dense[w], spilled[w], dueBase, stride, counts);
+            for (var h = 0; h < held;)
+            {
+                for (var k = fastPulse; k != 0; k &= k - 1) buffers[Tz(k)].Room(held - h);
+                var stop = rest | bad;
+                for (; h < held; h++)
+                {
+                    int el = ents[h];
+                    if ((stop & (2ul << el) - 1) != 0) break;
+                    var record = recs[h];
+                    var e = baseE + el;
+                    for (var kinds = pulses[h]; kinds != 0; kinds &= kinds - 1)
+                    {
+                        var buffer = buffers + Tz(kinds);
+                        buffer->Items[buffer->Count++] = new KindPulseHit { Entity = e, Cell = (ushort)(record >> 32) };
+                    }
+                    var at = ats[h];
+                    var origin = (ushort)(org[at] + (ushort)(record >> 16));
+                    if (org[at] != origin) org[at] = origin;
+                    due[at] = (ushort)(to + stepDir * (ushort)record);
+                }
+                if (h == held) break;
+                int next = ents[h];
+                for (var r = rest & ((1ul << next) - 1); r != 0; r &= r - 1) Exact(baseE + Tz(r), stepDir, from, to, playing, w, dense[w], spilled[w], dueBase, stride, counts);
+                rest &= ~0ul << next;
+                if ((bad >> next & 1) == 0) continue;
+                bad &= ~(1ul << next);
+                Undense(baseE + next);
+                Tick(baseE + next, stepDir, to, playing, w);
+                while (h < held && ents[h] == next) h++;
+            }
+            for (; rest != 0; rest &= rest - 1) Exact(baseE + Tz(rest), stepDir, from, to, playing, w, dense[w], spilled[w], dueBase, stride, counts);
         }
     }
 
-    void Leave(int e, int stepDir, ushort from, ushort to, byte* due, int held, ulong* scratch, ulong* playing, int w)
-    {
-        if (DenseStep(e, stepDir, from, to, due, held, _players.DuesOf(e), scratch)) return;
-        Undense(e);
-        Tick(e, stepDir, to, playing, w);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    void Exact(int e, int stepDir, ushort from, ushort to, byte* due, ulong* scratch, ulong* playing, int w, ulong dense, ulong spilled, ushort* dueBase, int stride, int* counts)
+    [MethodImpl(Optimized)]
+    void Exact(int e, int stepDir, ushort from, ushort to, ulong* playing, int w, ulong dense, ulong spilled, ushort* dueBase, int stride, int* counts)
     {
         if ((dense >> e & 1) != 0)
         {
             var dues = (spilled >> e & 1) == 0 ? dueBase + (nuint)e * (nuint)stride : _players.DuesOf(e);
+            var records = _scratch + 2448;
+            var due = (byte*)(records + PlaybackTable.MaxSlots);
             var held = DueSlots(dues, counts[e], to, due);
-            if (held == 0 || DenseStep(e, stepDir, from, to, due, held, dues, scratch)) return;
+            if (held == 0) return;
+            var origins = _players.OriginsOf(e);
+            var leave = _leave + (stepDir > 0 ? 0 : 1 + 2 * _rowHalf);
+            for (var h = 0; h < held; h++) records[h] = leave[(ushort)(origins[due[h]] + from)];
+            if (Commit(e, stepDir, to, due, records, held, origins, dues)) return;
             Undense(e);
         }
         Tick(e, stepDir, to, playing, w);
