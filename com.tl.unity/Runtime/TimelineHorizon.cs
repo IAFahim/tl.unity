@@ -26,6 +26,7 @@ namespace Tl.Unity
         public ushort Tick;
     }
 
+    [global::System.Runtime.InteropServices.StructLayout(global::System.Runtime.InteropServices.LayoutKind.Sequential, Size = 4)]
     public struct PlaybackDense : IComponentData, IEnableableComponent
     {
         public const int Inline = 4;
@@ -60,6 +61,25 @@ namespace Tl.Unity
 
     static unsafe class DueScan
     {
+        public static int Equal(ushort* dues, int count, ushort at, byte* hits)
+        {
+            var held = 0;
+            var i = 0;
+            if (global::Unity.Burst.Intrinsics.X86.Avx2.IsAvx2Supported)
+            {
+                var target = new global::Unity.Burst.Intrinsics.v256(at);
+                for (; i + 16 <= count; i += 16)
+                {
+                    var equal = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_cmpeq_epi16(global::Unity.Burst.Intrinsics.X86.Avx.mm256_loadu_si256(dues + i), target);
+                    for (var bits = (uint)global::Unity.Burst.Intrinsics.X86.Avx2.mm256_movemask_epi8(equal) & 0x55555555u; bits != 0; bits &= bits - 1)
+                        hits[held++] = (byte)(i + (global::Unity.Mathematics.math.tzcnt(bits) >> 1));
+                }
+            }
+            for (; i < count; i++)
+                if (dues[i] == at) hits[held++] = (byte)i;
+            return held;
+        }
+
         public static int Collect(ushort* dues, int count, ushort now, byte* hits, ref int near, ref bool live)
         {
             var held = 0;
