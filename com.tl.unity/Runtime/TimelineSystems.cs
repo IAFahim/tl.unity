@@ -57,7 +57,9 @@ namespace Tl.Unity
                     continue;
                 var slots = new PlaybackSlots(manager.GetBuffer<Playback>(target), entry.Entity, closed);
                 global::Tl.PlaybackRules.Apply(ref slots, view.Timelines, view.TimelineCount, entry.Op, entry.Timeline, entry.At);
-                manager.GetBuffer<TimelineRequest>(target).Clear();
+                var drained = manager.GetBuffer<TimelineRequest>(target);
+                drained.Clear();
+                drained.TrimExcess();
             }
             if (closed.Length == 0)
                 return;

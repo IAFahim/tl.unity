@@ -276,6 +276,7 @@ namespace Tl.Unity
                     for (var r = 0; r < queue.Length; r++)
                         global::Tl.PlaybackRules.Apply(ref slots, Index.Timelines, Index.TimelineCount, queue[r].Op, queue[r].Timeline, queue[r].At);
                     queue.Clear();
+                    queue.TrimExcess();
                     if (clocks != null)
                     {
                         TimelineTicks.Encode((global::Tl.Playback*)playbacks[row].GetUnsafePtr(), playbacks[row].Length, clocks[row]);
