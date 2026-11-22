@@ -417,12 +417,29 @@ namespace KindPure
 
         public void Step(bool forward)
         {
+            Step(forward, true);
+        }
+
+        public void Step(bool forward, bool vitals)
+        {
             if (forward != _forward)
             {
                 _step.SetSingleton(new TimelineStep { Forward = forward });
                 _forward = forward;
             }
-            Step();
+            TickHandle.Update(World.Unmanaged);
+            MovementHandle.Update(World.Unmanaged);
+            if (vitals) VitalsHandle.Update(World.Unmanaged);
+        }
+
+        public int SpilledRows()
+        {
+            Entities.CompleteAllTrackedJobs();
+            var spilled = 0;
+            foreach (var row in Rows)
+                if (Entities.GetBuffer<Playback>(row, true).Length > 4)
+                    spilled++;
+            return spilled;
         }
 
         public void StepEachSystemCompleted(double[] ticksPerSystem)

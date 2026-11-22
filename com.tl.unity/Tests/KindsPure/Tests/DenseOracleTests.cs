@@ -111,5 +111,87 @@ namespace KindPure
             Assert.Greater(denseRowSteps * (control == PureControl.Rates ? 100 : 10), PureControls.Rows * steps, control + " with " + rows + " rows: only " + denseRowSteps + " of " + PureControls.Rows * steps + " row-steps ran dense");
             Assert.AreEqual(PrecombineControlTests.DotNetDigest(control).ToString("X16"), digest.Value.ToString("X16"), control + ": the dense world's per-step state hashes differ from the .NET host's");
         }
+
+        static uint Next(ref uint state)
+        {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            return state;
+        }
+
+        static void RandomControl(IPureRequests both, int row, uint roll)
+        {
+            var timeline = (ushort)(1 + (roll >> 8) % 5);
+            var at = (ushort)((roll >> 16) % 40);
+            switch (roll & 31)
+            {
+                case 6: case 7: case 8: both.Request(row, global::Tl.RequestOp.Pause, timeline, 0); return;
+                case 9: case 10: case 11: both.Request(row, global::Tl.RequestOp.Resume, timeline, 0); return;
+                case 12: case 13: case 14: both.Request(row, global::Tl.RequestOp.Reverse, timeline, (ushort)(at & 1)); return;
+                case 15: case 16: both.Request(row, global::Tl.RequestOp.Speed, timeline, 32); return;
+                case 17: both.Request(row, global::Tl.RequestOp.Speed, timeline, 8); return;
+                case 18: case 19: both.Request(row, global::Tl.RequestOp.Speed, timeline, 16); return;
+                case 20: case 21: case 22: both.Request(row, global::Tl.RequestOp.Seek, timeline, at); return;
+                case 23: case 24: case 25: both.Request(row, global::Tl.RequestOp.Stop, timeline, 0); return;
+                case 26: both.Request(row, global::Tl.RequestOp.StopAll, 0, 0); return;
+                case 27: both.Request(row, global::Tl.RequestOp.Reset, 0, 0); return;
+                default: both.Request(row, global::Tl.RequestOp.Start, timeline, at); return;
+            }
+        }
+
+        [Test]
+        public void DenseRowsMatchExplicitRowsUnderARandomScriptWithRewindsReloadAndSkippedVitals([Values] PureRows rows, [Values(4, 7)] int slots)
+        {
+            const int Rows = 48;
+            const int Steps = 600;
+            const int Calm = 9;
+            using var dense = new PureWorld(Rows, _first, _second, false, rows, true);
+            using var plain = new PureWorld(Rows, _first, _second, false, rows, false);
+            var both = new SameRequestsToBothWorlds { Dense = dense, Explicit = plain };
+            var rng = 0xC0FFEE12u;
+            for (var r = 0; r < Rows; r++)
+                for (var k = 1 + (int)(Next(ref rng) % (uint)slots); k > 0; k--)
+                    both.Request(r, global::Tl.RequestOp.Start, (ushort)(1 + Next(ref rng) % 5), (ushort)(Next(ref rng) % 40));
+            var forward = true;
+            var second = false;
+            int rewinds = 0, controls = 0, skipped = 0, denseRowSteps = 0, spilled = 0;
+            for (var step = 0; step < Steps; step++)
+            {
+                if (step % 97 == 41 || Next(ref rng) % 211 == 0)
+                {
+                    forward = !forward;
+                    rewinds++;
+                }
+                if (step == Steps / 2 || step == Steps * 3 / 4)
+                {
+                    second = !second;
+                    dense.HotSwapLibrary(second);
+                    plain.HotSwapLibrary(second);
+                }
+                for (var r = 0; r < Rows; r++)
+                {
+                    if (Next(ref rng) % Calm != 0) continue;
+                    RandomControl(both, r, Next(ref rng));
+                    controls++;
+                }
+                var vitals = step % 23 is < 5 or > 10;
+                if (!vitals) skipped++;
+                dense.Step(forward, vitals);
+                plain.Step(forward, vitals);
+                var differs = FirstDifference(dense, plain, step);
+                if (differs.Length != 0)
+                    Assert.Fail(rows + " rows, " + slots + " slots: the dense world left the explicit one at " + differs);
+                denseRowSteps += dense.DenseRows();
+                spilled += dense.SpilledRows();
+            }
+            UnityEngine.Debug.Log("TlDenseOracle: random " + rows + " slots=" + slots + " denseRowSteps=" + denseRowSteps + " of " + Rows * Steps + " rewinds=" + rewinds + " controls=" + controls + " skippedVitals=" + skipped + " spilledRowSteps=" + spilled);
+            Assert.AreEqual(0, plain.DenseRows(), "the explicit world has no dense components and must never run dense");
+            Assert.Greater(denseRowSteps * 10, Rows * Steps, "only " + denseRowSteps + " of " + Rows * Steps + " row-steps ran dense");
+            Assert.Greater(rewinds, 4, "the script rewound the world too rarely");
+            Assert.Greater(controls, Rows * 4, "the script sent too few controls");
+            Assert.Greater(skipped, 0, "the script never skipped the Vitals system");
+            if (slots > 4) Assert.Greater(spilled, 0, "no row spilled past the four inline playback slots");
+        }
     }
 }
