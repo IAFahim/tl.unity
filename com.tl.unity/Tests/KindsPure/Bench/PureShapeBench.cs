@@ -43,13 +43,16 @@ namespace KindPure
             Row(writer, "env unity=" + UnityEngine.Application.unityVersion + " burst=" + Unity.Burst.BurstCompiler.IsEnabled + " workers=" + Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerCount + " timelines=" + TimelineCount + " live=" + LiveTracks + " warmup=" + warmup + " measure=" + measure + " runs=" + runs);
             var library = Library(LiveTracks);
             var split = Array.IndexOf(args, "-pureSplit") >= 0;
+            var every = 0;
+            for (var i = 0; i + 1 < args.Length; i++)
+                if (args[i] == "-pureRequestEvery") every = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
             foreach (var rowsText in rowsList.Split(','))
             foreach (var activeText in activeList.Split(','))
             {
                 var rows = int.Parse(rowsText, CultureInfo.InvariantCulture);
                 var active = int.Parse(activeText, CultureInfo.InvariantCulture);
                 if (split) Split(writer, library, rows, active, warmup, measure);
-                else Cell(writer, library, rows, active, warmup, measure, runs);
+                else Cell(writer, library, rows, active, warmup, measure, runs, every);
             }
         }
 
@@ -173,17 +176,20 @@ namespace KindPure
             return game.Hash();
         }
 
-        static void Cell(StreamWriter writer, byte[] library, int rows, int active, int warmup, int measure, int runs)
+        static void Cell(StreamWriter writer, byte[] library, int rows, int active, int warmup, int measure, int runs, int every)
         {
             var medians = new List<double>();
             var hash = 0ul;
             long allocated = 0;
             double setupMs = 0;
             var precombined = false;
+            var requestHeap = 0;
+            var chunkCapacity = 0;
             for (var run = 0; run < runs; run++)
             {
                 var setup = Stopwatch.StartNew();
                 using var game = World(library, rows, active);
+                game.RequestEvery(every);
                 game.Step();
                 game.Entities.CompleteAllTrackedJobs();
                 setupMs = setup.Elapsed.TotalMilliseconds;
@@ -202,13 +208,15 @@ namespace KindPure
                 allocated = Math.Max(allocated, spent);
                 Array.Sort(samples);
                 medians.Add(samples[measure / 2]);
+                requestHeap = game.RequestHeapBytes(4096);
+                chunkCapacity = game.Entities.GetChunk(game.Rows[0]).Archetype.ChunkCapacity;
                 hash = game.Hash();
                 precombined = game.Precombined("KindPure.Locomotion") && game.Precombined("KindPure.Lift");
             }
             medians.Sort();
             var ms = medians[medians.Count / 2];
-            Row(writer, string.Format(CultureInfo.InvariantCulture, "cell rows={0} active={1} precombined={2} stepMs={3:F3} minMs={4:F3} maxMs={5:F3} nsPerActive={6:F2} setupMs={7:F0} alloc={8} hash={9:X16}",
-                rows, active, precombined, ms, medians[0], medians[medians.Count - 1], ms * 1e6 / ((double)rows * active), setupMs, allocated, hash));
+            Row(writer, string.Format(CultureInfo.InvariantCulture, "cell rows={0} active={1} requestEvery={10} precombined={2} stepMs={3:F3} minMs={4:F3} maxMs={5:F3} nsPerActive={6:F2} setupMs={7:F0} alloc={8} chunkCapacity={11} requestHeapBytesPerRow={12} hash={9:X16}",
+                rows, active, precombined, ms, medians[0], medians[medians.Count - 1], ms * 1e6 / ((double)rows * active), setupMs, allocated, hash, every, chunkCapacity, requestHeap));
         }
     }
 }
