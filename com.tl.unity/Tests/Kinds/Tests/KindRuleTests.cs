@@ -50,6 +50,7 @@ namespace KindGame
                 PlaybackHandle = state.GetBufferTypeHandle<Playback>(false),
                 PlayingHandle = state.GetComponentTypeHandle<TimelinePlaying>(false),
                 ClockHandle = state.GetComponentTypeHandle<TimelineClock>(true),
+                DenseHandle = state.GetComponentTypeHandle<PlaybackDense>(false),
                 Swapped = changed,
             }.Run(targets);
         }

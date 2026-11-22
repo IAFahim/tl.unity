@@ -16,6 +16,7 @@ namespace Tl.Unity
         BufferTypeHandle<Playback> _playbackHandle;
         ComponentTypeHandle<TimelinePlaying> _playingHandle;
         ComponentTypeHandle<TimelineClock> _clockHandle;
+        ComponentTypeHandle<PlaybackDense> _denseHandle;
 
         public void OnCreate(ref SystemState state)
         {
@@ -28,6 +29,7 @@ namespace Tl.Unity
             _playbackHandle = state.GetBufferTypeHandle<Playback>(false);
             _playingHandle = state.GetComponentTypeHandle<TimelinePlaying>(false);
             _clockHandle = state.GetComponentTypeHandle<TimelineClock>(true);
+            _denseHandle = state.GetComponentTypeHandle<PlaybackDense>(false);
             state.RequireForUpdate(_store);
             state.RequireForUpdate<TlTimelineSet>();
         }
@@ -106,12 +108,15 @@ namespace Tl.Unity
             _playbackHandle.Update(ref state);
             _playingHandle.Update(ref state);
             _clockHandle.Update(ref state);
+            _denseHandle.Update(ref state);
             new TlTimelineSwapJob
             {
                 Index = index,
                 PlaybackHandle = _playbackHandle,
                 PlayingHandle = _playingHandle,
                 ClockHandle = _clockHandle,
+                DenseHandle = _denseHandle,
+                DenseClock = TimelineTicks.DenseClock(state.EntityManager),
                 Handles = handles,
                 Swapped = ids,
             }.Run(_playbacks);

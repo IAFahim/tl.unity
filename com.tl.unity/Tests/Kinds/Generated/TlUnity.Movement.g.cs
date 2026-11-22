@@ -19,6 +19,8 @@ public bool Forward;
 [ReadOnly] public BufferTypeHandle<global::Tl.Unity.Playback> PlaybackHandle;
 [ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelineClock> ClockHandle;
 [ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelinePlaying> PlayingHandle;
+[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.PlaybackDense> DenseHandle;
+public ushort DenseClock;
 public ComponentTypeHandle<Movement_MotionData> MotionHandle;
 [ReadOnly] public ComponentTypeHandle<Movement_WalkStatData> WalkStatHandle;
 [ReadOnly] public ComponentTypeHandle<Movement_JumpPowerData> JumpPowerHandle;
@@ -81,6 +83,7 @@ if (__l2 && __c4 != null) Kind_2(chunk, __c0, __c1, __c2, __c3, __c4);
 void Kind_0(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Motion* __c0, global::KindGame.WalkStat* __c1, global::KindGame.JumpPower* __c2, global::KindGame.Target* __c3, global::KindGame.Stamina* __c4)
 {
 var __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle);
+var __dn = chunk.GetEnableableBits(ref DenseHandle);
 if (!chunk.Has(ref LiftEntryHandle)) return;
 var __kid = KindSlot_0 != 0 ? KindSlot_0 - 2 : Index.KindOf(-1807956668);
 if (__kid < 0) return;
@@ -109,7 +112,7 @@ var __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr();
 var __cnt = __pbuf.Length;
 var __smp = __copies == null ? 0 : (int)__copies[__row].Copies;
 if (__cnt + __smp > __pbuf.Capacity) __smp = 0;
-var __clock = __clocks == null ? (ushort)0 : __clocks[__row];
+var __clock = global::Tl.Unity.TimelineTicks.ClockOf(__dn, DenseClock, __clocks, __row);
 var __listed = false;
 var __sampled = __smp != 0;
 var __sk = __sampled ? global::Tl.KindRules.Depth(__run + __cnt, __smp) : 1;
@@ -256,6 +259,7 @@ if (__buf.Capacity > global::KindGame.KindCapacity.Lift && __buf.Length <= globa
 void Kind_1(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks, global::KindGame.Motion* __c0, global::KindGame.WalkStat* __c1, global::KindGame.JumpPower* __c2, global::KindGame.Target* __c3, global::KindGame.Stamina* __c4)
 {
 var __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle);
+var __dn = chunk.GetEnableableBits(ref DenseHandle);
 if (!chunk.Has(ref LocomotionEntryHandle)) return;
 var __kid = KindSlot_1 != 0 ? KindSlot_1 - 2 : Index.KindOf(762452220);
 if (__kid < 0) return;
@@ -284,7 +288,7 @@ var __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr();
 var __cnt = __pbuf.Length;
 var __smp = __copies == null ? 0 : (int)__copies[__row].Copies;
 if (__cnt + __smp > __pbuf.Capacity) __smp = 0;
-var __clock = __clocks == null ? (ushort)0 : __clocks[__row];
+var __clock = global::Tl.Unity.TimelineTicks.ClockOf(__dn, DenseClock, __clocks, __row);
 var __listed = false;
 var __sampled = __smp != 0;
 var __sk = __sampled ? global::Tl.KindRules.Depth(__run + __cnt, __smp) : 1;
@@ -413,6 +417,7 @@ void Kind_2(in ArchetypeChunk chunk, global::KindGame.Motion* __c0, global::Kind
 var __pbReady = false;
 var __playbacks = default(BufferAccessor<global::Tl.Unity.Playback>);
 ushort* __clocks = null;
+var __dn = chunk.GetEnableableBits(ref DenseHandle);
 if (!chunk.Has(ref StatChangeEntryHandle)) return;
 var __kid = KindSlot_2 != 0 ? KindSlot_2 - 2 : Index.KindOf(-1931731205);
 if (__kid < 0) return;
@@ -441,7 +446,7 @@ var __sampled = __smp != 0;
 if (__sampled)
 {
 if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle); __pbReady = true; }
-var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; if (__cnt + __smp > __pbuf.Capacity) __smp = 0; __sampled = __smp != 0; __clock = __clocks == null ? (ushort)0 : __clocks[__row]; __rowInit = true;
+var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; if (__cnt + __smp > __pbuf.Capacity) __smp = 0; __sampled = __smp != 0; __clock = global::Tl.Unity.TimelineTicks.ClockOf(__dn, DenseClock, __clocks, __row); __rowInit = true;
 }
 var __sk = __sampled ? global::Tl.KindRules.Depth(__run + __cnt, __smp) : 1;
 for (var __sj = 0; __sj < __sk; __sj++)
@@ -461,7 +466,7 @@ __en->Flags &= ~global::Tl.KindEntryFlags.Ready;
 }
 else
 {
-if (!__rowInit) { if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle); __pbReady = true; } var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; __clock = __clocks == null ? (ushort)0 : __clocks[__row]; __rowInit = true; }
+if (!__rowInit) { if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle); __pbReady = true; } var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; __clock = global::Tl.Unity.TimelineTicks.ClockOf(__dn, DenseClock, __clocks, __row); __rowInit = true; }
 var __pb = __run + __en->Slot;
 var __tl = Index.Timelines + (__en->Timeline - 1);
 ushort __tick = __en->Slot < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;
@@ -515,6 +520,7 @@ if (__buf.Capacity > global::KindGame.KindCapacity.StatChange) __buf.TrimExcess(
 void Events(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks)
 {
 var __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle);
+var __dn = chunk.GetEnableableBits(ref DenseHandle);
 byte* __h0 = stackalloc byte[global::Tl.Events<global::KindGame.Cue>.HeaderBytes];
 var __has0 = chunk.Has(ref CuesEventHandle);
 var __acc0 = __has0 ? chunk.GetBufferAccessor(ref CuesEventHandle) : default;
@@ -538,7 +544,7 @@ var __pb = __pbs + __s;
 if (__pb->Timeline == 0 || (__pb->Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Stopping)) != 0) continue;
 var __tl = global::Tl.LibraryViewReader.GetTimeline(in View, new global::Tl.TimelineId(__pb->Timeline));
 if (__tl == null || __tl->Duration == 0) continue;
-var __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);
+var __tick = global::Tl.Unity.TimelineTicks.Real(__pb, global::Tl.Unity.TimelineTicks.ClockOf(__dn, DenseClock, __clocks, __row));
 var __stage = global::Tl.LibraryViewReader.StageAt(__tl, __tick);
 if (__stage == null) continue;
 var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
@@ -578,9 +584,11 @@ public static partial class TimelineJobs
 public struct Movement
 {
 EntityQuery _query;
+EntityQuery _dense;
 BufferTypeHandle<global::Tl.Unity.Playback> _PlaybackHandle;
 ComponentTypeHandle<global::Tl.Unity.TimelineClock> _ClockHandle;
 ComponentTypeHandle<global::Tl.Unity.TimelinePlaying> _PlayingHandle;
+ComponentTypeHandle<global::Tl.Unity.PlaybackDense> _DenseHandle;
 ComponentTypeHandle<Movement_MotionData> _MotionHandle;
 ComponentTypeHandle<Movement_WalkStatData> _WalkStatHandle;
 ComponentTypeHandle<Movement_JumpPowerData> _JumpPowerHandle;
@@ -612,6 +620,7 @@ builder.Dispose();
 jobs._PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true);
 jobs._ClockHandle = state.GetComponentTypeHandle<global::Tl.Unity.TimelineClock>(true);
 jobs._PlayingHandle = state.GetComponentTypeHandle<global::Tl.Unity.TimelinePlaying>(true);
+jobs._DenseHandle = state.GetComponentTypeHandle<global::Tl.Unity.PlaybackDense>(true);
 jobs._MotionHandle = state.GetComponentTypeHandle<Movement_MotionData>(false);
 jobs._WalkStatHandle = state.GetComponentTypeHandle<Movement_WalkStatData>(true);
 jobs._JumpPowerHandle = state.GetComponentTypeHandle<Movement_JumpPowerData>(true);
@@ -627,6 +636,7 @@ jobs._LocomotionEnabledHandle = state.GetComponentTypeHandle<global::KindGame.Lo
 jobs._StatChangeEntryHandle = state.GetBufferTypeHandle<global::KindGame.StatChangeEntry>(false);
 jobs._StatChangeActiveHandle = state.GetComponentTypeHandle<global::KindGame.StatChangeActive>(false);
 jobs._StatChangeEnabledHandle = state.GetComponentTypeHandle<global::KindGame.StatChangeEnabled>(true);
+jobs._dense = global::Tl.Unity.TimelineTicks.DenseQuery(ref state);
 return jobs;
 }
 public JobHandle Schedule(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward, global::KindGame.AnchorLookup Anchors, JobHandle dependsOn)
@@ -634,6 +644,7 @@ public JobHandle Schedule(ref SystemState state, global::Tl.LibraryView view, gl
 _PlaybackHandle.Update(ref state);
 _ClockHandle.Update(ref state);
 _PlayingHandle.Update(ref state);
+_DenseHandle.Update(ref state);
 _MotionHandle.Update(ref state);
 _WalkStatHandle.Update(ref state);
 _JumpPowerHandle.Update(ref state);
@@ -652,13 +663,14 @@ _StatChangeEnabledHandle.Update(ref state);
 var __id0 = index.KindOf(-1807956668);
 var __id1 = index.KindOf(762452220);
 var __id2 = index.KindOf(-1931731205);
-var job = new MovementChunkJob { View = view, Index = index, Forward = forward
+var job = new MovementChunkJob { View = view, Index = index, Forward = forward, DenseClock = global::Tl.Unity.TimelineTicks.DenseClock(_dense)
 , KindSlot_0 = __id0 + 2
 , KindSlot_1 = __id1 + 2
 , KindSlot_2 = __id2 + 2
 , PlaybackHandle = _PlaybackHandle
 , ClockHandle = _ClockHandle
 , PlayingHandle = _PlayingHandle
+, DenseHandle = _DenseHandle
 , MotionHandle = _MotionHandle
 , WalkStatHandle = _WalkStatHandle
 , JumpPowerHandle = _JumpPowerHandle
