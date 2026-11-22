@@ -450,7 +450,7 @@ namespace Tl.Unity
                     if (dense.Has(row))
                     {
                         if (nexts[row].Next != to) continue;
-                        if (DenseStep(in tables, ref sink, playbacks[row], origins[row], ref nexts[row].Next, row, to, hits, records)) continue;
+                        if (DenseStep(in tables, ref sink, playbacks[row], origins[row], ref nexts[row].Next, row, to, hits, records, clocks == null)) continue;
                         Undense(in chunk, ref dense, playbacks, row, horizons, clocks, dues);
                     }
                     bool live;
@@ -502,7 +502,7 @@ namespace Tl.Unity
             }
         }
 
-        bool DenseStep(in global::Tl.KindTables tables, ref UnityPulseSink sink, DynamicBuffer<Playback> buffer, DynamicBuffer<PlaybackOrigin> originBuffer, ref ushort next, int row, ushort to, byte* hits, ulong* records)
+        bool DenseStep(in global::Tl.KindTables tables, ref UnityPulseSink sink, DynamicBuffer<Playback> buffer, DynamicBuffer<PlaybackOrigin> originBuffer, ref ushort next, int row, ushort to, byte* hits, ulong* records, bool lanes)
         {
             var n = buffer.Length;
             if (originBuffer.Length != 2 * n) return false;
@@ -525,7 +525,7 @@ namespace Tl.Unity
             var leave = plan->Leave + (step > 0 ? 0 : plan->Rows);
             var from = DenseFrom;
             for (var h = 0; h < held; h++) records[h] = leave[(ushort)(origins[hits[h]] + from)];
-            var fast = sink.Active ? tables.FastPulseMask : 0ul;
+            var fast = lanes && sink.Active ? tables.FastPulseMask : 0ul;
             var pushed = 0ul;
             for (var h = 0; h < held; h++)
             {
