@@ -22,6 +22,8 @@ public sealed class TlKindAttribute : Attribute
     public int Inline { get; set; }
     public int GamePulses { get; set; }
     public bool Associative { get; set; }
+    public KindCombine Combine { get; set; }
+    public string? Priority { get; set; }
 }
 
 [AttributeUsage(AttributeTargets.Struct)]
