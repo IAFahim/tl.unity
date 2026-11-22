@@ -1561,9 +1561,20 @@ namespace Tl.Gen.Unity
             foreach (var i in fused)
             {
                 var kind = kinds[i].Decl;
-                W(writer, Lanes(kind)
-                    ? "{ var __rv = (" + kind.ValueTypeName + "*)(__vdv" + i + " + __ro); " + LaneOp(kind, "__ft" + i, "(*__rv)") + "}"
-                    : "if ((__m & __vm" + i + ") != 0) { ref readonly var __sv = ref *(" + kind.ValueTypeName + "*)(__vdv" + i + " + __ro); if (__fh" + i + ") " + kind.TypeName + ".Combine(ref __ft" + i + ", in __sv); else { __ft" + i + " = __sv; __fh" + i + " = true; } }");
+                if (Lanes(kind))
+                    W(writer, "{ var __rv = (" + kind.ValueTypeName + "*)(__vdv" + i + " + __ro); " + LaneOp(kind, "__ft" + i, "(*__rv)") + "}");
+                else if (kind.Monoid == 5)
+                {
+                    var t = kind.ValueTypeName;
+                    var priority = kind.LaneFields[0].Path;
+                    W(writer, "{ var __pr = (__m & __vm" + i + ") != 0; var __sv = (" + t + "*)(__vdv" + i + " + __ro); var __tk = __pr & (!__fh" + i + " | __sv->" + priority + " >= __ft" + i + "." + priority + ");");
+                    W(writer, "if (sizeof(" + t + ") == 8) { var __nv = *(ulong*)__sv; ref var __bits = ref global::Unity.Collections.LowLevel.Unsafe.UnsafeUtility.As<" + t + ", ulong>(ref __ft" + i + "); __bits = __tk ? __nv : __bits; }");
+                    W(writer, "else if (sizeof(" + t + ") == 4) { var __nv = *(uint*)__sv; ref var __bits = ref global::Unity.Collections.LowLevel.Unsafe.UnsafeUtility.As<" + t + ", uint>(ref __ft" + i + "); __bits = __tk ? __nv : __bits; }");
+                    W(writer, "else if (__tk) __ft" + i + " = *__sv;");
+                    W(writer, "__fh" + i + " |= __pr; }");
+                }
+                else
+                    W(writer, "if ((__m & __vm" + i + ") != 0) { ref readonly var __sv = ref *(" + kind.ValueTypeName + "*)(__vdv" + i + " + __ro); if (__fh" + i + ") " + kind.TypeName + ".Combine(ref __ft" + i + ", in __sv); else { __ft" + i + " = __sv; __fh" + i + " = true; } }");
             }
             W(writer, "}");
             foreach (var i in fused)
