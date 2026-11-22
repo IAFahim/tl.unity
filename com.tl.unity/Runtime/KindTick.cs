@@ -443,7 +443,13 @@ namespace Tl.Unity
             var records = stackalloc ulong[KindDense.MaxSlots];
             var heads = stackalloc ushort*[64];
             var tails = stackalloc ushort*[64];
+            var batchSlot = stackalloc byte[64 * PlaybackDense.Inline];
+            var batchRecord = stackalloc ulong[64 * PlaybackDense.Inline];
+            var batchEnd = stackalloc int[64];
             var lanes = clocks == null;
+            var plan = Index.Dense;
+            var leave = plan->Leave + (StepDir > 0 ? 0 : plan->Rows);
+            var from = DenseFrom;
             for (var kw = 0; kw < 2; kw++)
             {
                 if (kw == 1 && count <= 64) break;
@@ -456,6 +462,8 @@ namespace Tl.Unity
                     var bit = (int)global::Unity.Mathematics.math.tzcnt(scan);
                     due |= (nexts[(kw << 6) + bit].Next == to ? 1ul : 0ul) << bit;
                 }
+                var batched = 0;
+                var spilled = 0ul;
                 for (var gather = due; gather != 0; gather &= gather - 1)
                 {
                     var bit = (int)global::Unity.Mathematics.math.tzcnt(gather);
@@ -463,15 +471,27 @@ namespace Tl.Unity
                     var n = nexts[at].Count;
                     if (n <= PlaybackDense.Inline)
                     {
-                        heads[bit] = inlineOrigins + at * PlaybackDense.Inline;
-                        tails[bit] = inlineDues + at * PlaybackDense.Inline;
+                        var o = inlineOrigins + at * PlaybackDense.Inline;
+                        var d = inlineDues + at * PlaybackDense.Inline;
+                        heads[bit] = o;
+                        tails[bit] = d;
+                        for (var i = 0; i < n; i++)
+                        {
+                            if (d[i] != to) continue;
+                            batchSlot[batched] = (byte)i;
+                            batchRecord[batched] = leave[(ushort)(o[i] + from)];
+                            batched++;
+                        }
                     }
                     else
                     {
+                        spilled |= 1ul << bit;
                         heads[bit] = (ushort*)spills[at].GetUnsafePtr();
                         tails[bit] = heads[bit] + n;
                     }
+                    batchEnd[bit] = batched;
                 }
+                var cursor = 0;
                 for (var kb = (playingWord & ~denseWord) | due; kb != 0; kb &= kb - 1)
                 {
                     var bit = (int)global::Unity.Mathematics.math.tzcnt(kb);
@@ -479,7 +499,16 @@ namespace Tl.Unity
                     sink.IsActive = !anyClosed || !ctx.IsClosed(row);
                     if ((due >> bit & 1) != 0)
                     {
-                        if (DenseStep(in tables, ref sink, playbacks, heads[bit], tails[bit], nexts[row].Count, ref nexts[row].Next, row, to, hits, records, lanes)) continue;
+                        if ((spilled >> bit & 1) != 0)
+                        {
+                            if (DenseStep(in tables, ref sink, playbacks, heads[bit], tails[bit], nexts[row].Count, ref nexts[row].Next, row, to, hits, records, lanes)) continue;
+                        }
+                        else
+                        {
+                            var first = cursor;
+                            cursor = batchEnd[bit];
+                            if (DenseCommit(in tables, ref sink, playbacks, heads[bit], tails[bit], nexts[row].Count, batchSlot + first, batchRecord + first, cursor - first, ref nexts[row].Next, row, to, lanes)) continue;
+                        }
                         Undense(in chunk, ref dense, playbacks, row, horizons, clocks, dues);
                     }
                     else if (copiesRo != null && copiesRo[row].Copies != 0) ctx.Sampled(row, 0);
@@ -530,6 +559,51 @@ namespace Tl.Unity
                     if (touched) TryDensify(in chunk, ref dense, playbacks[row], spills[row], inlineOrigins + row * PlaybackDense.Inline, inlineDues + row * PlaybackDense.Inline, ref nexts[row], row, to, clocks);
                 }
             }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        bool DenseCommit(in global::Tl.KindTables tables, ref UnityPulseSink sink, BufferAccessor<Playback> playbacks, ushort* origins, ushort* dues, int n, byte* slots, ulong* records, int held, ref ushort next, int row, ushort to, bool lanes)
+        {
+            var fast = lanes && sink.Active ? tables.FastPulseMask : 0ul;
+            var plan = Index.Dense;
+            var shifted = false;
+            for (var h = 0; h < held; h++)
+            {
+                var record = records[h];
+                if ((ushort)record == 0) return false;
+                if ((plan->LeaveKinds[(byte)(record >> 48)] & ~fast) != 0) return false;
+                shifted |= (ushort)(record >> 16) != 0;
+            }
+            for (var h = 0; h < held; h++)
+            {
+                var record = records[h];
+                var kinds = plan->LeaveKinds[(byte)(record >> 48)];
+                var cell = (int)(ushort)(record >> 32);
+                for (; kinds != 0; kinds &= kinds - 1) sink.Push(in tables, (int)global::Unity.Mathematics.math.tzcnt(kinds), row, cell);
+            }
+            var step = StepDir;
+            global::Tl.Playback* playback = shifted ? (global::Tl.Playback*)playbacks[row].GetUnsafePtr() : null;
+            for (var h = 0; h < held; h++)
+            {
+                var i = slots[h];
+                var record = records[h];
+                var shift = (ushort)(record >> 16);
+                if (shift != 0)
+                {
+                    origins[i] = (ushort)(origins[i] + shift);
+                    var s = playback + i;
+                    if (s->Timeline != 0) s->Tick = (s->Flags & global::Tl.PlaybackFlags.Reverse) != 0 ? (ushort)(s->Tick - shift) : (ushort)(s->Tick + shift);
+                }
+                dues[i] = (ushort)(to + step * (ushort)record);
+            }
+            var least = (int)ushort.MaxValue;
+            for (var i = 0; i < n; i++)
+            {
+                var ahead = (ushort)((dues[i] - to) * step);
+                if (ahead < least) least = ahead;
+            }
+            next = (ushort)(to + step * least);
+            return true;
         }
 
         bool DenseStep(in global::Tl.KindTables tables, ref UnityPulseSink sink, BufferAccessor<Playback> playbacks, ushort* origins, ushort* dues, int n, ref ushort next, int row, ushort to, byte* hits, ulong* records, bool lanes)
