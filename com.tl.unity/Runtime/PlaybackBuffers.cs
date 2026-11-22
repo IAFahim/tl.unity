@@ -20,7 +20,7 @@ namespace Tl.Unity
         public global::Tl.TimelineId Timeline;
     }
 
-    [InternalBufferCapacity(4)]
+    [InternalBufferCapacity(0)]
     public struct TimelineRequest : IBufferElementData
     {
         public int Slot;
