@@ -1,0 +1,13 @@
+diff --git i/com.tl.unity/Runtime/KindDense.cs w/com.tl.unity/Runtime/KindDense.cs
+index 2d6bd6c..747b7d7 100644
+--- i/com.tl.unity/Runtime/KindDense.cs
++++ w/com.tl.unity/Runtime/KindDense.cs
+@@ -35,7 +35,7 @@ namespace Tl.Unity
+         public bool Fits => Half > 0;
+ 
+         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+-        public int RowOf(int timeline, int duration, bool reverse, int tick) => RowBase[timeline] + (reverse ? Half + duration - 1 - tick : tick);
++        public int RowOf(int timeline, int duration, bool reverse, int tick) => RowBase[timeline] + (reverse ? Half + tick : tick);
+ 
+         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+         public ushort GapOf(int timeline, int direction, int tick) => Gap[(direction > 0 ? 0 : Half) + RowBase[timeline] - 1 + tick];
