@@ -108,7 +108,7 @@ namespace KindPure
             }
             Assert.AreEqual(0, plain.DenseRows(), "the explicit world has no dense components and must never run dense");
             UnityEngine.Debug.Log("TlDenseOracle: " + control + " " + rows + " denseRowSteps=" + denseRowSteps + " of " + PureControls.Rows * steps);
-            Assert.Greater(denseRowSteps, 0, control + " with " + rows + " rows: no row-step ran dense");
+            Assert.Greater(denseRowSteps * (control == PureControl.Rates ? 100 : 10), PureControls.Rows * steps, control + " with " + rows + " rows: only " + denseRowSteps + " of " + PureControls.Rows * steps + " row-steps ran dense");
             Assert.AreEqual(PrecombineControlTests.DotNetDigest(control).ToString("X16"), digest.Value.ToString("X16"), control + ": the dense world's per-step state hashes differ from the .NET host's");
         }
     }

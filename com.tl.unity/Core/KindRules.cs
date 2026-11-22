@@ -19,14 +19,20 @@ public unsafe struct KindPulseBuffer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal void Push(int entity, int cell)
     {
-        if (Count == Capacity) Grow();
+        if (Count == Capacity) Grow(1);
         Items[Count++] = new KindPulseHit { Entity = entity, Cell = cell };
     }
 
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    void Grow()
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal void Room(int count)
     {
-        var next = Capacity == 0 ? 64 : Capacity * 2;
+        if (Capacity - Count < count) Grow(count);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    void Grow(int count)
+    {
+        var next = Math.Max(Capacity == 0 ? 64 : Capacity * 2, Count + count);
         var block = (KindPulseHit*)NativeMemory.AlignedAlloc((nuint)next * (nuint)sizeof(KindPulseHit), 64);
         if (Items != null)
         {
