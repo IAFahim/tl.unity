@@ -127,6 +127,8 @@ the kind's entry buffer in an `ITlBaker`.
   that still holds the usual entry count makes rows smaller and chunks fuller: 4 instead of 10 for a kind with at most 4 entries cut a
   4M-row tick by 14 % and 370 MB.
 - Game pulses: `[TlKind(GamePulses = n)]` reserves room for n pulses from game code per step.
+- Requests: `TimelineRequest` keeps no inline capacity; a queued request lives on the heap until the tick drains the queue and trims
+  it, so a row pays 16 B of chunk instead of 128 B. At 1M rows this took a chunk from 51 to 80 rows and every kind job with it.
 - None of this is generated into a file and editing a timeline never recompiles.
 
 ## Horizon glide
@@ -167,6 +169,31 @@ A row with `TimelineHorizon`, `TimelineClock` and a `PlaybackDue` buffer in its 
 - `TimelineGlide { Limit = 0 }` or removing `TimelineHorizon` turns a row eager again: the tick job decodes its slots and sets its clock to 0, which makes the stored and real ticks equal.
 - Memory: 2 B per slot (`PlaybackDue`, 4 inline in the chunk) and 2 B per row.
 - Measured (Unity 7000.0.0a16, Burst, 11 workers, safety checks off, `OwnerScaleBench`: 1,000 looping kind timelines with one clip each, median of 128 steps), tick job in ms, eager against lazy: 10,000 x 40 rows x playbacks 0.31 -> 0.16 (duration 120), 0.27 -> 0.06 (600), 0.27 -> 0.04 (3000); 20,000 x 100 1.28 -> 0.94, 1.17 -> 0.35, 1.27 -> 0.13; 20,000 x 200 2.46 -> 1.71, 2.42 -> 0.72, 2.60 -> 0.26. The whole timeline frame (tick plus generated kind jobs) gains 1.1x to 2.4x: the generated kind jobs are unchanged, and at duration 120 most of the tick's remaining time is the kind events themselves (span begins and ends, pulses), which both paths must do.
+
+## Dense rows (`PlaybackDense`)
+
+A row whose archetype also holds `PlaybackDense.Types` (`PlaybackDense`, `DenseOrigins`, `DenseDues`, `PlaybackOrigin`) runs dense when
+every live slot is plain (no flag but `Reverse`, rate 0), the row has no sampled copies, and every span kind its timelines feed reads a
+precombined table built by its system (no foreign feeder). The rule and the leave records are tl's (`KindStore.Dense`, IAFahim/tl#673).
+Opt in per entity; rows without the four types keep the eager, glide or lazy path above unchanged.
+
+- A dense slot is a 2-byte origin: its row in the shared row space (a forward and a reversed block per timeline, one table half per
+  world direction) is `origin + clock`, where the clock is one world counter (`TimelineDense` on the `TimelineKindTickSystem` entity).
+  A calm step writes nothing for the row. Up to four slots sit inline in the chunk (`DenseOrigins`, `DenseDues`); more go to the
+  `PlaybackOrigin` buffer.
+- The tick visits a dense row only when its `PlaybackDense.Next` equals the clock: a slot then arrives at a pulse tick (fast pulses
+  go to the kind's lanes) or leaves its block (a loop wraps the origin). A non-looping end, a slow pulse, a request, a world
+  direction change, a library change or any other write to the chunk's `Playback` returns the row to its own path for that step,
+  and the row densifies again after an exact step. On a lazy row a pulse arrival also leaves the dense path, so pulse entries match
+  the lazy path.
+- `Playback.Tick` of a dense row is stored relative to the world clock with the lazy-row encoding. Read it with
+  `TimelineTicks.Real(in playback, TimelineTicks.ClockOf(entityManager, entity))`; generated jobs, the timeline swap, the panel and
+  the tests do. A raw `Playback.Tick` read on a dense row is wrong, so only opt in rows whose readers decode.
+- Memory: 4 + 8 + 8 B per row in the chunk plus the 16 B `PlaybackOrigin` header; per library, the leave records (8 B per row-space
+  row and direction) and the gap tables, built the first time a precombined table exists.
+- `KindPure.DenseOracleTests` runs a dense world against the same world without the four types, through every `PureControl` in
+  eager, glide and lazy rows and a random script (rewinds, two reloads, skipped Vitals, rows past four slots), comparing every
+  component, enable bit and slot every step, and checks the dense world's per-step digest against the .NET host's.
 
 ## Kind Report
 
