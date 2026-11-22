@@ -58,6 +58,9 @@ namespace KindPure
         BufferTypeHandle<StatChangeEntry> _statChangeEntry;
         ComponentTypeHandle<StatChangeActive> _statChangeActive;
         ComponentTypeHandle<StatChangeEnabled> _statChangeEnabled;
+        ComponentTypeHandle<PlaybackDense> _dense;
+        BufferTypeHandle<PlaybackOrigin> _origin;
+        EntityQuery _denseClock;
         global::Tl.KindValues* _noTables;
 
         [BurstCompile]
@@ -82,6 +85,9 @@ namespace KindPure
             _statChangeEntry = state.GetBufferTypeHandle<StatChangeEntry>(false);
             _statChangeActive = state.GetComponentTypeHandle<StatChangeActive>(false);
             _statChangeEnabled = state.GetComponentTypeHandle<StatChangeEnabled>(true);
+            _dense = state.GetComponentTypeHandle<PlaybackDense>(true);
+            _origin = state.GetBufferTypeHandle<PlaybackOrigin>(true);
+            _denseClock = TimelineTicks.DenseQuery(ref state);
             var bytes = MostKinds * sizeof(global::Tl.KindValues);
             _noTables = (global::Tl.KindValues*)UnsafeUtility.Malloc(bytes, 16, Allocator.Persistent);
             UnsafeUtility.MemClear(_noTables, bytes);
@@ -114,6 +120,8 @@ namespace KindPure
             _statChangeEntry.Update(ref state);
             _statChangeActive.Update(ref state);
             _statChangeEnabled.Update(ref state);
+            _dense.Update(ref state);
+            _origin.Update(ref state);
             var indexWithoutTables = library.Kinds;
             indexWithoutTables.Values = _noTables;
             var job = new MovementChunkJob
@@ -137,6 +145,9 @@ namespace KindPure
                 StatChangeEntryHandle = _statChangeEntry,
                 StatChangeActiveHandle = _statChangeActive,
                 StatChangeEnabledHandle = _statChangeEnabled,
+                DenseHandle = _dense,
+                OriginHandle = _origin,
+                DenseClock = TimelineTicks.DenseClock(_denseClock),
             };
             state.Dependency = job.ScheduleParallel(_query, state.Dependency);
         }
@@ -174,6 +185,7 @@ namespace KindPure
         BufferTypeHandle<Playback> _playbackHandle;
         ComponentTypeHandle<TimelinePlaying> _playingHandle;
         ComponentTypeHandle<TimelineClock> _clockHandle;
+        ComponentTypeHandle<PlaybackDense> _denseHandle;
 
         public void OnCreate(ref SystemState state)
         {
@@ -181,6 +193,7 @@ namespace KindPure
             _playbackHandle = state.GetBufferTypeHandle<Playback>(false);
             _playingHandle = state.GetComponentTypeHandle<TimelinePlaying>(false);
             _clockHandle = state.GetComponentTypeHandle<TimelineClock>(true);
+            _denseHandle = state.GetComponentTypeHandle<PlaybackDense>(false);
             state.RequireForUpdate<TimelineLibrary>();
         }
 
@@ -200,12 +213,15 @@ namespace KindPure
             _playbackHandle.Update(ref state);
             _playingHandle.Update(ref state);
             _clockHandle.Update(ref state);
+            _denseHandle.Update(ref state);
             new TlTimelineSwapJob
             {
                 Index = index,
                 PlaybackHandle = _playbackHandle,
                 PlayingHandle = _playingHandle,
                 ClockHandle = _clockHandle,
+                DenseHandle = _denseHandle,
+                DenseClock = TimelineTicks.DenseClock(state.EntityManager),
                 Handles = handles,
                 Swapped = everyTimeline,
             }.Run(_playbacks);
@@ -235,11 +251,19 @@ namespace KindPure
         readonly SystemHandle _swap;
         bool _forward = true;
 
-        public PureWorld(int count, byte[] library) : this(count, library, null, false, PureRows.Eager)
+        public PureWorld(int count, byte[] library) : this(count, library, null, false, PureRows.Eager, true)
         {
         }
 
-        public PureWorld(int count, byte[] library, byte[] second, bool spanWalk, PureRows rows)
+        public PureWorld(int count, byte[] library, bool dense) : this(count, library, null, false, PureRows.Eager, dense)
+        {
+        }
+
+        public PureWorld(int count, byte[] library, byte[] second, bool spanWalk, PureRows rows) : this(count, library, second, spanWalk, rows, false)
+        {
+        }
+
+        public PureWorld(int count, byte[] library, byte[] second, bool spanWalk, PureRows rows, bool dense)
         {
             World = new World("TlKindsPure");
             Entities = World.EntityManager;
@@ -255,10 +279,10 @@ namespace KindPure
             _swap = World.CreateSystem<PureSwapEveryTimelineSystem>();
             Rows = new Entity[count];
             for (var i = 0; i < count; i++)
-                Rows[i] = Spawn(rows);
+                Rows[i] = Spawn(rows, dense);
         }
 
-        Entity Spawn(PureRows rows)
+        Entity Spawn(PureRows rows, bool dense)
         {
             var types = new List<ComponentType>
             {
@@ -282,8 +306,15 @@ namespace KindPure
                 types.Add(typeof(TimelineClock));
                 types.Add(typeof(PlaybackDue));
             }
+            if (dense)
+            {
+                types.Add(typeof(PlaybackDense));
+                types.Add(typeof(PlaybackOrigin));
+            }
             var entity = Entities.CreateEntity(types.ToArray());
             Entities.SetComponentEnabled<TimelinePlaying>(entity, false);
+            if (dense)
+                Entities.SetComponentEnabled<PlaybackDense>(entity, false);
             LocomotionKind.Init(Entities, entity);
             LiftKind.Init(Entities, entity);
             StatChangeKind.Init(Entities, entity);
@@ -361,6 +392,7 @@ namespace KindPure
             Entities.CompleteAllTrackedJobs();
             var h = global::Tl.TlStateHash.Begin();
             var real = stackalloc global::Tl.Playback[KindSlots.MaxSlots];
+            var denseClock = TimelineTicks.DenseClock(Entities);
             foreach (var row in Rows)
             {
                 var motion = Entities.GetComponentData<Movement_MotionData>(row).Value;
@@ -368,7 +400,7 @@ namespace KindPure
                 h.Float(motion.Y);
                 h.Int(Entities.GetComponentData<Movement_StaminaData>(row).Value.Value);
                 h.Int(Entities.GetComponentData<Vitals_HealthData>(row).Value.Value);
-                var clock = Entities.HasComponent<TimelineClock>(row) ? Entities.GetComponentData<TimelineClock>(row).Value : (ushort)0;
+                var clock = TimelineTicks.ClockOf(Entities, row, denseClock);
                 var slots = Entities.GetBuffer<Playback>(row, true);
                 for (var i = 0; i < slots.Length; i++)
                 {
@@ -379,6 +411,16 @@ namespace KindPure
                 h.Slots(real, slots.Length);
             }
             return h.Value;
+        }
+
+        public int DenseRows()
+        {
+            Entities.CompleteAllTrackedJobs();
+            var dense = 0;
+            foreach (var row in Rows)
+                if (Entities.HasComponent<PlaybackDense>(row) && Entities.IsComponentEnabled<PlaybackDense>(row))
+                    dense++;
+            return dense;
         }
 
         public void Dispose()

@@ -14,6 +14,8 @@ namespace Tl.Unity
         public BufferTypeHandle<Playback> PlaybackHandle;
         public ComponentTypeHandle<TimelinePlaying> PlayingHandle;
         [ReadOnly] public ComponentTypeHandle<TimelineClock> ClockHandle;
+        public ComponentTypeHandle<PlaybackDense> DenseHandle;
+        public ushort DenseClock;
         [NativeDisableContainerSafetyRestriction] public KindHandleSet Handles;
         [ReadOnly] public NativeArray<ushort> Swapped;
 
@@ -21,6 +23,7 @@ namespace Tl.Unity
         {
             var playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
             var clocks = chunk.Has(ref ClockHandle) ? (ushort*)chunk.GetNativeArray(ref ClockHandle).GetUnsafeReadOnlyPtr() : null;
+            var dense = chunk.GetEnableableBits(ref DenseHandle);
             var kinds = Index.KindCount;
             var buffers = stackalloc UnsafeUntypedBufferAccessor[kinds > 0 ? kinds : 1];
             var cursor = new KindCursor { Index = (KindIndex*)UnsafeUtility.AddressOf(ref Index), Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers };
@@ -29,6 +32,11 @@ namespace Tl.Unity
             for (var row = 0; row < chunk.Count; row++)
             {
                 var slots = playbacks[row];
+                if (((row < 64 ? dense.ULong0 >> row : dense.ULong1 >> (row - 64)) & 1) != 0)
+                {
+                    TimelineTicks.Decode((global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, DenseClock);
+                    chunk.SetComponentEnabled(ref DenseHandle, row, false);
+                }
                 var touched = false;
                 for (var i = 0; i < slots.Length; i++)
                 {

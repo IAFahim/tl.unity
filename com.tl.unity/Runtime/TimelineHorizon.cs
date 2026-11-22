@@ -26,6 +26,23 @@ namespace Tl.Unity
         public ushort Tick;
     }
 
+    public struct PlaybackDense : IComponentData, IEnableableComponent
+    {
+        public ushort Next;
+    }
+
+    [InternalBufferCapacity(8)]
+    public struct PlaybackOrigin : IBufferElementData
+    {
+        public ushort Value;
+    }
+
+    public struct TimelineDense : IComponentData
+    {
+        public ushort Clock;
+        public sbyte Direction;
+    }
+
     static unsafe class DueScan
     {
         public static int Collect(ushort* dues, int count, ushort now, byte* hits, ref int near, ref bool live)
@@ -137,6 +154,29 @@ namespace Tl.Unity
             if (global::Tl.SlotWord.PlainMask(*(ulong*)slot) == 0) return;
             slot->Tick = (slot->Flags & global::Tl.PlaybackFlags.Reverse) != 0 ? (ushort)(slot->Tick + clock) : (ushort)(slot->Tick - clock);
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ushort ClockOf(global::Unity.Burst.Intrinsics.v128 dense, ushort denseClock, ushort* clocks, int row)
+            => ((row < 64 ? dense.ULong0 >> row : dense.ULong1 >> (row - 64)) & 1) != 0 ? denseClock : clocks == null ? (ushort)0 : clocks[row];
+
+        public static EntityQuery DenseQuery(ref SystemState state)
+            => new EntityQueryBuilder(global::Unity.Collections.Allocator.Temp).WithAll<TimelineDense>().WithOptions(EntityQueryOptions.IncludeSystems).Build(ref state);
+
+        public static ushort DenseClock(EntityQuery query) => query.IsEmptyIgnoreFilter ? (ushort)0 : query.GetSingleton<TimelineDense>().Clock;
+
+        public static ushort DenseClock(EntityManager manager)
+        {
+            using var query = manager.CreateEntityQuery(new EntityQueryDesc { All = new[] { ComponentType.ReadOnly<TimelineDense>() }, Options = EntityQueryOptions.IncludeSystems });
+            return DenseClock(query);
+        }
+
+        public static ushort ClockOf(EntityManager manager, Entity entity, ushort denseClock)
+        {
+            if (manager.HasComponent<PlaybackDense>(entity) && manager.IsComponentEnabled<PlaybackDense>(entity)) return denseClock;
+            return manager.HasComponent<TimelineClock>(entity) ? manager.GetComponentData<TimelineClock>(entity).Value : (ushort)0;
+        }
+
+        public static ushort ClockOf(EntityManager manager, Entity entity) => ClockOf(manager, entity, DenseClock(manager));
 
         public static void Decode(global::Tl.Playback* slots, int count, ushort clock)
         {

@@ -78,6 +78,8 @@ namespace Tl.Gen.Unity
             W(writer, "[ReadOnly] public BufferTypeHandle<global::Tl.Unity.Playback> PlaybackHandle;");
             W(writer, "[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelineClock> ClockHandle;");
             W(writer, "[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelinePlaying> PlayingHandle;");
+            W(writer, "[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.PlaybackDense> DenseHandle;");
+            W(writer, "public ushort DenseClock;");
             for (var i = 0; i < shape.Columns.Count; i++)
                 if (shape.UsedColumns[i])
                     W(writer, "[ReadOnly] public ComponentTypeHandle<" + ComponentName(model, shape.Columns[i]) + "> " + shape.Columns[i].Name + "Handle;");
@@ -119,6 +121,7 @@ namespace Tl.Gen.Unity
             handles.Add(("PlaybackHandle", "BufferTypeHandle<global::Tl.Unity.Playback>", "GetBufferTypeHandle<global::Tl.Unity.Playback>", true));
             handles.Add(("ClockHandle", "ComponentTypeHandle<global::Tl.Unity.TimelineClock>", "GetComponentTypeHandle<global::Tl.Unity.TimelineClock>", true));
             handles.Add(("PlayingHandle", "ComponentTypeHandle<global::Tl.Unity.TimelinePlaying>", "GetComponentTypeHandle<global::Tl.Unity.TimelinePlaying>", true));
+            handles.Add(("DenseHandle", "ComponentTypeHandle<global::Tl.Unity.PlaybackDense>", "GetComponentTypeHandle<global::Tl.Unity.PlaybackDense>", true));
             for (var i = 0; i < shape.Columns.Count; i++)
                 if (shape.UsedColumns[i])
                     handles.Add((shape.Columns[i].Name + "Handle", "ComponentTypeHandle<" + ComponentName(model, shape.Columns[i]) + ">", "GetComponentTypeHandle<" + ComponentName(model, shape.Columns[i]) + ">", true));
@@ -133,6 +136,7 @@ namespace Tl.Gen.Unity
             W(writer, "public struct " + name);
             W(writer, "{");
             W(writer, "EntityQuery _query;");
+            W(writer, "EntityQuery _dense;");
             foreach (var handle in handles)
                 W(writer, handle.type + " _" + handle.field + ";");
             W(writer, "public static " + name + " Create(ref SystemState state)");
@@ -146,13 +150,14 @@ namespace Tl.Gen.Unity
             W(writer, "builder.Dispose();");
             foreach (var handle in handles)
                 W(writer, "jobs._" + handle.field + " = state." + handle.getter + "(" + (handle.readOnly ? "true" : "false") + ");");
+            W(writer, "jobs._dense = global::Tl.Unity.TimelineTicks.DenseQuery(ref state);");
             W(writer, "return jobs;");
             W(writer, "}");
             W(writer, "public JobHandle Schedule(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward, JobHandle dependsOn)");
             W(writer, "{");
             foreach (var handle in handles)
                 W(writer, "_" + handle.field + ".Update(ref state);");
-            W(writer, "var job = new " + name + "Job { View = view, Index = index, Forward = forward");
+            W(writer, "var job = new " + name + "Job { View = view, Index = index, Forward = forward, DenseClock = global::Tl.Unity.TimelineTicks.DenseClock(_dense)");
             foreach (var handle in handles)
                 W(writer, ", " + handle.field + " = _" + handle.field);
             foreach (var kind in kinds)
@@ -171,6 +176,7 @@ namespace Tl.Gen.Unity
             W(writer, "void Feed_" + ordinal + "(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks" + ColumnArgs(shape, true) + ")");
             W(writer, "{");
             W(writer, "var __clocks = chunk.Has(ref ClockHandle) ? (ushort*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(ref ClockHandle)) : null;");
+            W(writer, "var __dn = chunk.GetEnableableBits(ref DenseHandle);");
             W(writer, "if (" + info.Name + "Owner < 0 || !chunk.Has(ref " + info.Name + "EntryHandle)) return;");
             W(writer, "var __kid = Index.KindOf(" + KindId(info.Decl.Id) + ");");
             W(writer, "if (__kid < 0) return;");
