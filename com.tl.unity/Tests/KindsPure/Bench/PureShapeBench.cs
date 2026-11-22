@@ -40,24 +40,37 @@ namespace KindPure
             Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobDebuggerEnabled = false;
             NativeLeakDetection.Mode = NativeLeakDetectionMode.Disabled;
             using var writer = new StreamWriter(log, append: true);
-            Row(writer, "env unity=" + UnityEngine.Application.unityVersion + " burst=" + Unity.Burst.BurstCompiler.IsEnabled + " workers=" + Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerCount + " timelines=" + TimelineCount + " live=" + LiveTracks + " warmup=" + warmup + " measure=" + measure + " runs=" + runs);
+            Row(writer, "env unity=" + UnityEngine.Application.unityVersion + " burst=" + Unity.Burst.BurstCompiler.IsEnabled + " workers=" + Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerCount + " threadIndices=" + Unity.Jobs.LowLevel.Unsafe.JobsUtility.ThreadIndexCount + " timelines=" + TimelineCount + " live=" + LiveTracks + " warmup=" + warmup + " measure=" + measure + " runs=" + runs);
             var library = Library(LiveTracks);
             var split = Array.IndexOf(args, "-pureSplit") >= 0;
             var every = 0;
+            string perfControl = null, perfAck = null;
             for (var i = 0; i + 1 < args.Length; i++)
+            {
                 if (args[i] == "-pureRequestEvery") every = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
+                if (args[i] == "-perfControl") perfControl = args[i + 1];
+                if (args[i] == "-perfAck") perfAck = args[i + 1];
+            }
             var dense = Array.IndexOf(args, "-pureExplicit") < 0;
             foreach (var rowsText in rowsList.Split(','))
             foreach (var activeText in activeList.Split(','))
             {
                 var rows = int.Parse(rowsText, CultureInfo.InvariantCulture);
                 var active = int.Parse(activeText, CultureInfo.InvariantCulture);
-                if (split) Split(writer, library, rows, active, warmup, measure, dense);
+                if (split) Split(writer, library, rows, active, warmup, measure, dense, perfControl, perfAck);
                 else Cell(writer, library, rows, active, warmup, measure, runs, every, dense);
             }
         }
 
-        static void Split(StreamWriter writer, byte[] library, int rows, int active, int warmup, int measure, bool dense)
+        static void Perf(string control, string ack, string command)
+        {
+            if (control == null || ack == null) return;
+            File.AppendAllText(control, command + "\n");
+            using var reply = new StreamReader(ack);
+            reply.ReadLine();
+        }
+
+        static void Split(StreamWriter writer, byte[] library, int rows, int active, int warmup, int measure, bool dense, string perfControl, string perfAck)
         {
             using var game = World(library, rows, active, dense);
             for (var i = 0; i <= warmup; i++) game.Step();
@@ -65,11 +78,13 @@ namespace KindPure
             var parts = new double[3];
             var samples = new double[3][];
             for (var s = 0; s < 3; s++) samples[s] = new double[measure];
+            Perf(perfControl, perfAck, "enable");
             for (var i = 0; i < measure; i++)
             {
                 game.StepEachSystemCompleted(parts);
                 for (var s = 0; s < 3; s++) samples[s][i] = parts[s] * 1000.0 / Stopwatch.Frequency;
             }
+            Perf(perfControl, perfAck, "disable");
             for (var s = 0; s < 3; s++) Array.Sort(samples[s]);
             Row(writer, string.Format(CultureInfo.InvariantCulture, "split rows={0} active={1} dense={2} denseRows={3} precombined={4} tickMs={5:F3} movementMs={6:F3} vitalsMs={7:F3}",
                 rows, active, dense, game.DenseRows(), game.Precombined("KindPure.Locomotion") && game.Precombined("KindPure.Lift"), samples[0][measure / 2], samples[1][measure / 2], samples[2][measure / 2]));
