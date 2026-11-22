@@ -1,0 +1,13 @@
+diff --git i/com.tl.unity/Runtime/KindSystems.cs w/com.tl.unity/Runtime/KindSystems.cs
+index 13e0a9b..601934b 100644
+--- i/com.tl.unity/Runtime/KindSystems.cs
++++ w/com.tl.unity/Runtime/KindSystems.cs
+@@ -173,7 +173,7 @@ namespace Tl.Unity
+             var limit = (int)state.EntityManager.GetComponentData<TimelineGlide>(state.SystemHandle).Limit;
+             var forget = _glideIndex != identity || _glideGeneration != library.Generation || _glideStepDir != stepDir || _glideLimit != limit;
+             var dense = state.EntityManager.GetComponentData<TimelineDense>(state.SystemHandle);
+-            var denseForget = _glideIndex != identity || _glideGeneration != library.Generation || dense.Direction != stepDir;
++            var denseForget = _glideIndex != identity || _glideGeneration != library.Generation;
+             if (index.Dense != null && index.Dense->EligibleEpoch != index.Dense->TableEpoch)
+             {
+                 state.CompleteDependency();

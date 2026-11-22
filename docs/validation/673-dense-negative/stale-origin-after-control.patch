@@ -1,0 +1,12 @@
+diff --git i/com.tl.unity/Runtime/KindTick.cs w/com.tl.unity/Runtime/KindTick.cs
+index 62cca2e..3c1d3c3 100644
+--- i/com.tl.unity/Runtime/KindTick.cs
++++ w/com.tl.unity/Runtime/KindTick.cs
+@@ -269,7 +269,6 @@ namespace Tl.Unity
+                 {
+                     var queue = requests[row];
+                     if (queue.Length == 0) continue;
+-                    if (dense.Has(row)) Undense(in chunk, ref dense, playbacks, row, horizons, clocks, dues);
+                     if (horizons != null) horizons[row] = 0;
+                     if (clocks != null) TimelineTicks.Decode((global::Tl.Playback*)playbacks[row].GetUnsafePtr(), playbacks[row].Length, clocks[row]);
+                     var slots = new KindSlots(playbacks[row], &ctx, row);

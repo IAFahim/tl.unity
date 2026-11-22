@@ -1,0 +1,22 @@
+diff --git i/com.tl.unity/Runtime/KindTick.cs w/com.tl.unity/Runtime/KindTick.cs
+index 62cca2e..ec49f05 100644
+--- i/com.tl.unity/Runtime/KindTick.cs
++++ w/com.tl.unity/Runtime/KindTick.cs
+@@ -618,7 +618,7 @@ namespace Tl.Unity
+             for (var h = 0; h < held; h++)
+             {
+                 var record = records[h];
+-                if ((ushort)record == 0) return false;
++                if ((ushort)record == 0) continue;
+                 if ((plan->LeaveKinds[(byte)(record >> 48)] & ~fast) != 0) return false;
+                 shifted |= (ushort)(record >> 16) != 0;
+             }
+@@ -665,7 +665,7 @@ namespace Tl.Unity
+             for (var h = 0; h < held; h++)
+             {
+                 var record = records[h];
+-                if ((ushort)record == 0 || (plan->LeaveKinds[(byte)(record >> 48)] & ~fast) != 0) return false;
++                if ((plan->LeaveKinds[(byte)(record >> 48)] & ~fast) != 0) return false;
+             }
+             global::Tl.Playback* slots = null;
+             for (var h = 0; h < held; h++)
