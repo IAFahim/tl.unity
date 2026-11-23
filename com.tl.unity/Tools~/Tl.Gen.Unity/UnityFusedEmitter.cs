@@ -219,15 +219,6 @@ namespace Tl.Gen.Unity
             W(writer, "var __m0 = __count >= 64 ? ~0ul : (1ul << __count) - 1;");
             W(writer, "var __m1 = __count <= 64 ? 0ul : (__count >= 128 ? ~0ul : (1ul << (__count - 64)) - 1);");
             W(writer, "var __pb = chunk.GetUntypedBufferAccessor(ref PlaybackHandle);");
-            W(writer, "ulong __d0 = 0, __d1 = 0;");
-            W(writer, "var __uni = -1;");
-            W(writer, "for (var __row = 0; __row < __count; __row++)");
-            W(writer, "{");
-            W(writer, "var __s = (global::Tl.Playback*)__pb.GetUnsafeReadOnlyPtrAndLength(__row, out var __n);");
-            W(writer, "if (!global::Tl.Unity.DenseSlots.IsDense(__s, __n)) { __uni = -2; continue; }");
-            W(writer, "if (__row < 64) __d0 |= 1ul << __row; else __d1 |= 1ul << (__row - 64);");
-            W(writer, "__uni = __uni == -1 || __uni == __n ? __n : -2;");
-            W(writer, "}");
             W(writer, "var __epl = chunk.GetEnableableBits(ref PlayingHandle);");
             W(writer, "var __l0 = __epl.ULong0;");
             W(writer, "var __l1 = __epl.ULong1;");
@@ -235,56 +226,69 @@ namespace Tl.Gen.Unity
             {
                 W(writer, "var __h" + g + " = Kid" + g + " >= 0 && chunk.Has(ref Entry" + g + ");");
                 W(writer, "var __a" + g + " = __h" + g + " ? chunk.GetEnableableBits(ref Active" + g + ") : default;");
+                W(writer, "var __e" + g + " = __h" + g + " ? chunk.GetEnableableBits(ref Enabled" + g + ") : default;");
                 W(writer, "__l0 |= __a" + g + ".ULong0;");
                 W(writer, "__l1 |= __a" + g + ".ULong1;");
             }
-            W(writer, "if (((__l0 & ~__d0 & __m0) | (__l1 & ~__d1 & __m1)) != 0) Mixed[global::System.Threading.Interlocked.Increment(ref *MixedCount) - 1] = new global::Tl.Unity.FusedMixed { Chunk = chunk, Dense = new global::Unity.Burst.Intrinsics.v128(__d0, __d1) };");
-            W(writer, "if ((__d0 | __d1) == 0) return;");
-            for (var g = 0; g < kinds.Count; g++)
-                W(writer, "var __e" + g + " = __h" + g + " ? chunk.GetEnableableBits(ref Enabled" + g + ") : default;");
             for (var c = 0; c < columns.Count; c++)
                 W(writer, "var __x" + c + " = (" + columns[c].element + "*)chunk.GetComponentDataPtr" + (columns[c].write ? "RW" : "RO") + "(ref Column" + c + ");");
+            var on = new List<string> { "Skip == 0" };
             for (var g = 0; g < kinds.Count; g++)
             {
                 var kind = kinds[g];
-                var h = "__h" + g;
-                W(writer, "var __ok" + g + " = " + ColumnsReady(shapes[kind.System], columnOf[kind.System], kind.Decl.ApplyParams).Replace("__h", h) + ";");
+                W(writer, "var __ok" + g + " = " + ColumnsReady(shapes[kind.System], columnOf[kind.System], kind.Decl.ApplyParams).Replace("__h", "__h" + g) + ";");
+                on.Add("__ok" + g);
+                on.Add("(__e" + g + ".ULong0 & __m0) == __m0");
+                on.Add("(__e" + g + ".ULong1 & __m1) == __m1");
                 if (kind.Span) W(writer, "ulong __n" + g + "_0 = 0, __n" + g + "_1 = 0;");
                 else
                 {
                     W(writer, "var __acc" + g + " = default(BufferAccessor<" + kind.Info.Entry + ">); var __accReady" + g + " = false;");
                     W(writer, "var __act" + g + " = default(EnabledMask); var __actReady" + g + " = false;");
+                    on.Add("((__a" + g + ".ULong0 & __m0) | (__a" + g + ".ULong1 & __m1)) == 0");
+                    on.Add("(__fast >> Kid" + g + " & 1) != 0");
                 }
             }
             W(writer, "var __fast = Index.TickFastPulses != null ? *Index.TickFastPulses : 0ul;");
             W(writer, "Entity* __ents = null;");
-            var cases = new[] { "2", "4" };
-            foreach (var n in cases)
+            W(writer, "var __chunkOn = " + string.Join(" && ", on) + ";");
+            W(writer, "ulong __d0 = 0, __d1 = 0;");
+            W(writer, "var __first = (global::Tl.Playback*)__pb.GetUnsafeReadOnlyPtrAndLength(0, out var __firstCount);");
+            W(writer, "if (!global::Tl.Unity.DenseSlots.IsDense(__first, __firstCount)) __firstCount = 0;");
+            foreach (var n in new[] { "2", "4" })
             {
-                W(writer, (n == "2" ? "if" : "else if") + " (__d0 == __m0 && __d1 == __m1 && __uni == " + n + ")");
+                W(writer, (n == "2" ? "if" : "else if") + " (__chunkOn && __firstCount == " + n + ")");
                 W(writer, "{");
                 W(writer, "for (var __row = 0; __row < __count; __row++)");
                 W(writer, "{");
-                W(writer, "var __s = (global::Tl.Playback*)__pb.GetUnsafeReadOnlyPtr(__row);");
+                W(writer, "var __s = (global::Tl.Playback*)__pb.GetUnsafeReadOnlyPtrAndLength(__row, out var __len0);");
+                W(writer, "if (!global::Tl.Unity.DenseSlots.IsDense(__s, __len0)) continue;");
+                W(writer, "if (__row < 64) __d0 |= 1ul << __row; else __d1 |= 1ul << (__row - 64);");
+                W(writer, "if (__len0 == " + n + ")");
+                W(writer, "{");
                 W(writer, "var __n = " + n + ";");
-                EmitFusedRow(writer, systems, shapes, kinds, columnOf, anyFloat, anyInt, anyPick, scalarSpans);
+                EmitFusedRow(writer, systems, shapes, kinds, columnOf, anyFloat, anyInt, anyPick, scalarSpans, true);
+                W(writer, "}");
+                W(writer, "else");
+                W(writer, "{");
+                W(writer, "var __n = __len0;");
+                EmitFusedRow(writer, systems, shapes, kinds, columnOf, anyFloat, anyInt, anyPick, scalarSpans, false);
+                W(writer, "}");
                 W(writer, "}");
                 W(writer, "}");
             }
             W(writer, "else");
             W(writer, "{");
-            W(writer, "for (var __wd = 0; __wd < 2; __wd++)");
+            W(writer, "for (var __row = 0; __row < __count; __row++)");
             W(writer, "{");
-            W(writer, "var __bits = __wd == 0 ? __d0 : __d1;");
-            W(writer, "while (__bits != 0)");
-            W(writer, "{");
-            W(writer, "var __row = (__wd << 6) + (int)global::Unity.Mathematics.math.tzcnt(__bits);");
-            W(writer, "__bits &= __bits - 1;");
-            W(writer, "var __s = (global::Tl.Playback*)__pb.GetUnsafeReadOnlyPtrAndLength(__row, out var __n);");
-            EmitFusedRow(writer, systems, shapes, kinds, columnOf, anyFloat, anyInt, anyPick, scalarSpans);
+            W(writer, "var __s = (global::Tl.Playback*)__pb.GetUnsafeReadOnlyPtrAndLength(__row, out var __len0);");
+            W(writer, "if (!global::Tl.Unity.DenseSlots.IsDense(__s, __len0)) continue;");
+            W(writer, "if (__row < 64) __d0 |= 1ul << __row; else __d1 |= 1ul << (__row - 64);");
+            W(writer, "var __n = __len0;");
+            EmitFusedRow(writer, systems, shapes, kinds, columnOf, anyFloat, anyInt, anyPick, scalarSpans, false);
             W(writer, "}");
             W(writer, "}");
-            W(writer, "}");
+            W(writer, "if (((__l0 & ~__d0 & __m0) | (__l1 & ~__d1 & __m1)) != 0) Mixed[global::System.Threading.Interlocked.Increment(ref *MixedCount) - 1] = new global::Tl.Unity.FusedMixed { Chunk = chunk, Dense = new global::Unity.Burst.Intrinsics.v128(__d0, __d1) };");
             for (var g = 0; g < kinds.Count; g++)
             {
                 if (!kinds[g].Span) continue;
@@ -337,7 +341,7 @@ namespace Tl.Gen.Unity
                 }
         }
 
-        static void EmitFusedRow(StringBuilder writer, IReadOnlyList<FusedSystem> systems, List<Shape> shapes, List<FusedKind> kinds, List<Dictionary<int, int>> columnOf, bool anyFloat, bool anyInt, bool anyPick, List<FusedKind> scalarSpans)
+        static void EmitFusedRow(StringBuilder writer, IReadOnlyList<FusedSystem> systems, List<Shape> shapes, List<FusedKind> kinds, List<Dictionary<int, int>> columnOf, bool anyFloat, bool anyInt, bool anyPick, List<FusedKind> scalarSpans, bool fast)
         {
             W(writer, "{");
             W(writer, "uint __any = 0, __cell = 0;");
@@ -388,6 +392,32 @@ namespace Tl.Gen.Unity
             W(writer, "{");
             EmitScalarSpans(writer, all, kinds, true);
             W(writer, "}");
+            if (fast)
+            {
+                for (var s = 0; s < systems.Count; s++)
+                {
+                    for (var g = 0; g < kinds.Count; g++)
+                    {
+                        var kind = kinds[g];
+                        if (kind.System != s || !kind.Span) continue;
+                        W(writer, "if (__f" + g + ") " + kind.Decl.TypeName + ".Apply(in __t" + g + ApplyArgs(shapes[s], columnOf[s], kind.Decl.ApplyParams) + ");");
+                        W(writer, "if ((__any & Lm" + g + ") != 0) { if (__row < 64) __n" + g + "_0 |= 1ul << __row; else __n" + g + "_1 |= 1ul << (__row - 64); }");
+                    }
+                    var pulses = kinds.FindAll(k => k.System == s && !k.Span);
+                    if (pulses.Count == 0) continue;
+                    W(writer, "if (__cell != 0)");
+                    W(writer, "{");
+                    foreach (var kind in pulses)
+                    {
+                        W(writer, "{");
+                        EmitLaneApply(writer, kind, kinds.IndexOf(kind), ApplyArgs(shapes[s], columnOf[s], kind.Decl.ApplyParams));
+                        W(writer, "}");
+                    }
+                    W(writer, "}");
+                }
+                W(writer, "}");
+                return;
+            }
             for (var s = 0; s < systems.Count; s++)
             {
                 W(writer, "if ((Skip >> " + s + " & 1) != 0)");
