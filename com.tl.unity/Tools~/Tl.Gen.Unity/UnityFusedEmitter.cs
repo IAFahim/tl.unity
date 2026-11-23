@@ -182,6 +182,11 @@ namespace Tl.Gen.Unity
             W(writer, "public ushort Clock;");
             W(writer, "public bool Vector;");
             W(writer, "public ulong Skip;");
+            W(writer, "[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public uint* Leave;");
+            W(writer, "public int Step;");
+            W(writer, "public ushort From;");
+            W(writer, "public ushort Next;");
+            W(writer, "public ComponentTypeHandle<global::Tl.Unity.TimelineDenseChunk> DenseChunkHandle;");
             W(writer, "public int Cell;");
             W(writer, "public " + V256 + " CellIndex;");
             W(writer, "public " + V256 + " FloatLanes;");
@@ -256,6 +261,7 @@ namespace Tl.Gen.Unity
             }
             W(writer, "var __fast = Index.TickFastPulses != null ? *Index.TickFastPulses : 0ul;");
             W(writer, "Entity* __ents = null;");
+            W(writer, "var __exactNext = false;");
             W(writer, "var __hits = stackalloc uint[256];");
             W(writer, "var __chunkOn = " + string.Join(" && ", on) + ";");
             W(writer, "ulong __d0 = 0, __d1 = 0;");
@@ -298,6 +304,14 @@ namespace Tl.Gen.Unity
                 W(writer, "}");
             }
             W(writer, "if (((__l0 & ~__d0 & __m0) | (__l1 & ~__d1 & __m1)) != 0) Mixed[global::System.Threading.Interlocked.Increment(ref *MixedCount) - 1] = new global::Tl.Unity.FusedMixed { Chunk = chunk, Dense = new global::Unity.Burst.Intrinsics.v128(__d0, __d1) };");
+            W(writer, "if (chunk.HasChunkComponent(ref DenseChunkHandle))");
+            W(writer, "{");
+            W(writer, "ref var __info = ref chunk.GetChunkComponentDataRW(ref DenseChunkHandle);");
+            W(writer, "__info.Dense0 = __d0;");
+            W(writer, "__info.Dense1 = __d1;");
+            W(writer, "__info.WalkClock = Clock;");
+            W(writer, "__info.State = (byte)(__exactNext ? 3 : 1);");
+            W(writer, "}");
             for (var g = 0; g < kinds.Count; g++)
             {
                 if (!kinds[g].Span) continue;
@@ -317,6 +331,14 @@ namespace Tl.Gen.Unity
             W(writer, "}");
         }
 
+        static void SlotHead(StringBuilder writer, bool dues)
+        {
+            W(writer, "if (__s[__i].Timeline == 0) continue;");
+            if (!dues) return;
+            W(writer, "if (global::Tl.Unity.DenseSlots.DueOf(__s + __i) == Clock) global::Tl.Unity.DenseSlots.Wrap(__s + __i, Leave, From, Clock, Step);");
+            W(writer, "if ((__s[__i].Phase & global::Tl.Unity.DenseSlots.ExactAtDue) != 0 && global::Tl.Unity.DenseSlots.DueOf(__s + __i) == Next) __exactNext = true;");
+        }
+
         static string RowAt(string slot) => "(Half + (nuint)(ushort)(__s[" + slot + "].Tick + Clock) * Stride)";
 
         static void EmitScalarSpans(StringBuilder writer, List<FusedKind> scalar, List<FusedKind> kinds, bool full, bool hits)
@@ -329,6 +351,7 @@ namespace Tl.Gen.Unity
             if (full) W(writer, hits ? "__any = 0; __cell = 0; __nh = 0;" : "__any = 0; __cell = 0;");
             W(writer, "for (var __i = 0; __i < __n; __i++)");
             W(writer, "{");
+            SlotHead(writer, full);
             W(writer, "var __r = " + RowAt("__i") + ";");
             W(writer, "var __m = *(uint*)__r;");
             if (full && hits) W(writer, "__any |= __m; { var __cv = *(uint*)(__r + Cell); __cell |= __cv; __hits[__nh] = __cv; __nh += __cv != 0 ? 1 : 0; }");
@@ -375,6 +398,7 @@ namespace Tl.Gen.Unity
             }
             W(writer, "for (var __i = 0; __i < __n; __i++)");
             W(writer, "{");
+            SlotHead(writer, true);
             W(writer, "var __w = " + Avx + ".mm256_load_si256(" + RowAt("__i") + ");");
             W(writer, "__hd = " + Avx2 + ".mm256_or_si256(__hd, __w);");
             if (hits) W(writer, "{ var __cv = " + Avx2 + ".mm256_permutevar8x32_epi32(__w, CellIndex).UInt0; __hits[__nh] = __cv; __nh += __cv != 0 ? 1 : 0; }");
@@ -515,6 +539,7 @@ namespace Tl.Gen.Unity
         {
             W(writer, "for (var __i = 0; __i < __n; __i++)");
             W(writer, "{");
+            SlotHead(writer, false);
             W(writer, "var __c = *(uint*)(" + RowAt("__i") + " + Cell);");
             W(writer, "if (__c == 0) continue;");
             W(writer, "var __st = Start" + g + " + (__c - 1);");
@@ -559,6 +584,7 @@ namespace Tl.Gen.Unity
             W(writer, "if (__ents == null) __ents = (Entity*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(EntityHandle));");
             W(writer, "for (var __i = 0; __i < __n; __i++)");
             W(writer, "{");
+            SlotHead(writer, false);
             W(writer, "var __c = *(uint*)(" + RowAt("__i") + " + Cell);");
             W(writer, "if (__c != 0) Index.PushPulse(Kid" + g + ", ThreadIndex, in chunk, __ents[__row], __row, (int)__c - 1);");
             W(writer, "}");
@@ -573,6 +599,7 @@ namespace Tl.Gen.Unity
             W(writer, "var __was = __buf.Length;");
             W(writer, "for (var __i = 0; __i < __n; __i++)");
             W(writer, "{");
+            SlotHead(writer, false);
             W(writer, "var __c = *(uint*)(" + RowAt("__i") + " + Cell);");
             W(writer, "if (__c == 0) continue;");
             W(writer, "var __st = Start" + g + " + (__c - 1);");
@@ -666,6 +693,7 @@ namespace Tl.Gen.Unity
             W(writer, "DynamicComponentTypeHandle _playback;");
             W(writer, "ComponentTypeHandle<global::Tl.Unity.TimelinePlaying> _playing;");
             W(writer, "EntityTypeHandle _entities;");
+            W(writer, "ComponentTypeHandle<global::Tl.Unity.TimelineDenseChunk> _denseChunk;");
             for (var c = 0; c < columns.Count; c++)
                 W(writer, "ComponentTypeHandle<" + columns[c].type + "> _column" + c + ";");
             for (var g = 0; g < kinds.Count; g++)
@@ -692,6 +720,7 @@ namespace Tl.Gen.Unity
             W(writer, "_playback = state.GetDynamicComponentTypeHandle(ComponentType.ReadOnly<global::Tl.Unity.Playback>());");
             W(writer, "_playing = state.GetComponentTypeHandle<global::Tl.Unity.TimelinePlaying>(true);");
             W(writer, "_entities = state.GetEntityTypeHandle();");
+            W(writer, "_denseChunk = state.GetComponentTypeHandle<global::Tl.Unity.TimelineDenseChunk>(false);");
             for (var c = 0; c < columns.Count; c++)
                 W(writer, "_column" + c + " = state.GetComponentTypeHandle<" + columns[c].type + ">(" + (columns[c].write ? "false" : "true") + ");");
             for (var g = 0; g < kinds.Count; g++)
@@ -745,6 +774,7 @@ namespace Tl.Gen.Unity
             W(writer, "_playback.Update(ref state);");
             W(writer, "_playing.Update(ref state);");
             W(writer, "_entities.Update(ref state);");
+            W(writer, "_denseChunk.Update(ref state);");
             for (var c = 0; c < columns.Count; c++)
                 W(writer, "_column" + c + ".Update(ref state);");
             for (var g = 0; g < kinds.Count; g++)
@@ -761,6 +791,8 @@ namespace Tl.Gen.Unity
                 if (kinds[g].Lane == "int") W(writer, "if (__fits && __kid" + g + " >= 0) ((uint*)&__ints)[index.Values[__kid" + g + "].Front >> 2] = ~0u;");
             }
             W(writer, "var __clock = _dense.GetSingleton<global::Tl.Unity.TimelineDense>().Clock;");
+            W(writer, "var __step = forward ? 1 : -1;");
+            W(writer, "if (__fits) dense->WalkClock = __clock;");
             W(writer, "var job = new TlFusedChunkJob");
             W(writer, "{");
             W(writer, "Index = index,");
@@ -769,6 +801,11 @@ namespace Tl.Gen.Unity
             W(writer, "Clock = __clock,");
             W(writer, "Vector = __fits,");
             W(writer, "Skip = Skip,");
+            W(writer, "Leave = __fits && dense->Leave != null ? dense->Leave + (forward ? 0 : dense->Rows) : null,");
+            W(writer, "Step = __step,");
+            W(writer, "From = (ushort)(__clock - __step),");
+            W(writer, "Next = (ushort)(__clock + __step),");
+            W(writer, "DenseChunkHandle = _denseChunk,");
             W(writer, "Cell = __fits ? dense->CellLane : 0,");
             W(writer, "CellIndex = new " + V256 + "(__fits ? dense->CellLane >> 2 : 0),");
             W(writer, "FloatLanes = __floats,");

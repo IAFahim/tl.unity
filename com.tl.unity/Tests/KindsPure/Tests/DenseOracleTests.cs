@@ -108,8 +108,9 @@ namespace KindPure
             }
             Assert.AreEqual(0, plain.DenseRows(), "the unfused world must never run dense");
             UnityEngine.Debug.Log("TlDenseOracle: " + control + " " + rows + " denseRowSteps=" + denseRowSteps + " of " + PureControls.Rows * steps);
-            Assert.Greater(denseRowSteps * (control == PureControl.Rates ? 100 : 10), PureControls.Rows * steps, control + " with " + rows + " rows: only " + denseRowSteps + " of " + PureControls.Rows * steps + " row-steps ran dense");
             Assert.AreEqual(PrecombineControlTests.DotNetDigest(control).ToString("X16"), digest.Value.ToString("X16"), control + ": the dense world's per-step state hashes differ from the .NET host's");
+            if (rows == PureRows.Lazy) Assert.AreEqual(0, denseRowSteps, "lazy rows (TimelineClock) are opt-in and stay off the dense path");
+            else Assert.Greater(denseRowSteps * (control == PureControl.Rates ? 100 : 10), PureControls.Rows * steps, control + " with " + rows + " rows: only " + denseRowSteps + " of " + PureControls.Rows * steps + " row-steps ran dense");
         }
 
         static uint Next(ref uint state)
@@ -190,12 +191,13 @@ namespace KindPure
             }
             UnityEngine.Debug.Log("TlDenseOracle: random " + rows + " slots=" + slots + " denseRowSteps=" + denseRowSteps + " of " + Rows * Steps + " rewinds=" + rewinds + " controls=" + controls + " skippedVitals=" + skipped + " spilledRowSteps=" + spilled + " denseRowStepsOver16Slots=" + wide);
             Assert.AreEqual(0, plain.DenseRows(), "the unfused world must never run dense");
-            Assert.Greater(denseRowSteps * 10, Rows * Steps, "only " + denseRowSteps + " of " + Rows * Steps + " row-steps ran dense");
+            if (rows == PureRows.Lazy) Assert.AreEqual(0, denseRowSteps, "lazy rows (TimelineClock) are opt-in and stay off the dense path");
+            else Assert.Greater(denseRowSteps * 10, Rows * Steps, "only " + denseRowSteps + " of " + Rows * Steps + " row-steps ran dense (the .NET random oracle requires 10%)");
             Assert.Greater(rewinds, 4, "the script rewound the world too rarely");
             Assert.Greater(controls, Rows * 4, "the script sent too few controls");
             Assert.Greater(skipped, 0, "the script never skipped the Vitals system");
             if (slots > 4) Assert.Greater(spilled, 0, "no row spilled past the four inline playback slots");
-            if (slots > 16) Assert.Greater(wide, 0, "no dense row held more than 16 slots, so the wide due scan never ran");
+            if (slots > 16 && rows != PureRows.Lazy) Assert.Greater(wide, 0, "no dense row held more than 16 slots, so the wide due scan never ran");
         }
     }
 }

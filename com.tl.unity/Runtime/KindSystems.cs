@@ -91,6 +91,8 @@ namespace Tl.Unity
         int _glideLimit;
         ulong _glideIndex;
         DenseSpace* _space;
+        EntityQuery _bare;
+        ComponentTypeHandle<TimelineDenseChunk> _denseChunkHandle;
         ulong _spaceIndex;
         uint _spaceGeneration;
         bool _spaceStale;
@@ -108,6 +110,12 @@ namespace Tl.Unity
                 .WithAllRW<TimelinePlaying>()
                 .WithOptions(EntityQueryOptions.IgnoreComponentEnabledState)
                 .Build(ref state);
+            _bare = new EntityQueryBuilder(Allocator.Temp)
+                .WithAll<Playback, TimelineRequest, TimelinePlaying>()
+                .WithNoneChunkComponent<TimelineDenseChunk>()
+                .WithOptions(EntityQueryOptions.IgnoreComponentEnabledState)
+                .Build(ref state);
+            _denseChunkHandle = state.GetComponentTypeHandle<TimelineDenseChunk>(false);
             _playbackHandle = state.GetBufferTypeHandle<Playback>(false);
             _requestHandle = state.GetBufferTypeHandle<TimelineRequest>(false);
             _playingHandle = state.GetComponentTypeHandle<TimelinePlaying>(false);
@@ -154,7 +162,10 @@ namespace Tl.Unity
                 Bind(ref state, in index);
                 _bound = library.Generation;
             }
+            if (!_bare.IsEmptyIgnoreFilter)
+                state.EntityManager.AddComponent(_bare, ComponentType.ChunkComponent<TimelineDenseChunk>());
             KindHandleSet.Update(ref _handles, ref state, index.KindCount);
+            _denseChunkHandle.Update(ref state);
             _playbackHandle.Update(ref state);
             _requestHandle.Update(ref state);
             _playingHandle.Update(ref state);
@@ -232,6 +243,8 @@ namespace Tl.Unity
                 DenseFrom = dense.Clock,
                 DenseReady = !_spaceStale && _space != null,
                 DenseForget = denseForget,
+                Walked = index.Dense != null && index.Dense->WalkClock == dense.Clock,
+                DenseChunkHandle = _denseChunkHandle,
             };
             dependency = tick.ScheduleParallel(_query, dependency);
             if (senders->Length != 0)

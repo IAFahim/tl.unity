@@ -13,6 +13,16 @@ namespace Tl.Unity
         [NativeDisableUnsafePtrRestriction] public DenseSpace* Space;
     }
 
+    public unsafe struct TimelineDenseChunk : IComponentData
+    {
+        public ulong Dense0;
+        public ulong Dense1;
+        public ushort WalkClock;
+        public ushort SkipClock;
+        public byte State;
+        public fixed ushort Since[128];
+    }
+
     public unsafe struct DenseSpace
     {
         public int* RowBase;
@@ -67,18 +77,32 @@ namespace Tl.Unity
     public static unsafe class DenseSlots
     {
         public const byte Marker = 0x80;
+        public const byte ExactAtDue = 0x40;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsDense(global::Tl.Playback* slots, int count) => count != 0 && (slots->Phase & Marker) != 0;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ushort DueOf(global::Tl.Playback* slots) => (ushort)(slots->Channel | slots->Rate << 8);
+        public static ushort DueOf(global::Tl.Playback* slot) => (ushort)(slot->Channel | slot->Rate << 8);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void SetDue(global::Tl.Playback* slots, ushort due)
+        public static bool ExactEnd(uint record) => (record & 0xFFFFu) == 1 ? record >> 16 == 0 : (record & 0x10000u) != 0;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void SetDue(global::Tl.Playback* slot, ushort due, bool exact)
         {
-            slots->Channel = (byte)due;
-            slots->Rate = (byte)(due >> 8);
+            slot->Channel = (byte)due;
+            slot->Rate = (byte)(due >> 8);
+            slot->Phase = (byte)((slot->Phase & Marker) | (exact ? ExactAtDue : 0));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Wrap(global::Tl.Playback* slot, uint* leave, ushort from, ushort to, int step)
+        {
+            var origin = (ushort)(slot->Tick + (short)(leave[(ushort)(slot->Tick + from)] >> 16));
+            slot->Tick = origin;
+            var record = leave[(ushort)(origin + to)];
+            SetDue(slot, (ushort)(to + step * (int)(record & 0xFFFFu)), ExactEnd(record));
         }
 
         public static void Settle(DenseSpace* space, global::Tl.Playback* slots, int count, ushort clock)
@@ -86,11 +110,16 @@ namespace Tl.Unity
             for (var i = 0; i < count; i++)
             {
                 var s = slots + i;
+                if (s->Timeline == 0)
+                {
+                    *(ulong*)s = 0;
+                    continue;
+                }
                 s->Tick = space->TickAt(s->Timeline, s->Flags != 0, (ushort)(s->Tick + clock));
+                s->Channel = space->Channel[s->Timeline - 1];
+                s->Rate = 0;
+                s->Phase = 0;
             }
-            slots->Channel = space->Channel[slots->Timeline - 1];
-            slots->Rate = 0;
-            slots->Phase = 0;
         }
 
         public static void Read(DenseSpace* space, ushort clock, global::Tl.Playback* slots, int count, global::Tl.Playback* into)
@@ -119,6 +148,7 @@ namespace Tl.Unity
         public int CellLane;
         public int TableEpoch;
         public int BuiltEpoch;
+        public ushort WalkClock;
         public bool Ready;
 
         public static KindDense* Create(global::Tl.LibraryTimeline* timelines, int timelineCount)
@@ -219,7 +249,8 @@ namespace Tl.Unity
                                 arrives = exact;
                             }
                             var gap = arrives ? 1u : 1u + (leave[row + step] & 0xFFFFu);
-                            leave[row] = gap | (exact ? 0u : (uint)(ushort)shift << 16);
+                            var end = arrives ? exact : DenseSlots.ExactEnd(leave[row + step]);
+                            leave[row] = arrives ? gap | (exact ? 0u : (uint)(ushort)shift << 16) : gap | (end ? 0x10000u : 0u);
                         }
                     }
                 }
