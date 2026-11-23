@@ -24,6 +24,7 @@ public sealed unsafe partial class KindStore
     bool _denseReady;
     bool _denseValues;
     internal bool DenseEnabled = true;
+    internal bool PulseHitsEnabled = true;
 
     void BuildRows()
     {
@@ -241,10 +242,11 @@ public sealed unsafe partial class KindStore
         var ep = _t.EntryPulse;
         var fastPulse = _t.FastPulseMask;
         var recs = _scratch;
-        var map = recs + WordSlots;
-        var pulses = map + WordSlots / 64;
-        var ents = (byte*)(pulses + WordSlots);
-        var ats = (ushort*)(ents + WordSlots);
+        var cap = 64 * Math.Min(stride, WordSlots / 64);
+        var map = recs + cap;
+        var pulses = map + cap / 64;
+        var ents = (byte*)(pulses + cap);
+        var ats = (ushort*)(ents + cap);
         var magic = (ulong)uint.MaxValue / (ulong)stride + 1;
         for (var w = firstWord; w < endWord; w++)
         {

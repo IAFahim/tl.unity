@@ -308,7 +308,7 @@ public sealed unsafe partial class KindStore : IDisposable
             {
                 if (v->Data == null && v->Cells >= 0)
                 {
-                    if (_routes[kind] != null && RowsAreEntities(kind) && !_feeding.Contains(_kindNames[kind]))
+                    if (PulseHitsEnabled && _routes[kind] != null && RowsAreEntities(kind) && !_feeding.Contains(_kindNames[kind]))
                     {
                         var steps = new Steps { Store = this };
                         var built = KindPulseValues.Build<T, TEval, Steps>(in _t, kind, part, _routes[kind], ref eval, ref steps);
