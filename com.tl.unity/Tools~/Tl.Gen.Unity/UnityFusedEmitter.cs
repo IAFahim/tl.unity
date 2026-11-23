@@ -293,7 +293,7 @@ namespace Tl.Gen.Unity
                 W(writer, "if (!global::Tl.Unity.DenseSlots.IsDense(__s, __len0)) continue;");
                 W(writer, "if (__row < 64) __d0 |= 1ul << __row; else __d1 |= 1ul << (__row - 64);");
                 W(writer, "var __n = __len0;");
-                EmitFusedRow(writer, systems, shapes, kinds, columnOf, anyFloat, anyInt, anyPick, scalarSpans, fast);
+                EmitFusedRow(writer, systems, shapes, kinds, columnOf, anyFloat, anyInt, anyPick, scalarSpans, fast, fast);
                 W(writer, "}");
                 W(writer, "}");
             }
@@ -319,19 +319,20 @@ namespace Tl.Gen.Unity
 
         static string RowAt(string slot) => "(Half + (nuint)(ushort)(__s[" + slot + "].Tick + Clock) * Stride)";
 
-        static void EmitScalarSpans(StringBuilder writer, List<FusedKind> scalar, List<FusedKind> kinds, bool full)
+        static void EmitScalarSpans(StringBuilder writer, List<FusedKind> scalar, List<FusedKind> kinds, bool full, bool hits)
         {
             foreach (var kind in scalar)
             {
                 var g = kinds.IndexOf(kind);
                 W(writer, Lanes(kind.Decl) ? Identity(kind.Decl, "__t" + g) + "__f" + g + " = false;" : "__t" + g + " = default; __f" + g + " = false;");
             }
-            if (full) W(writer, "__any = 0; __cell = 0; __nh = 0;");
+            if (full) W(writer, hits ? "__any = 0; __cell = 0; __nh = 0;" : "__any = 0; __cell = 0;");
             W(writer, "for (var __i = 0; __i < __n; __i++)");
             W(writer, "{");
             W(writer, "var __r = " + RowAt("__i") + ";");
             W(writer, "var __m = *(uint*)__r;");
-            if (full) W(writer, "__any |= __m; { var __cv = *(uint*)(__r + Cell); __cell |= __cv; __hits[__nh] = __cv; __nh += __cv != 0 ? 1 : 0; }");
+            if (full && hits) W(writer, "__any |= __m; { var __cv = *(uint*)(__r + Cell); __cell |= __cv; __hits[__nh] = __cv; __nh += __cv != 0 ? 1 : 0; }");
+            else if (full) W(writer, "__any |= __m; __cell |= *(uint*)(__r + Cell);");
             foreach (var kind in scalar)
             {
                 var g = kinds.IndexOf(kind);
@@ -350,11 +351,11 @@ namespace Tl.Gen.Unity
                 }
         }
 
-        static void EmitFusedRow(StringBuilder writer, IReadOnlyList<FusedSystem> systems, List<Shape> shapes, List<FusedKind> kinds, List<Dictionary<int, int>> columnOf, bool anyFloat, bool anyInt, bool anyPick, List<FusedKind> scalarSpans, bool fast)
+        static void EmitFusedRow(StringBuilder writer, IReadOnlyList<FusedSystem> systems, List<Shape> shapes, List<FusedKind> kinds, List<Dictionary<int, int>> columnOf, bool anyFloat, bool anyInt, bool anyPick, List<FusedKind> scalarSpans, bool fast, bool hits = false)
         {
             W(writer, "{");
             W(writer, "uint __any = 0, __cell = 0;");
-            W(writer, "var __nh = 0;");
+            if (hits) W(writer, "var __nh = 0;");
             for (var g = 0; g < kinds.Count; g++)
                 if (kinds[g].Span)
                     W(writer, kinds[g].Decl.ValueTypeName + " __t" + g + " = default; var __f" + g + " = false;");
@@ -376,7 +377,7 @@ namespace Tl.Gen.Unity
             W(writer, "{");
             W(writer, "var __w = " + Avx + ".mm256_load_si256(" + RowAt("__i") + ");");
             W(writer, "__hd = " + Avx2 + ".mm256_or_si256(__hd, __w);");
-            W(writer, "{ var __cv = " + Avx2 + ".mm256_permutevar8x32_epi32(__w, CellIndex).UInt0; __hits[__nh] = __cv; __nh += __cv != 0 ? 1 : 0; }");
+            if (hits) W(writer, "{ var __cv = " + Avx2 + ".mm256_permutevar8x32_epi32(__w, CellIndex).UInt0; __hits[__nh] = __cv; __nh += __cv != 0 ? 1 : 0; }");
             if (anyFloat) W(writer, "__fs = " + Avx + ".mm256_add_ps(__fs, " + Avx + ".mm256_and_ps(__w, FloatLanes));");
             if (anyInt) W(writer, "__is = " + Avx2 + ".mm256_add_epi32(__is, " + Avx2 + ".mm256_and_si256(__w, IntLanes));");
             foreach (var kind in kinds.FindAll(k => k.Lane == "pick"))
@@ -405,16 +406,16 @@ namespace Tl.Gen.Unity
                     W(writer, "if (__f" + g + ") __t" + g + " = *(" + kind.Decl.ValueTypeName + "*)((byte*)&__br" + g + " + Off" + g + ");");
                 }
             }
-            if (scalarSpans.Count != 0) EmitScalarSpans(writer, scalarSpans, kinds, false);
+            if (scalarSpans.Count != 0) EmitScalarSpans(writer, scalarSpans, kinds, false, hits);
             W(writer, "}");
             W(writer, "else");
             W(writer, "{");
-            EmitScalarSpans(writer, all, kinds, true);
+            EmitScalarSpans(writer, all, kinds, true, hits);
             W(writer, "}");
             W(writer, "}");
             W(writer, "else");
             W(writer, "{");
-            EmitScalarSpans(writer, all, kinds, true);
+            EmitScalarSpans(writer, all, kinds, true, hits);
             W(writer, "}");
             if (fast)
             {
@@ -434,7 +435,8 @@ namespace Tl.Gen.Unity
                     foreach (var kind in pulses)
                     {
                         W(writer, "{");
-                        EmitHitApply(writer, kind, kinds.IndexOf(kind), ApplyArgs(shapes[s], columnOf[s], kind.Decl.ApplyParams));
+                        if (hits) EmitHitApply(writer, kind, kinds.IndexOf(kind), ApplyArgs(shapes[s], columnOf[s], kind.Decl.ApplyParams));
+                        else EmitLaneApply(writer, kind, kinds.IndexOf(kind), ApplyArgs(shapes[s], columnOf[s], kind.Decl.ApplyParams));
                         W(writer, "}");
                     }
                     W(writer, "}");
