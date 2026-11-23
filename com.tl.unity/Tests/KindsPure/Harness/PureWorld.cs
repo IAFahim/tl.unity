@@ -464,7 +464,7 @@ namespace KindPure
             Step(forward, true);
         }
 
-        public void Step(bool forward, bool vitals)
+        public void Step(bool forward, bool vitals, bool runKinds = true)
         {
             if (forward != _forward)
             {
@@ -472,7 +472,7 @@ namespace KindPure
                 _forward = forward;
             }
             TickHandle.Update(World.Unmanaged);
-            Kinds(vitals);
+            if (runKinds) Kinds(vitals);
         }
 
         public int DenseRowsWiderThan(int slots)

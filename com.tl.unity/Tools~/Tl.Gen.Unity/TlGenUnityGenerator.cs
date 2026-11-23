@@ -262,7 +262,7 @@ namespace Tl.Gen.Unity
                             own.Add(info);
                 if (own.Count == 0)
                     continue;
-                if (!UnityKindJobEmitter.Fusable(model, assignments[index], own))
+                if ((fused.Count != 0 && model.Namespace != fused[0].Model.Namespace) || !UnityKindJobEmitter.Fusable(model, assignments[index], own))
                     fusable = false;
                 fused.Add(new UnityKindJobEmitter.FusedSystem { Model = model, Assignment = assignments[index], AssignmentIndex = index, Kinds = own });
             }

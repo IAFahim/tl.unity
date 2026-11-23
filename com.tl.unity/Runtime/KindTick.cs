@@ -18,6 +18,45 @@ namespace Tl.Unity
     }
 
     [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
+    internal unsafe struct KindRecoverDensePulsesJob : IJobChunk
+    {
+        [NativeDisableUnsafePtrRestriction] public KindIndex Index;
+        public BufferTypeHandle<Playback> PlaybackHandle;
+        [ReadOnly] public EntityTypeHandle EntityHandle;
+        [NativeSetThreadIndex] internal int ThreadIndex;
+        public ushort Clock;
+        public int Step;
+
+        public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
+        {
+            var dense = Index.Dense;
+            var reverseOffset = Step > 0 ? 0 : dense->Rows;
+            var leave = dense->Leave + reverseOffset;
+            var table = dense->Table + (long)reverseOffset * dense->Stride + dense->CellLane;
+            var from = (ushort)(Clock - Step);
+            var entities = chunk.GetNativeArray(EntityHandle);
+            var playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
+            for (var row = 0; row < chunk.Count; row++)
+            {
+                var buffer = playbacks[row];
+                var slots = (global::Tl.Playback*)buffer.GetUnsafePtr();
+                if (!DenseSlots.IsDense(slots, buffer.Length)) continue;
+                for (var i = 0; i < buffer.Length; i++)
+                {
+                    var slot = slots + i;
+                    if (slot->Timeline == 0) continue;
+                    if (DenseSlots.DueOf(slot) == Clock) DenseSlots.Wrap(slot, leave, from, Clock, Step);
+                    if (dense->Lanes == 0) continue;
+                    var cell = *(uint*)(table + (long)(ushort)(slot->Tick + Clock) * dense->Stride);
+                    if (cell == 0) continue;
+                    for (var kinds = dense->Lanes; kinds != 0; kinds &= kinds - 1)
+                        Index.PushPulse((int)global::Unity.Mathematics.math.tzcnt(kinds), ThreadIndex, in chunk, entities[row], row, (int)cell - 1);
+                }
+            }
+        }
+    }
+
+    [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
     public unsafe struct KindPulseClearJob : IJob
     {
         [NativeDisableUnsafePtrRestriction] public KindIndex Index;
@@ -149,6 +188,7 @@ namespace Tl.Unity
         [NativeDisableUnsafePtrRestriction] public KindDense* Dense;
         [NativeDisableUnsafePtrRestriction] public DenseSpace* Space;
         public ushort DenseFrom;
+        public uint DenseSequence;
         public bool DenseReady;
         public bool DenseForget;
         public bool Walked;
@@ -235,11 +275,7 @@ namespace Tl.Unity
             var playbacks = chunk.GetBufferAccessor(ref PlaybackHandle);
             TimelineDenseChunk* info = null;
             if (Space != null && clocks == null && chunk.HasChunkComponent(ref DenseChunkHandle))
-            {
                 info = (TimelineDenseChunk*)UnsafeUtility.AddressOf(ref chunk.GetChunkComponentDataRW(ref DenseChunkHandle));
-                if (info->SkipClock == DenseFrom && (info->State & 1) != 0 && !Walked && Dense != null && Dense->Leave != null)
-                    CatchUp(playbacks, info, count);
-            }
             ulong requested0 = 0, requested1 = 0;
             var ctx = new KindCursor
             {
@@ -397,20 +433,6 @@ namespace Tl.Unity
 
     public unsafe partial struct KindTickJob
     {
-        void CatchUp(BufferAccessor<Playback> playbacks, TimelineDenseChunk* info, int count)
-        {
-            var at = DenseFrom;
-            var before = (ushort)(at - StepDir);
-            var leave = Dense->Leave + (StepDir > 0 ? 0 : Dense->Rows);
-            for (var row = 0; row < count; row++)
-            {
-                if (((row < 64 ? info->Dense0 >> row : info->Dense1 >> (row - 64)) & 1) == 0) continue;
-                var buffer = playbacks[row];
-                var raw = (global::Tl.Playback*)buffer.GetUnsafePtr();
-                if (DenseSlots.IsDense(raw, buffer.Length)) StepDense(raw, buffer.Length, leave, before, at);
-            }
-        }
-
         void TickDense(in ArchetypeChunk chunk, in global::Tl.KindTables tables, ref KindCursor ctx, ref UnityPulseSink sink, BufferAccessor<Playback> playbacks, v128 playing, TimelinePlaying* copiesRo, bool anyClosed, byte* horizons, ulong reverse, bool playbackChanged, TimelineDenseChunk* info, ulong requested0, ulong requested1)
         {
             var count = chunk.Count;
@@ -434,12 +456,11 @@ namespace Tl.Unity
             ulong skip0 = 0, skip1 = 0;
             if (info != null)
             {
-                if (!settleAll && Walked && (info->State & 3) == 1 && info->WalkClock == from)
+                if (!settleAll && Walked && (info->State & 3) == 1 && info->WalkSequence == DenseSequence)
                 {
                     skip0 = info->Dense0 & ~pending0 & ~requested0;
                     skip1 = info->Dense1 & ~pending1 & ~requested1;
                 }
-                info->SkipClock = (skip0 | skip1) != 0 ? to : (ushort)(to + 0x8000);
             }
             for (var kw = 0; kw < 2; kw++)
             {

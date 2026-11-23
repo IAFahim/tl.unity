@@ -177,6 +177,17 @@ namespace Tl.Unity
             var dense = state.EntityManager.GetComponentData<TimelineDense>(state.SystemHandle);
             var denseStep = SystemAPI.GetSingleton<TimelineStep>().Forward ? 1 : -1;
             var denseForget = dense.Direction != denseStep;
+            var walked = index.Dense != null && index.Dense->WalkSequence == dense.Sequence;
+            if (!walked && dense.Space != null && index.Dense != null && index.Dense->Ready &&
+                _spaceIndex == identity && _spaceGeneration == library.Generation)
+                state.Dependency = new KindRecoverDensePulsesJob
+                {
+                    Index = index,
+                    PlaybackHandle = _playbackHandle,
+                    EntityHandle = _entityHandle,
+                    Clock = dense.Clock,
+                    Step = dense.Direction,
+                }.ScheduleParallel(_query, state.Dependency);
             if (_spaceStale)
             {
                 state.CompleteDependency();
@@ -241,9 +252,10 @@ namespace Tl.Unity
                 Dense = index.Dense,
                 Space = _space,
                 DenseFrom = dense.Clock,
+                DenseSequence = dense.Sequence,
                 DenseReady = !_spaceStale && _space != null,
                 DenseForget = denseForget,
-                Walked = index.Dense != null && index.Dense->WalkClock == dense.Clock,
+                Walked = walked,
                 DenseChunkHandle = _denseChunkHandle,
             };
             dependency = tick.ScheduleParallel(_query, dependency);
@@ -268,7 +280,7 @@ namespace Tl.Unity
                 }
                 senders->Clear();
             }
-            state.EntityManager.SetComponentData(state.SystemHandle, new TimelineDense { Clock = (ushort)(dense.Clock + denseStep), Direction = (sbyte)denseStep, Space = _space });
+            state.EntityManager.SetComponentData(state.SystemHandle, new TimelineDense { Clock = (ushort)(dense.Clock + denseStep), Direction = (sbyte)denseStep, Sequence = dense.Sequence + 1, Space = _space });
             *_tick.Last = dependency;
             state.Dependency = dependency;
         }

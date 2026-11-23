@@ -1,6 +1,7 @@
 using System;
 using NUnit.Framework;
 using Tl.Unity;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 
 namespace KindPure
@@ -265,6 +266,85 @@ namespace KindPure
             Assert.GreaterOrEqual(denseRowSteps * 5, Rows * Steps * 2, "only " + denseRowSteps + " of " + Rows * Steps + " row-steps ran dense while the consumer skipped");
             for (var row = 0; row < Rows; row++)
                 Assert.Less(Health(every, row), 1_000_000 - Skipped * 18, "row " + row + " never received a timeline hit next to its game pulses");
+        }
+
+        [Test]
+        public void SkippingTheFusedScheduleKeepsEveryPulseAcrossWrapsAndRewinds()
+        {
+            const int rows = 24, steps = 120;
+            using var dense = new PureWorld(rows, _first, true);
+            using var plain = new PureWorld(rows, _first, false);
+            for (var row = 0; row < rows; row++)
+            {
+                dense.Start(row, PureControls.Loop, (ushort)row);
+                plain.Start(row, PureControls.Loop, (ushort)row);
+            }
+            for (var step = 0; step < steps; step++)
+            {
+                var run = step % 7 < 5 || step == steps - 1;
+                var forward = step % 11 < 8;
+                dense.Step(forward, true, run);
+                plain.Step(forward, true, run);
+                if (run) Assert.AreEqual("", FirstDifference(dense, plain, step));
+                if (step == 4) Assert.Greater(dense.DenseRows(), 0);
+            }
+        }
+
+        [Test]
+        public unsafe void FlushedHitsKeepTheExplicitEntryOrderWhenTheConsumerSkipsAStep()
+        {
+            using var dense = new PureWorld(1, _first, true);
+            dense.Start(0, PureControls.Loop, 9);
+            dense.Step(true);
+            dense.Step(true);
+            dense.Step(true);
+            var slot = default(global::Tl.Playback);
+            var entity = dense.Rows[0];
+            TimelineTicks.Read(dense.Entities, entity, &slot, 1);
+            Assert.AreEqual(11, slot.Tick);
+            Assert.AreEqual(1, dense.DenseRows());
+
+            dense.Step(true, true, false);
+            AppendStatPulse(dense, 17);
+            AppendStatPulse(dense, -17);
+            dense.Step(true, true, false);
+
+            var entries = dense.Entities.GetBuffer<StatChangeEntry>(entity, true);
+            Assert.AreEqual(3, entries.Length);
+            var bytes = (byte*)entries.GetUnsafeReadOnlyPtr();
+            Assert.AreEqual(3, *(int*)(bytes + 8));
+            Assert.AreEqual(17, *(int*)(bytes + sizeof(StatChangeEntry) + 8));
+            Assert.AreEqual(-17, *(int*)(bytes + 2 * sizeof(StatChangeEntry) + 8));
+        }
+
+        [Test]
+        public void PendingPulseEntriesKeepAnEligibleRowOnTheExplicitPath()
+        {
+            using var pending = new PureWorld(1, _first, true);
+            using var empty = new PureWorld(1, _first, true);
+            foreach (var world in new[] { pending, empty })
+            {
+                world.Start(0, PureControls.Loop, 5);
+                world.Step(true);
+                world.Step(true);
+                Assert.AreEqual(0, world.DenseRows());
+            }
+
+            AppendStatPulse(pending, 17);
+            pending.Step(true);
+            empty.Step(true);
+
+            Assert.AreEqual(0, pending.DenseRows());
+            Assert.AreEqual(1, empty.DenseRows());
+        }
+
+        unsafe void AppendStatPulse(PureWorld world, int value)
+        {
+            var entity = world.Rows[0];
+            var entries = world.Entities.GetBuffer<StatChangeEntry>(entity);
+            entries.Add(new StatChangeEntry { Flags = global::Tl.KindEntryFlags.Pulse });
+            *(int*)((byte*)entries.GetUnsafePtr() + (entries.Length - 1) * sizeof(StatChangeEntry) + 8) = value;
+            world.Entities.SetComponentEnabled<StatChangeActive>(entity, true);
         }
 
         [Test]

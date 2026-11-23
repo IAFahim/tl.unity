@@ -34,7 +34,7 @@ namespace Tl.Gen.Unity
 
         internal static bool Fusable(UnitySystemModel model, SystemAssignment assignment, IReadOnlyList<UnityKindInfo> kinds)
         {
-            if (kinds.Count == 0 || EventConsumers(assignment).Count != 0) return false;
+            if (kinds.Count == 0 || model.Contexts.Count != 0 || EventConsumers(assignment).Count != 0) return false;
             var shape = ShapeOf(model, assignment, kinds);
             foreach (var info in kinds)
             {
@@ -180,6 +180,7 @@ namespace Tl.Gen.Unity
             W(writer, "[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public byte* Half;");
             W(writer, "public uint Stride;");
             W(writer, "public ushort Clock;");
+            W(writer, "public uint Sequence;");
             W(writer, "public bool Vector;");
             W(writer, "public ulong Skip;");
             W(writer, "[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public uint* Leave;");
@@ -309,7 +310,7 @@ namespace Tl.Gen.Unity
             W(writer, "ref var __info = ref chunk.GetChunkComponentDataRW(ref DenseChunkHandle);");
             W(writer, "__info.Dense0 = __d0;");
             W(writer, "__info.Dense1 = __d1;");
-            W(writer, "__info.WalkClock = Clock;");
+            W(writer, "__info.WalkSequence = Sequence;");
             W(writer, "__info.State = (byte)(__exactNext ? 3 : 1);");
             W(writer, "}");
             for (var g = 0; g < kinds.Count; g++)
@@ -734,7 +735,7 @@ namespace Tl.Gen.Unity
             W(writer, "public JobHandle Schedule(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward, JobHandle dependsOn)");
             W(writer, "{");
             W(writer, "var dense = index.Dense;");
-            W(writer, "if (!DenseEnabled || dense == null || !dense->Fits || _dense.IsEmptyIgnoreFilter)");
+            W(writer, "if (dense == null || !dense->Fits || (!DenseEnabled && !dense->Ready) || _dense.IsEmptyIgnoreFilter)");
             W(writer, "{");
             W(writer, "global::Tl.Unity.KindDense.Register(dense, 0, 0);");
             W(writer, "var __unfused = dependsOn;");
@@ -761,6 +762,8 @@ namespace Tl.Gen.Unity
                 table.Add("(__kid" + g + " < 0 || index.Values[__kid" + g + "].Data == dense->Table)");
                 if (kind.Lane == "pick") table.Add("(__kid" + g + " < 0 || dense->KeyLanes[__kid" + g + "] >= 0)");
             }
+            for (var g = 0; g < kinds.Count; g++)
+                if (!kinds[g].Span) table.Add("(__kid" + g + " < 0 || index.PulseValuesTable[__kid" + g + "].Data != null)");
             W(writer, "var __fits = " + string.Join(" && ", table) + ";");
             W(writer, "var __spanKinds = 0ul;");
             W(writer, "var __laneKinds = 0ul;");
@@ -769,7 +772,7 @@ namespace Tl.Gen.Unity
                 if (kinds[g].Span) W(writer, "if (__fits && __kid" + g + " >= 0 && __kid" + g + " < 64 && !index.HasForeign(__kid" + g + ")) __spanKinds |= 1ul << __kid" + g + ";");
                 else W(writer, "if (__fits && __kid" + g + " >= 0 && __kid" + g + " < 64 && index.PulseValuesTable[__kid" + g + "].Data != null) __laneKinds |= 1ul << __kid" + g + ";");
             }
-            W(writer, "global::Tl.Unity.KindDense.Register(dense, __spanKinds, __laneKinds);");
+            W(writer, "global::Tl.Unity.KindDense.Register(dense, DenseEnabled ? __spanKinds : 0ul, DenseEnabled ? __laneKinds : 0ul);");
             W(writer, "var __items = global::Tl.Unity.FusedMixed.Allocate(_query.CalculateChunkCountWithoutFiltering(), out var __mixedCount);");
             W(writer, "_playback.Update(ref state);");
             W(writer, "_playing.Update(ref state);");
@@ -790,15 +793,17 @@ namespace Tl.Gen.Unity
                 if (kinds[g].Lane == "float") W(writer, "if (__fits && __kid" + g + " >= 0) ((uint*)&__floats)[index.Values[__kid" + g + "].Front >> 2] = ~0u;");
                 if (kinds[g].Lane == "int") W(writer, "if (__fits && __kid" + g + " >= 0) ((uint*)&__ints)[index.Values[__kid" + g + "].Front >> 2] = ~0u;");
             }
-            W(writer, "var __clock = _dense.GetSingleton<global::Tl.Unity.TimelineDense>().Clock;");
+            W(writer, "var __dense = _dense.GetSingleton<global::Tl.Unity.TimelineDense>();");
+            W(writer, "var __clock = __dense.Clock;");
             W(writer, "var __step = forward ? 1 : -1;");
-            W(writer, "if (__fits) dense->WalkClock = __clock;");
+            W(writer, "if (__fits) dense->WalkSequence = __dense.Sequence;");
             W(writer, "var job = new TlFusedChunkJob");
             W(writer, "{");
             W(writer, "Index = index,");
             W(writer, "Half = __fits ? dense->Table + (forward ? 0 : (long)dense->Rows * dense->Stride) : null,");
             W(writer, "Stride = (uint)(__fits ? dense->Stride : 32),");
             W(writer, "Clock = __clock,");
+            W(writer, "Sequence = __dense.Sequence,");
             W(writer, "Vector = __fits,");
             W(writer, "Skip = Skip,");
             W(writer, "Leave = __fits && dense->Leave != null ? dense->Leave + (forward ? 0 : dense->Rows) : null,");

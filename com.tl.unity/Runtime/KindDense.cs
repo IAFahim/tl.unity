@@ -10,6 +10,7 @@ namespace Tl.Unity
     {
         public ushort Clock;
         public sbyte Direction;
+        public uint Sequence;
         [NativeDisableUnsafePtrRestriction] public DenseSpace* Space;
     }
 
@@ -17,8 +18,7 @@ namespace Tl.Unity
     {
         public ulong Dense0;
         public ulong Dense1;
-        public ushort WalkClock;
-        public ushort SkipClock;
+        public uint WalkSequence;
         public byte State;
         public fixed ushort Since[128];
     }
@@ -140,6 +140,7 @@ namespace Tl.Unity
         public uint* Leave;
         public byte* Eligible;
         public int* KeyLanes;
+        public ulong RegisteredSpanKinds;
         public ulong SpanKinds;
         public ulong LaneKinds;
         public ulong Lanes;
@@ -148,7 +149,7 @@ namespace Tl.Unity
         public int CellLane;
         public int TableEpoch;
         public int BuiltEpoch;
-        public ushort WalkClock;
+        public uint WalkSequence;
         public bool Ready;
 
         public static KindDense* Create(global::Tl.LibraryTimeline* timelines, int timelineCount)
@@ -170,8 +171,8 @@ namespace Tl.Unity
 
         public static void Register(KindDense* dense, ulong spanKinds, ulong laneKinds)
         {
-            if (dense == null || dense->SpanKinds == spanKinds && dense->LaneKinds == laneKinds) return;
-            dense->SpanKinds = spanKinds;
+            if (dense == null || dense->RegisteredSpanKinds == spanKinds && dense->LaneKinds == laneKinds) return;
+            dense->RegisteredSpanKinds = spanKinds;
             dense->LaneKinds = laneKinds;
             dense->TableEpoch++;
         }
@@ -181,6 +182,7 @@ namespace Tl.Unity
             var dense = index.Dense;
             if (dense == null) return;
             dense->BuiltEpoch = dense->TableEpoch;
+            dense->SpanKinds = dense->RegisteredSpanKinds;
             dense->Ready = false;
             Free(dense->Leave);
             dense->Leave = null;

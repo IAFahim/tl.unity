@@ -170,30 +170,22 @@ A row with `TimelineHorizon`, `TimelineClock` and a `PlaybackDue` buffer in its 
 - Memory: 2 B per slot (`PlaybackDue`, 4 inline in the chunk) and 2 B per row.
 - Measured (Unity 7000.0.0a16, Burst, 11 workers, safety checks off, `OwnerScaleBench`: 1,000 looping kind timelines with one clip each, median of 128 steps), tick job in ms, eager against lazy: 10,000 x 40 rows x playbacks 0.31 -> 0.16 (duration 120), 0.27 -> 0.06 (600), 0.27 -> 0.04 (3000); 20,000 x 100 1.28 -> 0.94, 1.17 -> 0.35, 1.27 -> 0.13; 20,000 x 200 2.46 -> 1.71, 2.42 -> 0.72, 2.60 -> 0.26. The whole timeline frame (tick plus generated kind jobs) gains 1.1x to 2.4x: the generated kind jobs are unchanged, and at duration 120 most of the tick's remaining time is the kind events themselves (span begins and ends, pulses), which both paths must do.
 
-## Dense rows (`PlaybackDense`)
+## Dense rows
 
-A row whose archetype also holds `PlaybackDense.Types` (`PlaybackDense`, `DenseOrigins`, `DenseDues`, `PlaybackOrigin`) runs dense when
-every live slot is plain (no flag but `Reverse`, rate 0), the row has no sampled copies, and every span kind its timelines feed reads a
-precombined table built by its system (no foreign feeder). The rule and the leave records are tl's (`KindStore.Dense`, IAFahim/tl#673).
-Opt in per entity; rows without the four types keep the eager, glide or lazy path above unchanged.
+Schedule the generated `TimelineJobs.Fused` to combine compatible kind systems in one chunk walk. An eager or glide row can run dense
+when its live slots play at 1x, it has no sampled copies or pending pulse entries, and its span kinds use the shared precombined
+table. The tick system adds `TimelineDenseChunk` metadata to the archetype's chunks. Rows with `TimelineClock` use the lazy path.
 
-- A dense slot is a 2-byte origin: its row in the shared row space (a forward and a reversed block per timeline, one table half per
-  world direction) is `origin + clock`, where the clock is one world counter (`TimelineDense` on the `TimelineKindTickSystem` entity).
-  A calm step writes nothing for the row. Up to four slots sit inline in the chunk (`DenseOrigins`, `DenseDues`); more go to the
-  `PlaybackOrigin` buffer.
-- The tick visits a dense row only when its `PlaybackDense.Next` equals the clock: a slot then arrives at a pulse tick (fast pulses
-  go to the kind's lanes) or leaves its block (a loop wraps the origin). A non-looping end, a slow pulse, a request, a world
-  direction change, a library change or any other write to the chunk's `Playback` returns the row to its own path for that step,
-  and the row densifies again after an exact step. On a lazy row a pulse arrival also leaves the dense path, so pulse entries match
-  the lazy path.
-- `Playback.Tick` of a dense row is stored relative to the world clock with the lazy-row encoding. Read it with
-  `TimelineTicks.Real(in playback, TimelineTicks.ClockOf(entityManager, entity))`; generated jobs, the timeline swap, the panel and
-  the tests do. A raw `Playback.Tick` read on a dense row is wrong, so only opt in rows whose readers decode.
-- Memory: 4 + 8 + 8 B per row in the chunk plus the 16 B `PlaybackOrigin` header; per library, the leave records (8 B per row-space
-  row and direction) and the gap tables, built the first time a precombined table exists.
-- `KindPure.DenseOracleTests` runs a dense world against the same world without the four types, through every `PureControl` in
-  eager, glide and lazy rows and a random script (rewinds, two reloads, skipped Vitals, rows past four slots), comparing every
-  component, enable bit and slot every step, and checks the dense world's per-step digest against the .NET host's.
+- Each dense slot stores a two-byte origin and its next due clock in the existing `Playback` buffer. The table row is `origin + clock`.
+  The world clock lives on the tick system. The fused job reads spans and fast pulses in slot order and updates origins at loop wraps.
+- A non-looping end, a slow pulse, a request, a world direction change or a library change returns the row to explicit stepping.
+  A row can run dense again when it meets the eligibility rules.
+- A skipped consumer gets the lane hits on its next run. If the entire fused schedule skips a step, the next tick recovers that step's
+  hits before clearing the pulse lanes. Deferred hits precede newer entries already in the buffer.
+- Read slots with `TimelineTicks.Read`, which decodes dense and lazy playbacks. Write playback changes through `TimelineRequest` or
+  `TlRequests`.
+- `KindPure.DenseOracleTests` compares dense and explicit worlds through controls, rewinds, library swaps, wide rows and skipped
+  schedules, and checks the control digests against the .NET host.
 
 ## Kind Report
 
