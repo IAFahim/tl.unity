@@ -18,6 +18,7 @@ namespace Tl.Unity
         EntityQuery _requestQuery;
         EntityQuery _closedQuery;
         int _sequence;
+        int _steps;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -33,6 +34,7 @@ namespace Tl.Unity
             var view = SystemAPI.GetSingleton<TimelineLibrary>().View;
             if (!view.Kinds.IsEmpty)
                 return;
+            var sweep = (++_steps & 63) == 0;
             var entities = _requestQuery.ToEntityArray(Allocator.Temp);
             if (entities.Length == 0)
                 return;
@@ -41,7 +43,7 @@ namespace Tl.Unity
             for (var e = 0; e < entities.Length; e++)
             {
                 var requests = manager.GetBuffer<TimelineRequest>(entities[e]);
-                if (requests.Length == 0 && requests.Capacity != 0) requests.TrimExcess();
+                if (sweep && requests.Length == 0 && requests.Capacity != 0) requests.TrimExcess();
                 for (var r = 0; r < requests.Length; r++)
                     gathered.Add(new global::Tl.RequestRecord(entities[e].Index, requests[r].Slot, requests[r].Timeline, requests[r].At, requests[r].Op, _sequence++));
             }
