@@ -15,6 +15,8 @@ using Unity.Mathematics;
 
 namespace KindPure.Origins
 {
+    public unsafe struct Pad2 : IComponentData { public fixed byte Bytes[2]; }
+    public unsafe struct Pad4 : IComponentData { public fixed byte Bytes[4]; }
     public unsafe struct Pad8 : IComponentData { public fixed byte Bytes[8]; }
     public unsafe struct Pad16 : IComponentData { public fixed byte Bytes[16]; }
     public unsafe struct Pad32 : IComponentData { public fixed byte Bytes[32]; }
@@ -92,6 +94,8 @@ namespace KindPure.Origins
         TwoKinds,
         SlotFree,
         LanePulses,
+        Composite,
+        CompositeSlotFree,
     }
 
     public unsafe struct CostPlan : IDisposable
@@ -179,6 +183,59 @@ namespace KindPure.Origins
             var speed = pickKey >= 0 ? ((float*)(rows + ((ushort)(origins[pickKey & 255] + frame) << 3)))[1] : 0f;
             motion.X += speed * stats.Walk;
             motion.Y += lift * stats.Jump;
+            return any;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static uint MoveLanes(int* rows, ushort* origins, int active, uint frame, ref Motion motion, in Stats stats, ref Vitals vitals)
+        {
+            float lift;
+            int pickKey;
+            uint any;
+            int damage;
+            int stat;
+            if (X86.Avx2.IsAvx2Supported)
+            {
+                var floatSums = X86.Avx.mm256_setzero_ps();
+                var intSums = X86.Avx.mm256_setzero_si256();
+                var pickKeys = X86.Avx.mm256_set1_epi32(-1);
+                var heads = X86.Avx.mm256_setzero_si256();
+                for (var slot = 0; slot < active; slot++)
+                {
+                    var lanes = X86.Avx.mm256_load_si256(rows + ((ushort)(origins[slot] + frame) << 3));
+                    floatSums = X86.Avx.mm256_add_ps(floatSums, lanes);
+                    intSums = X86.Avx2.mm256_add_epi32(intSums, lanes);
+                    pickKeys = X86.Avx2.mm256_max_epi32(pickKeys, X86.Avx2.mm256_or_si256(lanes, X86.Avx.mm256_set1_epi32(slot)));
+                    heads = X86.Avx2.mm256_or_si256(heads, lanes);
+                }
+                lift = floatSums.Float3;
+                pickKey = pickKeys.SInt2;
+                any = heads.UInt0;
+                damage = intSums.SInt4;
+                stat = intSums.SInt5;
+            }
+            else
+            {
+                lift = 0f;
+                pickKey = -1;
+                any = 0u;
+                damage = 0;
+                stat = 0;
+                for (var slot = 0; slot < active; slot++)
+                {
+                    var row = rows + ((ushort)(origins[slot] + frame) << 3);
+                    lift += ((float*)row)[3];
+                    pickKey = math.max(pickKey, row[2] | slot);
+                    any |= (uint)row[0];
+                    damage += row[4];
+                    stat += row[5];
+                }
+            }
+            var speed = pickKey >= 0 ? ((float*)(rows + ((ushort)(origins[pickKey & 255] + frame) << 3)))[1] : 0f;
+            motion.X += speed * stats.Walk;
+            motion.Y += lift * stats.Jump;
+            vitals.Health -= damage;
+            vitals.Stamina += stat;
             return any;
         }
 
@@ -381,7 +438,7 @@ namespace KindPure.Origins
             Diff(in chunk, ref ActiveBHandle, activeB, listedB0, listedB1, all0, all1);
         }
 
-        static void Diff<T>(in ArchetypeChunk chunk, ref ComponentTypeHandle<T> handle, v128 before, ulong now0, ulong now1, ulong all0, ulong all1) where T : unmanaged, IComponentData, IEnableableComponent
+        internal static void Diff<T>(in ArchetypeChunk chunk, ref ComponentTypeHandle<T> handle, v128 before, ulong now0, ulong now1, ulong all0, ulong all1) where T : unmanaged, IComponentData, IEnableableComponent
         {
             var d0 = (now0 ^ before.ULong0) & all0;
             var d1 = (now1 ^ before.ULong1) & all1;
@@ -389,6 +446,67 @@ namespace KindPure.Origins
             var mask = chunk.GetEnabledMask(ref handle);
             for (; d0 != 0; d0 &= d0 - 1) { var b = math.tzcnt(d0); mask[b] = (now0 >> b & 1) != 0; }
             for (; d1 != 0; d1 &= d1 - 1) { var b = math.tzcnt(d1); mask[64 + b] = (now1 >> b & 1) != 0; }
+        }
+    }
+
+    [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard, CompileSynchronously = true)]
+    public unsafe struct CostComposedJob : IJobChunk
+    {
+        public CostPlan Plan;
+        public uint Frame;
+        public int Fixed;
+        [ReadOnly] public DynamicComponentTypeHandle OriginsHandle;
+        [ReadOnly] public ComponentTypeHandle<CostDense> DenseHandle;
+        [ReadOnly] public ComponentTypeHandle<CostPlaying> PlayingHandle;
+        public ComponentTypeHandle<CostActiveA> ActiveAHandle;
+        [ReadOnly] public ComponentTypeHandle<CostEnabledA> EnabledAHandle;
+        public ComponentTypeHandle<CostActiveB> ActiveBHandle;
+        [ReadOnly] public ComponentTypeHandle<CostEnabledB> EnabledBHandle;
+        public ComponentTypeHandle<Motion> MotionHandle;
+        [ReadOnly] public ComponentTypeHandle<Stats> StatsHandle;
+        public ComponentTypeHandle<Vitals> VitalsHandle;
+
+        public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
+        {
+            var count = chunk.Count;
+            var all0 = count >= 64 ? ~0ul : (1ul << count) - 1;
+            var all1 = count <= 64 ? 0ul : count >= 128 ? ~0ul : (1ul << (count - 64)) - 1;
+            var playing = chunk.GetEnableableBits(ref PlayingHandle);
+            var denseBits = chunk.GetEnableableBits(ref DenseHandle);
+            var activeA = chunk.GetEnableableBits(ref ActiveAHandle);
+            var enabledA = chunk.GetEnableableBits(ref EnabledAHandle);
+            var activeB = chunk.GetEnableableBits(ref ActiveBHandle);
+            var enabledB = chunk.GetEnableableBits(ref EnabledBHandle);
+            var rows0 = (activeA.ULong0 | playing.ULong0) & enabledA.ULong0 & (activeB.ULong0 | playing.ULong0) & enabledB.ULong0 & denseBits.ULong0;
+            var rows1 = (activeA.ULong1 | playing.ULong1) & enabledA.ULong1 & (activeB.ULong1 | playing.ULong1) & enabledB.ULong1 & denseBits.ULong1;
+            if ((rows0 & all0) != all0 || (rows1 & all1) != all1) return;
+            var dense = (CostDense*)chunk.GetRequiredComponentDataPtrRO(ref DenseHandle);
+            var motion = (Motion*)chunk.GetRequiredComponentDataPtrRW(ref MotionHandle);
+            var stats = (Stats*)chunk.GetRequiredComponentDataPtrRO(ref StatsHandle);
+            var vitals = (Vitals*)chunk.GetRequiredComponentDataPtrRW(ref VitalsHandle);
+            var fixedOrigins = Fixed > 0 ? (ushort*)chunk.GetDynamicComponentDataArrayReinterpret<ushort>(ref OriginsHandle, Fixed * sizeof(ushort)).GetUnsafeReadOnlyPtr() : null;
+            var buffers = Fixed > 0 ? default : chunk.GetUntypedBufferAccessor(ref OriginsHandle);
+            ulong listedA0 = 0, listedA1 = 0, listedB0 = 0, listedB1 = 0;
+            for (var row = 0; row < count; row++)
+            {
+                ushort* origins;
+                int active;
+                if (Fixed > 0)
+                {
+                    origins = fixedOrigins + row * Fixed;
+                    active = dense[row].Count;
+                }
+                else origins = (ushort*)buffers.GetUnsafePtrAndLength(row, out active);
+                uint any;
+                if (active == 2) any = CostKernels.MoveLanes(Plan.Rows, origins, 2, Frame, ref motion[row], in stats[row], ref vitals[row]);
+                else if (active == 4) any = CostKernels.MoveLanes(Plan.Rows, origins, 4, Frame, ref motion[row], in stats[row], ref vitals[row]);
+                else any = CostKernels.MoveLanes(Plan.Rows, origins, active, Frame, ref motion[row], in stats[row], ref vitals[row]);
+                var bit = 1ul << (row & 63);
+                if ((any & 1) != 0) { if (row < 64) listedA0 |= bit; else listedA1 |= bit; }
+                if ((any & 2) != 0) { if (row < 64) listedB0 |= bit; else listedB1 |= bit; }
+            }
+            CostMoveJob.Diff(in chunk, ref ActiveAHandle, activeA, listedA0, listedA1, all0, all1);
+            CostMoveJob.Diff(in chunk, ref ActiveBHandle, activeB, listedB0, listedB1, all0, all1);
         }
     }
 
@@ -588,7 +706,7 @@ namespace KindPure.Origins
             _entities = _world.EntityManager;
             _level = level;
             _ends = ends;
-            _plan = level == CostLevel.LanePulses ? ends : plan;
+            _plan = level >= CostLevel.LanePulses ? ends : plan;
             _table = table;
             _fixed = active == 2 || active == 4 ? active : 0;
             _originType = _fixed == 2 ? ComponentType.ReadWrite<Fixed2Origins>() : _fixed == 4 ? ComponentType.ReadWrite<Fixed4Origins>() : ComponentType.ReadWrite<HeapOrigin>();
@@ -621,8 +739,8 @@ namespace KindPure.Origins
 
         int AddPads(System.Collections.Generic.List<ComponentType> types, int targetCapacity)
         {
-            var pads = new[] { ComponentType.ReadWrite<Pad8>(), ComponentType.ReadWrite<Pad16>(), ComponentType.ReadWrite<Pad32>(), ComponentType.ReadWrite<Pad64>(), ComponentType.ReadWrite<Pad128>() };
-            for (var units = 0; units < 32; units++)
+            var pads = new[] { ComponentType.ReadWrite<Pad2>(), ComponentType.ReadWrite<Pad4>(), ComponentType.ReadWrite<Pad8>(), ComponentType.ReadWrite<Pad16>(), ComponentType.ReadWrite<Pad32>(), ComponentType.ReadWrite<Pad64>(), ComponentType.ReadWrite<Pad128>() };
+            for (var units = 0; units < 128; units++)
             {
                 var trial = new System.Collections.Generic.List<ComponentType>(types);
                 for (var p = 0; p < pads.Length; p++)
@@ -631,7 +749,7 @@ namespace KindPure.Origins
                 {
                     types.Clear();
                     types.AddRange(trial);
-                    return units * 8;
+                    return units * 2;
                 }
             }
             throw new InvalidOperationException("no padding reaches chunk capacity " + targetCapacity);
@@ -730,6 +848,11 @@ namespace KindPure.Origins
                 done = new CostVitalsLaneJob { Plan = _plan, Frame = _frame, Fixed = _fixed, OriginsHandle = _entities.GetDynamicComponentTypeHandle(ComponentType.ReadOnly(_originType.TypeIndex)), DenseHandle = _entities.GetComponentTypeHandle<CostDense>(true), ActiveHandle = _entities.GetComponentTypeHandle<CostActiveA>(true), EnabledHandle = _entities.GetComponentTypeHandle<CostEnabledA>(true), VitalsHandle = vitalsHandle }.ScheduleParallel(_characters, done);
                 done = new CostTickJob { Plan = _plan, Frame = _frame, Fixed = _fixed, Checks = true, TwoKinds = false, Lanes = null, Threads = _threads, OriginsHandle = originsHandle, SpillHandle = spillHandle, DuesHandle = duesHandle, DenseHandle = denseHandle, PlayingHandle = _entities.GetComponentTypeHandle<CostPlaying>(true), EntityHandle = entityHandle }.ScheduleParallel(_characters, done);
             }
+            else if (_level >= CostLevel.Composite)
+            {
+                done = new CostComposedJob { Plan = _plan, Frame = _frame, Fixed = _fixed, OriginsHandle = _entities.GetDynamicComponentTypeHandle(ComponentType.ReadOnly(_originType.TypeIndex)), DenseHandle = _entities.GetComponentTypeHandle<CostDense>(true), PlayingHandle = _entities.GetComponentTypeHandle<CostPlaying>(true), ActiveAHandle = _entities.GetComponentTypeHandle<CostActiveA>(false), EnabledAHandle = _entities.GetComponentTypeHandle<CostEnabledA>(true), ActiveBHandle = _entities.GetComponentTypeHandle<CostActiveB>(false), EnabledBHandle = _entities.GetComponentTypeHandle<CostEnabledB>(true), MotionHandle = motionHandle, StatsHandle = statsHandle, VitalsHandle = vitalsHandle }.ScheduleParallel(_characters, default);
+                done = new CostTickJob { Plan = _plan, Frame = _frame, Fixed = _fixed, Checks = true, TwoKinds = false, Lanes = null, Threads = _threads, OriginsHandle = originsHandle, SpillHandle = spillHandle, DuesHandle = duesHandle, DenseHandle = denseHandle, PlayingHandle = _entities.GetComponentTypeHandle<CostPlaying>(true), EntityHandle = entityHandle }.ScheduleParallel(_characters, done);
+            }
             else
             {
                 JobHandle start = default;
@@ -792,7 +915,7 @@ namespace KindPure.Origins
             var args = Environment.GetCommandLineArgs();
             var log = Path.Combine(UnityEngine.Application.dataPath, "..", "OriginCosts.log");
             var cells = "1000000x2,1000000x4,50000x40,50000x100";
-            var levels = "U1,Chunk,Dues,Walks,Checks,ScalarPick,TwoKinds,SlotFree,LanePulses";
+            var levels = "U1,Chunk,Dues,Walks,Checks,ScalarPick,TwoKinds,SlotFree,LanePulses,Composite,CompositeSlotFree";
             var warmup = 40;
             var measure = 16;
             var runs = 5;
@@ -825,8 +948,11 @@ namespace KindPure.Origins
                     var active = int.Parse(size[1], CultureInfo.InvariantCulture);
                     foreach (var name in levels.Split(','))
                     {
-                        var level = (CostLevel)Enum.Parse(typeof(CostLevel), name);
-                        Cell(writer, table, plan, ends, characters, active, level, level == CostLevel.SlotFree ? slotFreeCapacity : portCapacity, warmup, measure, runs);
+                        var parts = name.Split('@');
+                        var level = (CostLevel)Enum.Parse(typeof(CostLevel), parts[0]);
+                        var capacity = level == CostLevel.SlotFree || level == CostLevel.CompositeSlotFree ? slotFreeCapacity : portCapacity;
+                        if (parts.Length > 1) capacity = int.Parse(parts[1], CultureInfo.InvariantCulture);
+                        Cell(writer, table, plan, ends, characters, active, level, capacity, warmup, measure, runs);
                     }
                 }
             }
