@@ -148,6 +148,34 @@ namespace Tl.Unity
             for (var i = 0; i < count; i++) Encode(slots + i, clock);
         }
 
+        public static TimelineDense Dense(EntityManager manager)
+        {
+            using var query = manager.CreateEntityQuery(new EntityQueryDesc { All = new[] { ComponentType.ReadOnly<TimelineDense>() }, Options = EntityQueryOptions.IncludeSystems });
+            return query.IsEmptyIgnoreFilter ? default : query.GetSingleton<TimelineDense>();
+        }
+
+        public static int Read(EntityManager manager, Entity entity, global::Tl.Playback* into, int capacity)
+        {
+            if (manager.HasChunkComponent<TimelineDenseChunk>(entity))
+                manager.CompleteDependencyBeforeRO<TimelineDenseChunk>();
+            var slots = manager.GetBuffer<Playback>(entity, true);
+            var count = global::System.Math.Min(slots.Length, capacity);
+            var raw = (global::Tl.Playback*)slots.GetUnsafeReadOnlyPtr();
+            if (DenseSlots.IsDense(raw, count))
+            {
+                var dense = Dense(manager);
+                DenseSlots.Read(dense.Space, dense.Clock, raw, count, into);
+                return count;
+            }
+            var clock = manager.HasComponent<TimelineClock>(entity) ? manager.GetComponentData<TimelineClock>(entity).Value : (ushort)0;
+            for (var i = 0; i < count; i++)
+            {
+                into[i] = raw[i];
+                Decode(into + i, clock);
+            }
+            return count;
+        }
+
         public static ushort Due(global::Tl.Playback* slot, in global::Tl.KindTables tables, in global::Tl.KindCalm calm, ulong worldReverse, ushort now)
         {
             var word = *(ulong*)slot;

@@ -43,7 +43,7 @@ public readonly struct EntityRef
 
 public readonly unsafe struct PlaybackView
 {
-    internal PlaybackView(Playback* slots, int* counts, ulong* spilled, Playback* blocks, int entities, int slotsPerEntity)
+    internal PlaybackView(Playback* slots, int* counts, ulong* spilled, Playback* blocks, int entities, int slotsPerEntity, ulong* dense = null, ushort* origins = null, ushort* blockOrigins = null, ushort clock = 0)
     {
         Slots = slots;
         Counts = counts;
@@ -51,6 +51,10 @@ public readonly unsafe struct PlaybackView
         Blocks = blocks;
         EntityCount = entities;
         SlotsPerEntity = slotsPerEntity;
+        Dense = dense;
+        Origins = origins;
+        BlockOrigins = blockOrigins;
+        Clock = clock;
     }
 
     public readonly Playback* Slots;
@@ -59,8 +63,15 @@ public readonly unsafe struct PlaybackView
     public readonly Playback* Blocks;
     public readonly int EntityCount;
     public readonly int SlotsPerEntity;
+    public readonly ulong* Dense;
+    public readonly ushort* Origins;
+    public readonly ushort* BlockOrigins;
+    public readonly ushort Clock;
 
     public int CountOf(int entity) => Counts[entity];
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IsDense(int entity) => Dense != null && (Dense[entity >> 6] >> (entity & 63) & 1) != 0;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Playback* RunOf(int entity)
@@ -100,6 +111,11 @@ public sealed unsafe class PlaybackTable : IDisposable
     TimelineWorld? _owner;
     internal ushort Clock;
     internal bool Forward = true, Frozen;
+    ulong* _dense;
+    ushort* _origins;
+    ushort* _blockOrigins;
+    internal ushort DenseClock;
+    internal bool Settled;
 
     public PlaybackTable(int entityCapacity, int slotsPerEntity = 4) : this(entityCapacity, slotsPerEntity, 0)
     {
@@ -159,15 +175,56 @@ public sealed unsafe class PlaybackTable : IDisposable
     }
 
     public int SlotsPerEntity => _slotsPerEntity;
-    public PlaybackView View { get { Escape(); return new(_slots, _counts, _spilled, _blocks, _entities, _slotsPerEntity); } }
-    internal PlaybackView RawView => new(_slots, _counts, _spilled, _blocks, _entities, _slotsPerEntity);
+    public PlaybackView View { get { Escape(); SettleAll(); return RawView; } }
+    public PlaybackView SystemView => RawView;
+    internal PlaybackView RawView => new(_slots, _counts, _spilled, _blocks, _entities, _slotsPerEntity, _dense, _origins, _blockOrigins, DenseClock);
+    internal ulong* DenseBits => _dense;
+
+    internal bool IsDense(int entity) => _dense != null && (_dense[entity >> 6] >> (entity & 63) & 1) != 0;
+
+    internal void SetDense(int entity, bool value)
+    {
+        if (value) _dense[entity >> 6] |= 1ul << (entity & 63);
+        else _dense[entity >> 6] &= ~(1ul << (entity & 63));
+    }
+
+    internal ushort* OriginsOf(int entity) => IsSpilled(entity) ? _blockOrigins + *(int*)InlineRun(entity) : _origins + (nuint)entity * (nuint)_slotsPerEntity;
+
+    internal ushort* InlineDues => _origins + (nuint)_entities * (nuint)_slotsPerEntity;
+
+    internal ushort* DuesOf(int entity) => IsSpilled(entity) ? _blockOrigins + (nuint)_blocksCapacity + (nuint)(*(int*)InlineRun(entity)) : _origins + (nuint)_entities * (nuint)_slotsPerEntity + (nuint)entity * (nuint)_slotsPerEntity;
+
+    internal void EnsureDense()
+    {
+        if (_dense != null) return;
+        _dense = (ulong*)KindStore.Zeroed((nuint)_playingWords * 8u);
+        _origins = (ushort*)KindStore.Zeroed((nuint)_entities * (nuint)_slotsPerEntity * 4u);
+        if (_blocksCapacity != 0) _blockOrigins = (ushort*)KindStore.Zeroed((nuint)_blocksCapacity * 4u);
+    }
+
+    public void Settle(int entity)
+    {
+        if (IsDense(entity)) _kinds!.Settle(entity);
+    }
+
+    void SettleAll()
+    {
+        if (_dense == null || Settled || _kinds == null) return;
+        for (var w = 0; w < _playingWords; w++)
+            for (var bits = _dense[w]; bits != 0; bits &= bits - 1) _kinds.Settle((w << 6) + KindStore.Tz(bits));
+        Settled = true;
+    }
     public int HorizonLimit => _limit;
     ushort* InlineDue(int entity) => _due + (nuint)entity * (nuint)_slotsPerEntity;
     internal ushort* DueOf(int entity) => IsSpilled(entity) ? _blockDue + *(int*)InlineRun(entity) : InlineDue(entity);
 
     void Escape() { Thaw(); _limit = 0; }
 
-    internal void Edit(int entity) { if (Frozen) LazyTicks.Shift(SlotsOf(entity), _counts[entity], Clock, Forward); }
+    internal void Edit(int entity)
+    {
+        if (IsDense(entity)) _kinds!.Undense(entity);
+        if (Frozen) LazyTicks.Shift(SlotsOf(entity), _counts[entity], Clock, Forward);
+    }
 
     internal void Seal(int entity)
     {
@@ -272,6 +329,17 @@ public sealed unsafe class PlaybackTable : IDisposable
             {
                 new ReadOnlySpan<Playback>(_blocks, _blocksUsed).CopyTo(new Span<Playback>(blocks, _blocksUsed));
                 NativeMemory.AlignedFree(_blocks);
+            }
+            if (_origins != null)
+            {
+                var origins = (ushort*)KindStore.Zeroed((nuint)capacity * 4u);
+                if (_blockOrigins != null)
+                {
+                    new ReadOnlySpan<ushort>(_blockOrigins, _blocksUsed).CopyTo(new Span<ushort>(origins, _blocksUsed));
+                    new ReadOnlySpan<ushort>(_blockOrigins + _blocksCapacity, _blocksUsed).CopyTo(new Span<ushort>(origins + capacity, _blocksUsed));
+                    NativeMemory.AlignedFree(_blockOrigins);
+                }
+                _blockOrigins = origins;
             }
             _blocks = blocks;
             _blocksCapacity = capacity;
@@ -379,6 +447,7 @@ public sealed unsafe class PlaybackTable : IDisposable
 
     public bool Find(int entity, byte channel, out Playback playback)
     {
+        Settle(entity);
         var slots = new Slots(this, entity);
         var found = PlaybackRules.Find(ref slots, channel, out playback);
         if (Frozen) fixed (Playback* at = &playback) LazyTicks.Shift(at, 1, Clock, Forward);
@@ -473,6 +542,9 @@ public sealed unsafe class PlaybackTable : IDisposable
         NativeMemory.AlignedFree(_spilled);
         NativeMemory.AlignedFree(Next);
         NativeMemory.AlignedFree(_blockDue);
+        NativeMemory.AlignedFree(_dense);
+        NativeMemory.AlignedFree(_origins);
+        NativeMemory.AlignedFree(_blockOrigins);
         if (_blocks != null) NativeMemory.AlignedFree(_blocks);
         GC.SuppressFinalize(this);
     }

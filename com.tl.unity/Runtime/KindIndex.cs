@@ -118,6 +118,7 @@ namespace Tl.Unity
         public KindWorkerCache* WorkerCache;
         public UnsafeUntypedBufferAccessor* WorkerBuffers;
         public EnabledMask* WorkerMasks;
+        public KindDense* Dense;
 
         public bool IsCreated => Timelines != null || KindCount == 0 && Closure != null;
 
@@ -474,6 +475,7 @@ namespace Tl.Unity
                 index.PrevSampledCount = Zeroed<int>(1);
                 *index.SampledCount = 1;
                 *index.PrevSampledCount = 1;
+                if (index.KindCount != 0) index.Dense = KindDense.Create(view.Timelines, count);
                 return index;
             }
             catch
@@ -483,7 +485,7 @@ namespace Tl.Unity
             }
         }
 
-        public void SpanValues<TFill>(int kind, ref TFill fill) where TFill : struct, global::Tl.IKindFill
+        public void SpanValues<TFill>(int kind, ref TFill fill) where TFill : struct, global::Tl.IKindFill, IKindDenseFill
         {
             if ((uint)kind >= (uint)KindCount || Values[kind].Data != null) return;
             var views = Zeroed<global::Tl.KindValues>(64);
@@ -492,17 +494,46 @@ namespace Tl.Unity
             var committed = false;
             try
             {
-                var b = global::Tl.KindBuild.Of(in Score, Timelines, views, row, true, ref fill);
-                if (b.Kinds != 0)
+                ulong kinds;
+                if (Dense != null && Dense->Fits)
                 {
-                    var bytes = (long)b.Rows * b.Stride;
-                    if (bytes > int.MaxValue)
-                        throw new InvalidOperationException("Tl: a precombined kind table would exceed 2 GB.");
-                    data = ZeroedBytes(Math.Max(1L, bytes), 64);
-                    b.Fill(data, ref fill);
+                    var b = KindDenseBuild.Of(in Score, Timelines, views, row, PulseBase, PulseBits, ref fill);
+                    kinds = b.Kinds;
+                    if (kinds != 0)
+                    {
+                        var bytes = (long)b.Rows * b.Stride * 2;
+                        if (bytes > int.MaxValue)
+                            throw new InvalidOperationException("Tl: a precombined kind table would exceed 2 GB.");
+                        data = ZeroedBytes(Math.Max(1L, bytes), 64);
+                        b.Fill(data, ref fill);
+                        if (b.CellLane >= 0)
+                        {
+                            Dense->Table = data;
+                            Dense->Stride = b.Stride;
+                            Dense->CellLane = b.CellLane;
+                            for (var k = 0; k < 64; k++) Dense->KeyLanes[k] = b.KeyOf(k);
+                        }
+                    }
+                }
+                else
+                {
+                    var b = global::Tl.KindBuild.Of(in Score, Timelines, views, row, true, ref fill);
+                    kinds = b.Kinds;
+                    if (kinds != 0)
+                    {
+                        var bytes = (long)b.Rows * b.Stride;
+                        if (bytes > int.MaxValue)
+                            throw new InvalidOperationException("Tl: a precombined kind table would exceed 2 GB.");
+                        data = ZeroedBytes(Math.Max(1L, bytes), 64);
+                        b.Fill(data, ref fill);
+                    }
+                }
+                if (kinds != 0)
+                {
                     for (var k = 0; k < KindCount; k++)
-                        if ((b.Kinds >> k & 1) != 0)
+                        if ((kinds >> k & 1) != 0)
                             Values[k] = views[k];
+                    if (Dense != null) Dense->TableEpoch++;
                     committed = true;
                 }
             }
@@ -747,6 +778,7 @@ namespace Tl.Unity
                 Free(PulseValuesTable[k].Data);
             }
             Free(PulseValuesTable);
+            KindDense.Release(Dense);
             Score.Free();
             this = default;
         }

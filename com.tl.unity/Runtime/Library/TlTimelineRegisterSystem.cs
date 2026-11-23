@@ -106,12 +106,15 @@ namespace Tl.Unity
             _playbackHandle.Update(ref state);
             _playingHandle.Update(ref state);
             _clockHandle.Update(ref state);
+            var dense = TimelineTicks.Dense(state.EntityManager);
             new TlTimelineSwapJob
             {
                 Index = index,
                 PlaybackHandle = _playbackHandle,
                 PlayingHandle = _playingHandle,
                 ClockHandle = _clockHandle,
+                Space = dense.Space,
+                DenseClock = dense.Clock,
                 Handles = handles,
                 Swapped = ids,
             }.Run(_playbacks);

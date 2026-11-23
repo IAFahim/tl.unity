@@ -270,6 +270,7 @@ namespace Tl.Gen.Unity
             W(writer, "[ReadOnly] public BufferTypeHandle<global::Tl.Unity.Playback> PlaybackHandle;");
             W(writer, "[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelineClock> ClockHandle;");
             W(writer, "[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelinePlaying> PlayingHandle;");
+            W(writer, "public global::Unity.Burst.Intrinsics.v128 Skip;");
             foreach (var column in model.Columns)
                 W(writer, (column.ReadOnly ? "[ReadOnly] " : "") + "public ComponentTypeHandle<" + ComponentName(model, column) + "> " + column.Name + "Handle;");
             foreach (var context in model.Contexts)
@@ -468,7 +469,7 @@ namespace Tl.Gen.Unity
                     EmitPulseValues(writer, shape, assignment, assignmentIndex, kinds[k], k);
             if (values.Count > 0)
             {
-                W(writer, "public struct KindFill : global::Tl.IKindFill");
+                W(writer, "public struct KindFill : global::Tl.IKindFill, global::Tl.Unity.IKindDenseFill");
                 W(writer, "{");
                 W(writer, "[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public global::Tl.Unity.KindIndex Index;");
                 W(writer, "public void Add(ref global::Tl.KindBuild __b)");
@@ -480,21 +481,33 @@ namespace Tl.Gen.Unity
                     W(writer, "if (__kid" + k + " >= 0) { var __s" + k + " = default(KindSpans_" + k + "); __b.Add<" + info.Decl.ValueTypeName + ", KindSpans_" + k + ">(__kid" + k + ", 0, Index.Routes, ref __s" + k + "); }");
                 }
                 W(writer, "}");
+                W(writer, "public void Add(ref global::Tl.Unity.KindDenseBuild __b)");
+                W(writer, "{");
+                foreach (var k in values)
+                {
+                    var info = kinds[k];
+                    W(writer, "var __kid" + k + " = Index.KindOf(" + KindId(info.Key) + ");");
+                    W(writer, "if (__kid" + k + " >= 0) { var __s" + k + " = default(KindSpans_" + k + "); " + info.Decl.ValueTypeName + " __id" + k + "; " + Identity(info.Decl, "__id" + k) + "__b.Add<" + info.Decl.ValueTypeName + ", KindSpans_" + k + ">(__kid" + k + ", 0, Index.Routes, ref __s" + k + ", __id" + k + "); }");
+                }
+                W(writer, "}");
                 W(writer, "}");
             }
             for (var r = 0; r < runs.Count; r++)
                 EmitFused(writer, shape, assignment, assignmentIndex, kinds, runs[r], runs.Count == 1 ? "Fused" : "Fused_" + r);
             if (events.Count != 0)
                 EmitEvents(writer, events, eventConsumers, assignmentIndex);
+            W(writer, "[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
+            W(writer, "global::Unity.Burst.Intrinsics.v128 __Keep(global::Unity.Burst.Intrinsics.v128 __bits) => new global::Unity.Burst.Intrinsics.v128(__bits.ULong0 & ~Skip.ULong0, __bits.ULong1 & ~Skip.ULong1);");
             W(writer, "}");
             foreach (var k in pulseFast)
             {
                 EmitPulseJob(writer, model, shape, kinds[k], k);
                 EmitFinishJob(writer, model, shape, kinds[k], k);
             }
+            EmitMixed(writer, model);
             EmitEntry(writer, model, shape, events, kinds, values, fusedKinds, pulseFast);
             W(writer, "}");
-            return writer.ToString().Replace("\r\n", "\n");
+            return System.Text.RegularExpressions.Regex.Replace(writer.ToString(), @"\bchunk\.GetEnableableBits\(ref (\w+)\)", "__Keep(chunk.GetEnableableBits(ref $1))").Replace("\r\n", "\n");
         }
 
         static void EmitPulseJob(StringBuilder writer, UnitySystemModel model, Shape shape, UnityKindInfo info, int ordinal)
@@ -800,6 +813,22 @@ namespace Tl.Gen.Unity
             W(writer, "}");
         }
 
+        static void EmitMixed(StringBuilder writer, UnitySystemModel model)
+        {
+            W(writer, "[BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]");
+            W(writer, "public unsafe struct " + model.SystemTypeName + "MixedJob : global::Unity.Jobs.IJobParallelForDefer");
+            W(writer, "{");
+            W(writer, "[global::Unity.Collections.LowLevel.Unsafe.NativeDisableContainerSafetyRestriction] public " + model.SystemTypeName + "ChunkJob Job;");
+            W(writer, "[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public global::Tl.Unity.FusedMixed* Items;");
+            W(writer, "public void Execute(int index)");
+            W(writer, "{");
+            W(writer, "var job = Job;");
+            W(writer, "job.Skip = Items[index].Dense;");
+            W(writer, "job.Execute(Items[index].Chunk, index, false, default);");
+            W(writer, "}");
+            W(writer, "}");
+        }
+
         static void EmitEntry(StringBuilder writer, UnitySystemModel model, Shape shape, List<UnityContext> events, IReadOnlyList<UnityKindInfo> kinds, List<int> values, HashSet<int> fusedKinds, List<int> pulseFast)
         {
             var handles = new List<(string field, string type, string getter, bool readOnly)>();
@@ -854,12 +883,19 @@ namespace Tl.Gen.Unity
                 W(writer, "jobs._" + handle.field + " = state." + handle.getter + "(" + (handle.readOnly ? "true" : "false") + ");");
             W(writer, "return jobs;");
             W(writer, "}");
-            var signature = new StringBuilder();
-            signature.Append("public JobHandle Schedule(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward");
+            var contextParams = new StringBuilder();
+            var contextArgs = new StringBuilder();
             foreach (var context in model.Contexts)
-                signature.Append(", " + context.TypeName + " " + context.Name);
-            signature.Append(", JobHandle dependsOn)");
-            W(writer, signature.ToString());
+            {
+                contextParams.Append(", " + context.TypeName + " " + context.Name);
+                contextArgs.Append(", " + context.Name);
+            }
+            W(writer, "public JobHandle Schedule(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward" + contextParams + ", JobHandle dependsOn)");
+            W(writer, "{");
+            W(writer, "var job = Prepare(ref state, view, index, forward" + contextArgs + ", dependsOn);");
+            W(writer, "return Pulses(ref state, index" + contextArgs + ", job.ScheduleParallel(_query, dependsOn));");
+            W(writer, "}");
+            W(writer, "public " + name + "ChunkJob Prepare(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward" + contextParams + ", JobHandle dependsOn)");
             W(writer, "{");
             foreach (var handle in handles)
                 W(writer, "_" + handle.field + ".Update(ref state);");
@@ -883,11 +919,16 @@ namespace Tl.Gen.Unity
             foreach (var context in model.Contexts)
                 W(writer, ", " + context.Name + " = " + context.Name);
             W(writer, " };");
+            W(writer, "return job;");
+            W(writer, "}");
+            W(writer, "public JobHandle Pulses(ref SystemState state, global::Tl.Unity.KindIndex index" + contextParams + ", JobHandle __dep)");
+            W(writer, "{");
             if (pulseFast.Count == 0)
-                W(writer, "return job.ScheduleParallel(_query, dependsOn);");
+                W(writer, "return __dep;");
             else
             {
-                W(writer, "var __dep = job.ScheduleParallel(_query, dependsOn);");
+                foreach (var k in pulseFast)
+                    W(writer, "var __id" + k + " = index.KindOf(" + KindId(kinds[k].Key) + ");");
                 W(writer, "var __orderVer = state.EntityManager.GetComponentOrderVersion<global::Tl.Unity.Playback>();");
                 foreach (var k in pulseFast)
                 {
@@ -1042,9 +1083,20 @@ namespace Tl.Gen.Unity
         {
             var kind = info.Decl;
             var value = kind.ValueTypeName;
+            var law = kind.Monoid != 0;
             W(writer, "public struct KindSpans_" + ordinal + " : global::Tl.IKindSpanValues<" + value + ">");
             W(writer, "{");
-            W(writer, "public bool Evaluate(int __r, global::Tl.LibraryStep* __def, global::Tl.LibraryTimeline* __tl, ushort __tick, bool __backward, out " + value + " __v)");
+            if (law)
+            {
+                EmitLaw(writer, kind);
+                W(writer, "public bool Evaluate(int __r, global::Tl.LibraryStep* __def, global::Tl.LibraryTimeline* __tl, ushort __tick, bool __backward, out " + value + " __v)");
+                W(writer, "{");
+                W(writer, "if (!__Evaluate(__r, __def, __tl, __tick, __backward, out __v)) return false;");
+                W(writer, "__Law(in __v);");
+                W(writer, "return true;");
+                W(writer, "}");
+            }
+            W(writer, (law ? "bool __Evaluate" : "public bool Evaluate") + "(int __r, global::Tl.LibraryStep* __def, global::Tl.LibraryTimeline* __tl, ushort __tick, bool __backward, out " + value + " __v)");
             W(writer, "{");
             W(writer, "__v = default;");
             W(writer, "var __kflags = __backward ? global::Tl.FrameFlags.Reverse : global::Tl.FrameFlags.None;");
@@ -1054,7 +1106,40 @@ namespace Tl.Gen.Unity
             EmitCases(writer, shape, assignment, assignmentIndex, FeedersOf(assignment, kind), "__r", true, "return false");
             W(writer, "return true;");
             W(writer, "}");
-            W(writer, "public void Combine(ref " + value + " total, in " + value + " next) => " + kind.TypeName + ".Combine(ref total, in next);");
+            W(writer, law
+                ? "public void Combine(ref " + value + " total, in " + value + " next) { var __a = total; " + LaneOp(kind, "__a", "next") + kind.TypeName + ".Combine(ref total, in next); __Same(__a, total); }"
+                : "public void Combine(ref " + value + " total, in " + value + " next) => " + kind.TypeName + ".Combine(ref total, in next);");
+            W(writer, "}");
+        }
+
+        static void EmitLaw(StringBuilder writer, KindDecl kind)
+        {
+            var t = kind.ValueTypeName;
+            W(writer, t + " __last; bool __seen;");
+            W(writer, "void __Law(in " + t + " __v)");
+            W(writer, "{");
+            W(writer, t + " __a, __b;");
+            if (kind.Monoid != 5)
+                W(writer, Identity(kind, "__a") + "__b = __a; " + LaneOp(kind, "__a", "__v") + kind.TypeName + ".Combine(ref __b, in __v); __Same(__a, __b);");
+            W(writer, "__a = __v; __b = __v; " + LaneOp(kind, "__a", "__v") + kind.TypeName + ".Combine(ref __b, in __v); __Same(__a, __b);");
+            W(writer, "if (__seen) { __a = __last; __b = __last; " + LaneOp(kind, "__a", "__v") + kind.TypeName + ".Combine(ref __b, in __v); __Same(__a, __b); }");
+            W(writer, "__last = __v; __seen = true;");
+            W(writer, "}");
+            var tests = new List<string>();
+            for (var f = kind.Monoid == 5 ? 1 : 0; f < kind.LaneFields.Count; f++)
+            {
+                var field = kind.LaneFields[f];
+                var a = LanePath("__a", field.Path);
+                var b = LanePath("__b", field.Path);
+                tests.Add(field.Type == "float" ? "global::Unity.Mathematics.math.asint(" + a + ") != global::Unity.Mathematics.math.asint(" + b + ")"
+                    : field.Type == "double" ? "global::Unity.Mathematics.math.aslong(" + a + ") != global::Unity.Mathematics.math.aslong(" + b + ")"
+                    : a + " != " + b);
+            }
+            var monoid = kind.Monoid switch { 1 => "Sum", 2 => "Max", 3 => "Min", 4 => "Or", 5 => "Pick", _ => "Custom" };
+            W(writer, "static void __Same(" + t + " __a, " + t + " __b)");
+            W(writer, "{");
+            if (tests.Count > 0)
+                W(writer, "if (" + string.Join(" || ", tests) + ") throw new global::System.InvalidOperationException(\"Tl: kind '" + kind.Id + "' declares Combine = " + monoid + ", but " + kind.TypeName.Replace("global::", "") + ".Combine gives a different result on values from the library; fix Combine or the declaration.\");");
             W(writer, "}");
         }
 
@@ -1129,7 +1214,7 @@ namespace Tl.Gen.Unity
             W(writer, "else");
             W(writer, "{");
             if (lazyRow)
-                W(writer, "if (!__rowInit) { if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle); __pbReady = true; } var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; __clock = __clocks == null ? (ushort)0 : __clocks[__row]; __rowInit = true; }");
+                W(writer, "if (!__rowInit) { if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle); __pbReady = true; } var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; __clock = (__clocks == null ? (ushort)0 : __clocks[__row]); __rowInit = true; }");
             W(writer, "var __pb = __run + __en->Slot;");
             W(writer, "var __tl = Index.Timelines + (__en->Timeline - 1);");
             W(writer, "ushort __tick = __en->Slot < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;");
@@ -1406,6 +1491,33 @@ namespace Tl.Gen.Unity
             W(writer, "}");
         }
 
+        static bool Lanes(KindDecl kind) => kind.Monoid is > 0 and < 5;
+
+        static string LanePath(string root, string path) => path.Length == 0 ? root : root + "." + path;
+
+        static string Identity(KindDecl kind, string target)
+        {
+            var sb = new StringBuilder(target + " = default; ");
+            if (Lanes(kind))
+                foreach (var f in kind.LaneFields)
+                    sb.Append(LanePath(target, f.Path) + " = " + (kind.Monoid switch { 1 => f.Type == "float" ? "-0f" : f.Type == "double" ? "-0d" : "0", 2 => f.Type + ".MinValue", 3 => f.Type + ".MaxValue", _ => f.Type == "bool" ? "false" : "0" }) + "; ");
+            return sb.ToString();
+        }
+
+        static string LaneOp(KindDecl kind, string total, string next)
+        {
+            if (kind.Monoid == 5) return "if (" + next + "." + kind.LaneFields[0].Path + " >= " + total + "." + kind.LaneFields[0].Path + ") " + total + " = " + next + "; ";
+            var sb = new StringBuilder();
+            foreach (var f in kind.LaneFields)
+            {
+                var t = LanePath(total, f.Path);
+                var n = LanePath(next, f.Path);
+                sb.Append(kind.Monoid switch { 1 => t + " += " + n + "; ", 2 => t + " = global::System.Math.Max(" + t + ", " + n + "); ", 3 => t + " = global::System.Math.Min(" + t + ", " + n + "); ", _ => t + " |= " + n + "; " });
+            }
+            return sb.ToString();
+        }
+
+
         static void EmitKind(StringBuilder writer, Shape shape, SystemAssignment assignment, int assignmentIndex, UnityKindInfo info, int ordinal, bool useValues)
         {
             var kind = info.Decl;
@@ -1423,11 +1535,11 @@ namespace Tl.Gen.Unity
                 W(writer, "var __pbReady = false;");
                 W(writer, "var __playbacks = default(BufferAccessor<global::Tl.Unity.Playback>);");
                 W(writer, "ushort* __clocks = null;");
-            }
+                }
             else
             {
                 W(writer, "var __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle);");
-            }
+                }
             W(writer, "if (!chunk.Has(ref " + info.Name + "EntryHandle)) return;");
             W(writer, "var __kid = KindSlot_" + ordinal + " != 0 ? KindSlot_" + ordinal + " - 2 : Index.KindOf(" + KindId(info.Key) + ");");
             W(writer, "if (__kid < 0) return;");
@@ -1461,7 +1573,7 @@ namespace Tl.Gen.Unity
                 W(writer, "if (__sampled)");
                 W(writer, "{");
                 W(writer, "if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle); __pbReady = true; }");
-                W(writer, "var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; if (__cnt + __smp > __pbuf.Capacity) __smp = 0; __sampled = __smp != 0; __clock = __clocks == null ? (ushort)0 : __clocks[__row]; __rowInit = true;");
+                W(writer, "var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; if (__cnt + __smp > __pbuf.Capacity) __smp = 0; __sampled = __smp != 0; __clock = (__clocks == null ? (ushort)0 : __clocks[__row]); __rowInit = true;");
                 W(writer, "}");
                 W(writer, "var __sk = __sampled ? global::Tl.KindRules.Depth(__run + __cnt, __smp) : 1;");
             }
@@ -1650,11 +1762,11 @@ namespace Tl.Gen.Unity
             W(writer, "if (__tl == null || __tl->Duration == 0) continue;");
             if (closing)
             {
-                W(writer, "var __rt = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);");
+                W(writer, "var __rt = global::Tl.Unity.TimelineTicks.Real(__pb, (__clocks == null ? (ushort)0 : __clocks[__row]));");
                 W(writer, "var __tick = __rt < __tl->Duration ? __rt : (ushort)(__tl->Duration - 1);");
             }
             else
-                W(writer, "var __tick = global::Tl.Unity.TimelineTicks.Real(__pb, __clocks == null ? (ushort)0 : __clocks[__row]);");
+                W(writer, "var __tick = global::Tl.Unity.TimelineTicks.Real(__pb, (__clocks == null ? (ushort)0 : __clocks[__row]));");
             W(writer, "var __stage = global::Tl.LibraryViewReader.StageAt(__tl, __tick);");
             W(writer, "if (__stage == null) continue;");
             W(writer, "var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;");

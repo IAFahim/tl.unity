@@ -56,7 +56,7 @@ namespace KindPure
             }
         }
 
-        static ulong DotNetDigest(PureControl control)
+        internal static ulong DotNetDigest(PureControl control)
         {
             switch (control)
             {

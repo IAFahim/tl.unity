@@ -37,6 +37,31 @@ namespace KindPure
     [DisableAutoCreation]
     [UpdateInGroup(typeof(TimelineSimulationGroup))]
     [UpdateAfter(typeof(TimelineKindTickSystem))]
+    public partial struct PureFusedSystem : ISystem
+    {
+        public TimelineJobs.Fused Jobs;
+
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            state.RequireForUpdate<TimelineLibrary>();
+            state.RequireForUpdate<TimelineStep>();
+            Jobs.Create(ref state);
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            var library = SystemAPI.GetSingleton<TimelineLibrary>();
+            var step = SystemAPI.GetSingleton<TimelineStep>();
+            state.Dependency = Jobs.Schedule(ref state, library.View, library.Kinds, step.Forward, state.Dependency);
+        }
+    }
+
+    [BurstCompile]
+    [DisableAutoCreation]
+    [UpdateInGroup(typeof(TimelineSimulationGroup))]
+    [UpdateAfter(typeof(TimelineKindTickSystem))]
     public unsafe partial struct PureSpanWalkMovementSystem : ISystem
     {
         const int MostKinds = 64;
@@ -200,12 +225,15 @@ namespace KindPure
             _playbackHandle.Update(ref state);
             _playingHandle.Update(ref state);
             _clockHandle.Update(ref state);
+            var dense = TimelineTicks.Dense(state.EntityManager);
             new TlTimelineSwapJob
             {
                 Index = index,
                 PlaybackHandle = _playbackHandle,
                 PlayingHandle = _playingHandle,
                 ClockHandle = _clockHandle,
+                Space = dense.Space,
+                DenseClock = dense.Clock,
                 Handles = handles,
                 Swapped = everyTimeline,
             }.Run(_playbacks);
@@ -277,11 +305,19 @@ namespace KindPure
         readonly SystemHandle _swap;
         bool _forward = true;
 
-        public PureWorld(int count, byte[] library) : this(count, library, null, false, PureRows.Eager)
+        public PureWorld(int count, byte[] library) : this(count, library, null, false, PureRows.Eager, true)
         {
         }
 
-        public PureWorld(int count, byte[] library, byte[] second, bool spanWalk, PureRows rows)
+        public PureWorld(int count, byte[] library, bool dense) : this(count, library, null, false, PureRows.Eager, dense)
+        {
+        }
+
+        public PureWorld(int count, byte[] library, byte[] second, bool spanWalk, PureRows rows) : this(count, library, second, spanWalk, rows, false)
+        {
+        }
+
+        public PureWorld(int count, byte[] library, byte[] second, bool spanWalk, PureRows rows, bool dense)
         {
             World = new World("TlKindsPure");
             Entities = World.EntityManager;
@@ -292,8 +328,16 @@ namespace KindPure
             _step = Entities.CreateEntityQuery(typeof(TimelineStep));
             _published = Entities.CreateEntityQuery(typeof(TimelineLibrary));
             TickHandle = World.CreateSystem<TimelineKindTickSystem>();
-            MovementHandle = spanWalk ? World.CreateSystem<PureSpanWalkMovementSystem>() : World.CreateSystem<PureMovementSystem>();
-            VitalsHandle = World.CreateSystem<PureVitalsSystem>();
+            if (spanWalk)
+            {
+                MovementHandle = World.CreateSystem<PureSpanWalkMovementSystem>();
+                VitalsHandle = World.CreateSystem<PureVitalsSystem>();
+            }
+            else
+            {
+                MovementHandle = World.CreateSystem<PureFusedSystem>();
+                World.Unmanaged.GetUnsafeSystemRef<PureFusedSystem>(MovementHandle).Jobs.DenseEnabled = dense;
+            }
             _swap = World.CreateSystem<PureSwapEveryTimelineSystem>();
             RequestHandle = World.CreateSystem<PureRequestSystem>();
             Rows = new Entity[count];
@@ -347,6 +391,24 @@ namespace KindPure
             Entities.GetBuffer<TimelineRequest>(Rows[row]).Add(new TimelineRequest { Slot = 0, Timeline = timeline, At = at, Op = op });
         }
 
+        public void Damage(int row, int amount)
+        {
+            var sender = Entities.GetComponentData<TimelineKindTick>(TickHandle).BeginPulses(1);
+            var writer = sender.Writer;
+            writer.Begin(0);
+            new KindPulses<int>(writer, DamageKind.Id).To(Rows[row], amount);
+            writer.End();
+        }
+
+        public void Stat(int row, int delta)
+        {
+            var sender = Entities.GetComponentData<TimelineKindTick>(TickHandle).BeginPulses(1);
+            var writer = sender.Writer;
+            writer.Begin(0);
+            new KindPulses<int>(writer, StatChangeKind.Id).To(Rows[row], delta);
+            writer.End();
+        }
+
         public void HotSwapLibrary(bool second)
         {
             Entities.CompleteAllTrackedJobs();
@@ -376,22 +438,61 @@ namespace KindPure
             return (int)(bytes / Math.Max(1, take));
         }
 
+        bool Fused => VitalsHandle == default;
+
+        void Kinds(bool vitals)
+        {
+            if (Fused)
+            {
+                World.Unmanaged.GetUnsafeSystemRef<PureFusedSystem>(MovementHandle).Jobs.Skip = vitals ? 0ul : 2ul;
+                MovementHandle.Update(World.Unmanaged);
+                return;
+            }
+            MovementHandle.Update(World.Unmanaged);
+            if (vitals) VitalsHandle.Update(World.Unmanaged);
+        }
+
         public void Step()
         {
             RequestHandle.Update(World.Unmanaged);
             TickHandle.Update(World.Unmanaged);
-            MovementHandle.Update(World.Unmanaged);
-            VitalsHandle.Update(World.Unmanaged);
+            Kinds(true);
         }
 
         public void Step(bool forward)
+        {
+            Step(forward, true);
+        }
+
+        public void Step(bool forward, bool vitals, bool runKinds = true)
         {
             if (forward != _forward)
             {
                 _step.SetSingleton(new TimelineStep { Forward = forward });
                 _forward = forward;
             }
-            Step();
+            TickHandle.Update(World.Unmanaged);
+            if (runKinds) Kinds(vitals);
+        }
+
+        public int DenseRowsWiderThan(int slots)
+        {
+            Entities.CompleteAllTrackedJobs();
+            var wide = 0;
+            foreach (var row in Rows)
+                if (IsDense(row) && Entities.GetBuffer<Playback>(row, true).Length > slots)
+                    wide++;
+            return wide;
+        }
+
+        public int SpilledRows()
+        {
+            Entities.CompleteAllTrackedJobs();
+            var spilled = 0;
+            foreach (var row in Rows)
+                if (Entities.GetBuffer<Playback>(row, true).Length > 4)
+                    spilled++;
+            return spilled;
         }
 
         public void StepEachSystemCompleted(double[] ticksPerSystem)
@@ -400,10 +501,11 @@ namespace KindPure
             TickHandle.Update(World.Unmanaged);
             Entities.CompleteAllTrackedJobs();
             var afterTick = System.Diagnostics.Stopwatch.GetTimestamp();
-            MovementHandle.Update(World.Unmanaged);
+            if (Fused) Kinds(true);
+            else MovementHandle.Update(World.Unmanaged);
             Entities.CompleteAllTrackedJobs();
             var afterMovement = System.Diagnostics.Stopwatch.GetTimestamp();
-            VitalsHandle.Update(World.Unmanaged);
+            if (!Fused) VitalsHandle.Update(World.Unmanaged);
             Entities.CompleteAllTrackedJobs();
             var afterVitals = System.Diagnostics.Stopwatch.GetTimestamp();
             ticksPerSystem[0] = afterTick - start;
@@ -431,17 +533,25 @@ namespace KindPure
                 h.Float(motion.Y);
                 h.Int(Entities.GetComponentData<Movement_StaminaData>(row).Value.Value);
                 h.Int(Entities.GetComponentData<Vitals_HealthData>(row).Value.Value);
-                var clock = Entities.HasComponent<TimelineClock>(row) ? Entities.GetComponentData<TimelineClock>(row).Value : (ushort)0;
-                var slots = Entities.GetBuffer<Playback>(row, true);
-                for (var i = 0; i < slots.Length; i++)
-                {
-                    var slot = slots[i];
-                    slot.Tick = TimelineTicks.Real(in slot, clock);
-                    real[i] = *(global::Tl.Playback*)&slot;
-                }
-                h.Slots(real, slots.Length);
+                h.Slots(real, TimelineTicks.Read(Entities, row, real, KindSlots.MaxSlots));
             }
             return h.Value;
+        }
+
+        public int DenseRows()
+        {
+            Entities.CompleteAllTrackedJobs();
+            var dense = 0;
+            foreach (var row in Rows)
+                if (IsDense(row))
+                    dense++;
+            return dense;
+        }
+
+        bool IsDense(Entity row)
+        {
+            var slots = Entities.GetBuffer<Playback>(row, true);
+            return DenseSlots.IsDense((global::Tl.Playback*)slots.GetUnsafeReadOnlyPtr(), slots.Length);
         }
 
         public void Dispose()

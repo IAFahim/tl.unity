@@ -90,6 +90,12 @@ namespace Tl.Unity
         int _glideStepDir;
         int _glideLimit;
         ulong _glideIndex;
+        DenseSpace* _space;
+        EntityQuery _bare;
+        ComponentTypeHandle<TimelineDenseChunk> _denseChunkHandle;
+        ulong _spaceIndex;
+        uint _spaceGeneration;
+        bool _spaceStale;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -97,12 +103,19 @@ namespace Tl.Unity
             _tick = TimelineKindTick.Create();
             state.EntityManager.AddComponentData(state.SystemHandle, _tick);
             state.EntityManager.AddComponentData(state.SystemHandle, TimelineGlide.Default);
+            state.EntityManager.AddComponentData(state.SystemHandle, new TimelineDense());
             _query = new EntityQueryBuilder(Allocator.Temp)
                 .WithAllRW<Playback>()
                 .WithAllRW<TimelineRequest>()
                 .WithAllRW<TimelinePlaying>()
                 .WithOptions(EntityQueryOptions.IgnoreComponentEnabledState)
                 .Build(ref state);
+            _bare = new EntityQueryBuilder(Allocator.Temp)
+                .WithAll<Playback, TimelineRequest, TimelinePlaying>()
+                .WithNoneChunkComponent<TimelineDenseChunk>()
+                .WithOptions(EntityQueryOptions.IgnoreComponentEnabledState)
+                .Build(ref state);
+            _denseChunkHandle = state.GetComponentTypeHandle<TimelineDenseChunk>(false);
             _playbackHandle = state.GetBufferTypeHandle<Playback>(false);
             _requestHandle = state.GetBufferTypeHandle<TimelineRequest>(false);
             _playingHandle = state.GetComponentTypeHandle<TimelinePlaying>(false);
@@ -119,6 +132,8 @@ namespace Tl.Unity
         {
             state.CompleteDependency();
             _tick.Dispose();
+            DenseSpace.Release(_space);
+            _space = null;
         }
 
         void Bind(ref SystemState state, in KindIndex index)
@@ -147,7 +162,10 @@ namespace Tl.Unity
                 Bind(ref state, in index);
                 _bound = library.Generation;
             }
+            if (!_bare.IsEmptyIgnoreFilter)
+                state.EntityManager.AddComponent(_bare, ComponentType.ChunkComponent<TimelineDenseChunk>());
             KindHandleSet.Update(ref _handles, ref state, index.KindCount);
+            _denseChunkHandle.Update(ref state);
             _playbackHandle.Update(ref state);
             _requestHandle.Update(ref state);
             _playingHandle.Update(ref state);
@@ -156,6 +174,44 @@ namespace Tl.Unity
             _dueHandle.Update(ref state);
             _entityHandle.Update(ref state);
             _now = (ushort)((_now + 1) & TimelineTicks.Mask);
+            var dense = state.EntityManager.GetComponentData<TimelineDense>(state.SystemHandle);
+            var denseStep = SystemAPI.GetSingleton<TimelineStep>().Forward ? 1 : -1;
+            var denseForget = dense.Direction != denseStep;
+            var walked = index.Dense != null && index.Dense->WalkSequence == dense.Sequence;
+            if (!walked && dense.Space != null && index.Dense != null && index.Dense->Ready &&
+                _spaceIndex == identity && _spaceGeneration == library.Generation)
+                state.Dependency = new KindRecoverDensePulsesJob
+                {
+                    Index = index,
+                    PlaybackHandle = _playbackHandle,
+                    EntityHandle = _entityHandle,
+                    Clock = dense.Clock,
+                    Step = dense.Direction,
+                }.ScheduleParallel(_query, state.Dependency);
+            if (_spaceStale)
+            {
+                state.CompleteDependency();
+                DenseSpace.Release(_space);
+                _space = null;
+                _spaceStale = false;
+            }
+            if (index.Dense != null && index.Dense->BuiltEpoch != index.Dense->TableEpoch)
+            {
+                state.CompleteDependency();
+                KindDense.Refresh(ref index);
+                denseForget = true;
+            }
+            if (_space != null && (_spaceIndex != identity || _spaceGeneration != library.Generation))
+            {
+                denseForget = true;
+                _spaceStale = true;
+            }
+            else if (_space == null && index.Dense != null && index.Dense->Ready)
+            {
+                _space = DenseSpace.Of(index.Dense, index.Timelines, index.TimelineCount);
+                _spaceIndex = identity;
+                _spaceGeneration = library.Generation;
+            }
             var stepDir = SystemAPI.GetSingleton<TimelineStep>().Forward ? 1 : -1;
             var limit = (int)state.EntityManager.GetComponentData<TimelineGlide>(state.SystemHandle).Limit;
             var forget = _glideIndex != identity || _glideGeneration != library.Generation || _glideStepDir != stepDir || _glideLimit != limit;
@@ -193,6 +249,14 @@ namespace Tl.Unity
                 LastSystemVersion = state.LastSystemVersion,
                 HorizonLimit = limit,
                 ForgetHorizons = forget,
+                Dense = index.Dense,
+                Space = _space,
+                DenseFrom = dense.Clock,
+                DenseSequence = dense.Sequence,
+                DenseReady = !_spaceStale && _space != null,
+                DenseForget = denseForget,
+                Walked = walked,
+                DenseChunkHandle = _denseChunkHandle,
             };
             dependency = tick.ScheduleParallel(_query, dependency);
             if (senders->Length != 0)
@@ -216,6 +280,7 @@ namespace Tl.Unity
                 }
                 senders->Clear();
             }
+            state.EntityManager.SetComponentData(state.SystemHandle, new TimelineDense { Clock = (ushort)(dense.Clock + denseStep), Direction = (sbyte)denseStep, Sequence = dense.Sequence + 1, Space = _space });
             *_tick.Last = dependency;
             state.Dependency = dependency;
         }

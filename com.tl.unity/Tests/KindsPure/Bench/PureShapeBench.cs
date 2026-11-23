@@ -40,38 +40,55 @@ namespace KindPure
             Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobDebuggerEnabled = false;
             NativeLeakDetection.Mode = NativeLeakDetectionMode.Disabled;
             using var writer = new StreamWriter(log, append: true);
-            Row(writer, "env unity=" + UnityEngine.Application.unityVersion + " burst=" + Unity.Burst.BurstCompiler.IsEnabled + " workers=" + Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerCount + " timelines=" + TimelineCount + " live=" + LiveTracks + " warmup=" + warmup + " measure=" + measure + " runs=" + runs);
+            Row(writer, "env unity=" + UnityEngine.Application.unityVersion + " burst=" + Unity.Burst.BurstCompiler.IsEnabled + " workers=" + Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerCount + " threadIndices=" + Unity.Jobs.LowLevel.Unsafe.JobsUtility.ThreadIndexCount + " timelines=" + TimelineCount + " live=" + LiveTracks + " warmup=" + warmup + " measure=" + measure + " runs=" + runs);
             var library = Library(LiveTracks);
             var split = Array.IndexOf(args, "-pureSplit") >= 0;
             var every = 0;
+            string perfControl = null, perfAck = null;
             for (var i = 0; i + 1 < args.Length; i++)
+            {
                 if (args[i] == "-pureRequestEvery") every = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
+                if (args[i] == "-perfControl") perfControl = args[i + 1];
+                if (args[i] == "-perfAck") perfAck = args[i + 1];
+            }
+            var dense = Array.IndexOf(args, "-pureExplicit") < 0;
             foreach (var rowsText in rowsList.Split(','))
             foreach (var activeText in activeList.Split(','))
             {
                 var rows = int.Parse(rowsText, CultureInfo.InvariantCulture);
                 var active = int.Parse(activeText, CultureInfo.InvariantCulture);
-                if (split) Split(writer, library, rows, active, warmup, measure);
-                else Cell(writer, library, rows, active, warmup, measure, runs, every);
+                if (split) Split(writer, library, rows, active, warmup, measure, dense, perfControl, perfAck);
+                else Cell(writer, library, rows, active, warmup, measure, runs, every, dense);
             }
         }
 
-        static void Split(StreamWriter writer, byte[] library, int rows, int active, int warmup, int measure)
+        static void Perf(string control, string ack, string command)
         {
-            using var game = World(library, rows, active);
+            if (control == null || ack == null) return;
+            File.AppendAllText(control, command + "\n");
+            using var reply = new StreamReader(ack);
+            reply.ReadLine();
+        }
+
+        static void Split(StreamWriter writer, byte[] library, int rows, int active, int warmup, int measure, bool dense, string perfControl, string perfAck)
+        {
+            using var game = World(library, rows, active, dense);
             for (var i = 0; i <= warmup; i++) game.Step();
             game.Entities.CompleteAllTrackedJobs();
             var parts = new double[3];
             var samples = new double[3][];
             for (var s = 0; s < 3; s++) samples[s] = new double[measure];
+            Perf(perfControl, perfAck, "enable");
             for (var i = 0; i < measure; i++)
             {
                 game.StepEachSystemCompleted(parts);
                 for (var s = 0; s < 3; s++) samples[s][i] = parts[s] * 1000.0 / Stopwatch.Frequency;
             }
+            Perf(perfControl, perfAck, "disable");
             for (var s = 0; s < 3; s++) Array.Sort(samples[s]);
-            Row(writer, string.Format(CultureInfo.InvariantCulture, "split rows={0} active={1} precombined={2} tickMs={3:F3} movementMs={4:F3} vitalsMs={5:F3}",
-                rows, active, game.Precombined("KindPure.Locomotion") && game.Precombined("KindPure.Lift"), samples[0][measure / 2], samples[1][measure / 2], samples[2][measure / 2]));
+            Row(writer, string.Format(CultureInfo.InvariantCulture, "split rows={0} active={1} dense={2} denseRows={3} precombined={4} tickMs={5:F3} movementMs={6:F3} vitalsMs={7:F3}",
+                rows, active, dense, game.DenseRows(), game.Precombined("KindPure.Locomotion") && game.Precombined("KindPure.Lift"), samples[0][measure / 2], samples[1][measure / 2], samples[2][measure / 2]));
+            Row(writer, Memory(game, rows, active, dense));
         }
 
         static void Row(StreamWriter writer, string text)
@@ -159,9 +176,32 @@ namespace KindPure
             return global::Tl.LibraryAssembler.Assemble(parts, 60, global::Tl.LibrarySettings.Default);
         }
 
-        public static PureWorld World(byte[] library, int rows, int active)
+        static string Memory(PureWorld game, int rows, int active, bool dense)
         {
-            var game = new PureWorld(rows, library);
+            var entities = game.Entities;
+            entities.CompleteAllTrackedJobs();
+            var archetype = entities.GetChunk(game.Rows[0]).Archetype;
+            var capacity = archetype.ChunkCapacity;
+            var sample = Math.Min(rows, 4096);
+            long heap = 0;
+            for (var i = 0; i < sample; i++)
+            {
+                var row = game.Rows[(long)i * rows / sample];
+                heap += Spilled(entities.GetBuffer<Tl.Unity.Playback>(row, true).Capacity, 4, 8);
+                heap += Spilled(entities.GetBuffer<Tl.Unity.TimelineRequest>(row, true).Capacity, 4, sizeof(Tl.Unity.TimelineRequest));
+                heap += Spilled(entities.GetBuffer<LocomotionEntry>(row, true).Capacity, LocomotionKind.InlineCapacity, sizeof(LocomotionEntry));
+                heap += Spilled(entities.GetBuffer<LiftEntry>(row, true).Capacity, LiftKind.InlineCapacity, sizeof(LiftEntry));
+                heap += Spilled(entities.GetBuffer<StatChangeEntry>(row, true).Capacity, StatChangeKind.InlineCapacity, sizeof(StatChangeEntry));
+                heap += Spilled(entities.GetBuffer<DamageEntry>(row, true).Capacity, DamageKind.InlineCapacity, sizeof(DamageEntry));
+            }
+            return string.Format(CultureInfo.InvariantCulture, "memory rows={0} active={1} dense={2} chunkCapacity={3} chunkBytesPerRow={4:F1} heapBytesPerRow={5:F1}", rows, active, dense, capacity, 16384.0 / capacity, (double)heap / sample);
+        }
+
+        static long Spilled(int capacity, int inline, int element) => capacity > inline ? (long)capacity * element : 0;
+
+        public static PureWorld World(byte[] library, int rows, int active, bool dense = true)
+        {
+            var game = new PureWorld(rows, library, dense);
             for (var e = 0; e < rows; e++)
                 for (var k = 0; k < active; k++)
                     game.Start(e, (ushort)(1 + (e * 7 + k * 13) % TimelineCount), (ushort)((e * 31 + k * 17) % ShortestDuration));
@@ -176,7 +216,7 @@ namespace KindPure
             return game.Hash();
         }
 
-        static void Cell(StreamWriter writer, byte[] library, int rows, int active, int warmup, int measure, int runs, int every)
+        static void Cell(StreamWriter writer, byte[] library, int rows, int active, int warmup, int measure, int runs, int every, bool dense)
         {
             var medians = new List<double>();
             var hash = 0ul;
@@ -188,7 +228,7 @@ namespace KindPure
             for (var run = 0; run < runs; run++)
             {
                 var setup = Stopwatch.StartNew();
-                using var game = World(library, rows, active);
+                using var game = World(library, rows, active, dense);
                 game.RequestEvery(every);
                 game.Step();
                 game.Entities.CompleteAllTrackedJobs();
@@ -215,8 +255,8 @@ namespace KindPure
             }
             medians.Sort();
             var ms = medians[medians.Count / 2];
-            Row(writer, string.Format(CultureInfo.InvariantCulture, "cell rows={0} active={1} requestEvery={10} precombined={2} stepMs={3:F3} minMs={4:F3} maxMs={5:F3} nsPerActive={6:F2} setupMs={7:F0} alloc={8} chunkCapacity={11} requestHeapBytesPerRow={12} hash={9:X16}",
-                rows, active, precombined, ms, medians[0], medians[medians.Count - 1], ms * 1e6 / ((double)rows * active), setupMs, allocated, hash, every, chunkCapacity, requestHeap));
+            Row(writer, string.Format(CultureInfo.InvariantCulture, "cell rows={0} active={1} requestEvery={10} dense={13} precombined={2} stepMs={3:F3} minMs={4:F3} maxMs={5:F3} nsPerActive={6:F2} setupMs={7:F0} alloc={8} chunkCapacity={11} requestHeapBytesPerRow={12} hash={9:X16}",
+                rows, active, precombined, ms, medians[0], medians[medians.Count - 1], ms * 1e6 / ((double)rows * active), setupMs, allocated, hash, every, chunkCapacity, requestHeap, dense));
         }
     }
 }

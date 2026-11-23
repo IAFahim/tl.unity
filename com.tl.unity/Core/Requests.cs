@@ -117,6 +117,17 @@ public unsafe struct RequestQueue
 
     public static void Clear(RequestQueue* queue) => queue->_count = 0;
 
+    internal static int CapacityOf(RequestQueue* queue) => queue->_capacity;
+
+    internal static void Trim(RequestQueue* queue)
+    {
+        if (queue->_count != 0 || queue->_capacity <= 4096) return;
+        NativeMemory.AlignedFree(queue->_items);
+        NativeMemory.AlignedFree(queue->_scratch);
+        queue->_items = queue->_scratch = null;
+        queue->_capacity = 0;
+    }
+
     public static RequestQueue* Create()
     {
         var queue = (RequestQueue*)NativeMemory.AlignedAlloc((nuint)sizeof(RequestQueue), 8u);

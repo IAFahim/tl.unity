@@ -42,7 +42,7 @@ public struct StatTrack : IBlend<StatClip>
 #if TL_BASELINE
 [TimelineKind]
 #else
-[TimelineKind(Associative = true)]
+[TimelineKind(Combine = KindCombine.Pick, Priority = nameof(Speed.Priority))]
 #endif
 public struct Locomotion
 {
@@ -53,7 +53,7 @@ public struct Locomotion
 #if TL_BASELINE
 [TimelineKind]
 #else
-[TimelineKind(Associative = true)]
+[TimelineKind(Combine = KindCombine.Sum)]
 #endif
 public struct Lift
 {

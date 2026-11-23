@@ -195,6 +195,7 @@ namespace Tl.Gen.Unity
             W(writer, "var __len = __buf.Length;");
             W(writer, "byte* __data = (byte*)__buf.GetUnsafePtr();");
             EmitRowHead(writer);
+            W(writer, "if (global::Tl.Unity.DenseSlots.IsDense(__run, __cnt)) continue;");
             W(writer, "var __kept = 0;");
             W(writer, "for (var __j = 0; __j < __len; __j++)");
             W(writer, "{");

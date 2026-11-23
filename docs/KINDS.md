@@ -127,6 +127,8 @@ the kind's entry buffer in an `ITlBaker`.
   that still holds the usual entry count makes rows smaller and chunks fuller: 4 instead of 10 for a kind with at most 4 entries cut a
   4M-row tick by 14 % and 370 MB.
 - Game pulses: `[TlKind(GamePulses = n)]` reserves room for n pulses from game code per step.
+- Requests: `TimelineRequest` keeps no inline capacity; a queued request lives on the heap until the tick drains the queue and trims
+  it, so a row pays 16 B of chunk instead of 128 B. At 1M rows this took a chunk from 51 to 80 rows and every kind job with it.
 - None of this is generated into a file and editing a timeline never recompiles.
 
 ## Horizon glide
@@ -167,6 +169,23 @@ A row with `TimelineHorizon`, `TimelineClock` and a `PlaybackDue` buffer in its 
 - `TimelineGlide { Limit = 0 }` or removing `TimelineHorizon` turns a row eager again: the tick job decodes its slots and sets its clock to 0, which makes the stored and real ticks equal.
 - Memory: 2 B per slot (`PlaybackDue`, 4 inline in the chunk) and 2 B per row.
 - Measured (Unity 7000.0.0a16, Burst, 11 workers, safety checks off, `OwnerScaleBench`: 1,000 looping kind timelines with one clip each, median of 128 steps), tick job in ms, eager against lazy: 10,000 x 40 rows x playbacks 0.31 -> 0.16 (duration 120), 0.27 -> 0.06 (600), 0.27 -> 0.04 (3000); 20,000 x 100 1.28 -> 0.94, 1.17 -> 0.35, 1.27 -> 0.13; 20,000 x 200 2.46 -> 1.71, 2.42 -> 0.72, 2.60 -> 0.26. The whole timeline frame (tick plus generated kind jobs) gains 1.1x to 2.4x: the generated kind jobs are unchanged, and at duration 120 most of the tick's remaining time is the kind events themselves (span begins and ends, pulses), which both paths must do.
+
+## Dense rows
+
+Schedule one generated `TimelineJobs.Fused` job set per library to combine compatible kind systems in one chunk walk. An eager or glide row can run dense
+when its live slots play at 1x, it has no sampled copies or pending pulse entries, and its span kinds use the shared precombined
+table. The tick system adds `TimelineDenseChunk` metadata to the archetype's chunks. Rows with `TimelineClock` use the lazy path.
+
+- Each dense slot stores a two-byte origin and its next due clock in the existing `Playback` buffer. The table row is `origin + clock`.
+  The world clock lives on the tick system. The fused job reads spans and fast pulses in slot order and updates origins at loop wraps.
+- A non-looping end, a slow pulse, a request, a world direction change or a library change returns the row to explicit stepping.
+  A row can run dense again when it meets the eligibility rules.
+- A skipped consumer gets the lane hits on its next run. If the entire fused schedule skips a step, the next tick recovers that step's
+  hits before clearing the pulse lanes. Deferred hits precede newer entries already in the buffer.
+- Read slots with `TimelineTicks.Read`, which decodes dense and lazy playbacks. Write playback changes through `TimelineRequest` or
+  `TlRequests`.
+- `KindPure.DenseOracleTests` compares dense and explicit worlds through controls, rewinds, library swaps, wide rows and skipped
+  schedules, and checks the control digests against the .NET host.
 
 ## Kind Report
 

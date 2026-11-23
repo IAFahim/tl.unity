@@ -14,6 +14,8 @@ namespace Tl.Unity
         public BufferTypeHandle<Playback> PlaybackHandle;
         public ComponentTypeHandle<TimelinePlaying> PlayingHandle;
         [ReadOnly] public ComponentTypeHandle<TimelineClock> ClockHandle;
+        [NativeDisableUnsafePtrRestriction] public DenseSpace* Space;
+        public ushort DenseClock;
         [NativeDisableContainerSafetyRestriction] public KindHandleSet Handles;
         [ReadOnly] public NativeArray<ushort> Swapped;
 
@@ -29,6 +31,8 @@ namespace Tl.Unity
             for (var row = 0; row < chunk.Count; row++)
             {
                 var slots = playbacks[row];
+                if (Space != null && DenseSlots.IsDense((global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length))
+                    DenseSlots.Settle(Space, (global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, DenseClock);
                 var touched = false;
                 for (var i = 0; i < slots.Length; i++)
                 {
