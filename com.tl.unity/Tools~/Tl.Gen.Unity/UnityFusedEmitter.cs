@@ -331,7 +331,7 @@ namespace Tl.Gen.Unity
             W(writer, "{");
             W(writer, "var __r = " + RowAt("__i") + ";");
             W(writer, "var __m = *(uint*)__r;");
-            if (full) W(writer, "__any |= __m; { var __cv = *(uint*)(__r + Cell); __cell |= __cv; if (__cv != 0) __hits[__nh++] = __cv; }");
+            if (full) W(writer, "__any |= __m; { var __cv = *(uint*)(__r + Cell); __cell |= __cv; __hits[__nh] = __cv; __nh += __cv != 0 ? 1 : 0; }");
             foreach (var kind in scalar)
             {
                 var g = kinds.IndexOf(kind);
@@ -376,7 +376,7 @@ namespace Tl.Gen.Unity
             W(writer, "{");
             W(writer, "var __w = " + Avx + ".mm256_load_si256(" + RowAt("__i") + ");");
             W(writer, "__hd = " + Avx2 + ".mm256_or_si256(__hd, __w);");
-            W(writer, "{ var __cv = " + Avx2 + ".mm256_permutevar8x32_epi32(__w, CellIndex).UInt0; if (__cv != 0) __hits[__nh++] = __cv; }");
+            W(writer, "{ var __cv = " + Avx2 + ".mm256_permutevar8x32_epi32(__w, CellIndex).UInt0; __hits[__nh] = __cv; __nh += __cv != 0 ? 1 : 0; }");
             if (anyFloat) W(writer, "__fs = " + Avx + ".mm256_add_ps(__fs, " + Avx + ".mm256_and_ps(__w, FloatLanes));");
             if (anyInt) W(writer, "__is = " + Avx2 + ".mm256_add_epi32(__is, " + Avx2 + ".mm256_and_si256(__w, IntLanes));");
             foreach (var kind in kinds.FindAll(k => k.Lane == "pick"))
