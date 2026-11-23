@@ -391,6 +391,24 @@ namespace KindPure
             Entities.GetBuffer<TimelineRequest>(Rows[row]).Add(new TimelineRequest { Slot = 0, Timeline = timeline, At = at, Op = op });
         }
 
+        public void Damage(int row, int amount)
+        {
+            var sender = Entities.GetComponentData<TimelineKindTick>(TickHandle).BeginPulses(1);
+            var writer = sender.Writer;
+            writer.Begin(0);
+            new KindPulses<int>(writer, DamageKind.Id).To(Rows[row], amount);
+            writer.End();
+        }
+
+        public void Stat(int row, int delta)
+        {
+            var sender = Entities.GetComponentData<TimelineKindTick>(TickHandle).BeginPulses(1);
+            var writer = sender.Writer;
+            writer.Begin(0);
+            new KindPulses<int>(writer, StatChangeKind.Id).To(Rows[row], delta);
+            writer.End();
+        }
+
         public void HotSwapLibrary(bool second)
         {
             Entities.CompleteAllTrackedJobs();

@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using Tl.Unity;
 using Unity.Entities;
@@ -87,6 +88,7 @@ namespace KindPure
             var second = false;
             var digest = global::Tl.TlStateHash.Begin();
             var denseRowSteps = 0;
+            var denseWhileRated = 0;
             var steps = PureControls.StepsOf(control);
             for (var step = 0; step < steps; step++)
             {
@@ -104,13 +106,38 @@ namespace KindPure
                 if (differs.Length != 0)
                     Assert.Fail(control + " with " + rows + " rows: the dense world left the explicit one at " + differs);
                 digest.Lane(dense.Hash());
-                denseRowSteps += dense.DenseRows();
+                var denseRows = dense.DenseRows();
+                denseRowSteps += denseRows;
+                if (control == PureControl.Rates && step >= 3) denseWhileRated += denseRows;
             }
             Assert.AreEqual(0, plain.DenseRows(), "the unfused world must never run dense");
             UnityEngine.Debug.Log("TlDenseOracle: " + control + " " + rows + " denseRowSteps=" + denseRowSteps + " of " + PureControls.Rows * steps);
             Assert.AreEqual(PrecombineControlTests.DotNetDigest(control).ToString("X16"), digest.Value.ToString("X16"), control + ": the dense world's per-step state hashes differ from the .NET host's");
             if (rows == PureRows.Lazy) Assert.AreEqual(0, denseRowSteps, "lazy rows (TimelineClock) are opt-in and stay off the dense path");
-            else Assert.Greater(denseRowSteps * (control == PureControl.Rates ? 100 : 10), PureControls.Rows * steps, control + " with " + rows + " rows: only " + denseRowSteps + " of " + PureControls.Rows * steps + " row-steps ran dense");
+            else
+            {
+                var dotNet = DotNetDenseRowSteps(control);
+                var least = control == PureControl.Rates ? dotNet / 2 : Math.Max(PureControls.Rows * steps / 10, dotNet / 2);
+                Assert.GreaterOrEqual(denseRowSteps, least, control + " with " + rows + " rows: only " + denseRowSteps + " of " + PureControls.Rows * steps + " row-steps ran dense; the .NET host runs " + dotNet + " of them dense");
+                if (control == PureControl.Rates) Assert.AreEqual(0, denseWhileRated, "Rates: a row ran dense while one of its playbacks was rated");
+            }
+        }
+
+        static int DotNetDenseRowSteps(PureControl control)
+        {
+            switch (control)
+            {
+                case PureControl.PauseResume: return 2940;
+                case PureControl.Reverse: return 3738;
+                case PureControl.WorldRewind: return 1907;
+                case PureControl.Rates: return 48;
+                case PureControl.Seek: return 2070;
+                case PureControl.Handover: return 3760;
+                case PureControl.Loop: return 3656;
+                case PureControl.Stop: return 3006;
+                case PureControl.Republish: return 2588;
+                default: return 856;
+            }
         }
 
         static uint Next(ref uint state)
@@ -199,5 +226,92 @@ namespace KindPure
             if (slots > 4) Assert.Greater(spilled, 0, "no row spilled past the four inline playback slots");
             if (slots > 16 && rows != PureRows.Lazy) Assert.Greater(wide, 0, "no dense row held more than 16 slots, so the wide due scan never ran");
         }
+
+        [Test]
+        public void AConsumerThatSkipsStepsStillGetsEveryTimelineAndGamePulseExactlyOnce()
+        {
+            const int Rows = 24, Steps = 120, Skipped = Steps / 4;
+            using var dense = new PureWorld(Rows, _first, _second, false, PureRows.Eager, true);
+            using var plain = new PureWorld(Rows, _first, _second, false, PureRows.Eager, false);
+            using var every = new PureWorld(Rows, _first, _second, false, PureRows.Eager, true);
+            foreach (var world in new[] { dense, plain, every })
+                for (var row = 0; row < Rows; row++)
+                    world.Start(row, PureControls.Loop, (ushort)(row % 7));
+            var denseRowSteps = 0;
+            for (var step = 0; step < Steps; step++)
+            {
+                var skip = step % 4 == 1;
+                if (skip)
+                    foreach (var world in new[] { dense, plain, every })
+                        for (var row = 0; row < Rows; row++)
+                        {
+                            world.Damage(row, 7);
+                            world.Damage(row, 11);
+                            world.Stat(row, 100 + row);
+                        }
+                dense.Step(true, !skip);
+                plain.Step(true, !skip);
+                every.Step(true, true);
+                var differs = FirstDifference(dense, plain, step);
+                if (differs.Length != 0)
+                    Assert.Fail("step " + step + ": the dense world left the explicit one at " + differs);
+                denseRowSteps += dense.DenseRows();
+                if (skip) continue;
+                differs = FirstDifference(dense, every, step);
+                if (differs.Length != 0)
+                    Assert.Fail("step " + step + ": a consumer that skipped steps read other pulses than one that ran every step, at " + differs);
+            }
+            UnityEngine.Debug.Log("TlDenseOracle: skippedConsumer denseRowSteps=" + denseRowSteps + " of " + Rows * Steps);
+            Assert.GreaterOrEqual(denseRowSteps * 5, Rows * Steps * 2, "only " + denseRowSteps + " of " + Rows * Steps + " row-steps ran dense while the consumer skipped");
+            for (var row = 0; row < Rows; row++)
+                Assert.Less(Health(every, row), 1_000_000 - Skipped * 18, "row " + row + " never received a timeline hit next to its game pulses");
+        }
+
+        [Test]
+        public void EqualPrioritiesGoToTheLaterSlotAcrossAFreedAndReusedSlot()
+        {
+            const int Rows = 24, Steps = 40;
+            using var dense = new PureWorld(Rows, _first, _second, false, PureRows.Eager, true);
+            using var plain = new PureWorld(Rows, _first, _second, false, PureRows.Eager, false);
+            using var walk = new PureWorld(Rows, _first, _second, true, PureRows.Eager);
+            var worlds = new[] { dense, plain, walk };
+            var lastX = new float[Rows];
+            var denseRowSteps = 0;
+            for (var step = 0; step < Steps; step++)
+            {
+                foreach (var world in worlds)
+                    for (var row = 0; row < Rows; row++)
+                    {
+                        if (step == 0) world.Request(row, global::Tl.RequestOp.Start, PureControls.Loop, 0);
+                        if (step == 0 || step == 20)
+                        {
+                            world.Request(row, global::Tl.RequestOp.Start, PureControls.Walk, 20);
+                            world.Request(row, global::Tl.RequestOp.Reverse, PureControls.Walk, 1);
+                        }
+                        if (step == 10) world.Request(row, global::Tl.RequestOp.Stop, PureControls.Walk, 0);
+                        if (step == 21) world.Request(row, global::Tl.RequestOp.Stop, PureControls.Loop, 0);
+                        if (step == 26) world.Request(row, global::Tl.RequestOp.Start, PureControls.Loop, 6);
+                    }
+                foreach (var world in worlds) world.Step(true);
+                var differs = FirstDifference(dense, plain, step);
+                if (differs.Length != 0)
+                    Assert.Fail("step " + step + ": the dense world left the explicit one at " + differs);
+                Assert.AreEqual(walk.Hash(), dense.Hash(), "step " + step + ": the dense world left the span walk");
+                denseRowSteps += dense.DenseRows();
+                var tie = step is >= 1 and <= 3 ? -1f : (step is >= 5 and <= 9) || step == 26 ? -3f : 0f;
+                for (var row = 0; row < Rows; row++)
+                {
+                    var x = X(dense, row);
+                    if (tie != 0f) Assert.AreEqual(tie, x - lastX[row], "step " + step + " row " + row + ": equal priorities must go to the later slot");
+                    lastX[row] = x;
+                }
+            }
+            UnityEngine.Debug.Log("TlDenseOracle: equalPriorities denseRowSteps=" + denseRowSteps + " of " + Rows * Steps);
+            Assert.Greater(denseRowSteps * 2, Rows * Steps, "only " + denseRowSteps + " of " + Rows * Steps + " row-steps ran dense, so the vector Pick never met a tie");
+        }
+
+        static int Health(PureWorld world, int row) => world.Entities.GetComponentData<Vitals_HealthData>(world.Rows[row]).Value.Value;
+
+        static float X(PureWorld world, int row) => world.Entities.GetComponentData<Movement_MotionData>(world.Rows[row]).Value.X;
     }
 }
