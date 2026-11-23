@@ -213,6 +213,47 @@ namespace KindPure
         }
     }
 
+    [BurstCompile]
+    public struct PureResumeEveryRowJob : IJobChunk
+    {
+        public BufferTypeHandle<TimelineRequest> RequestHandle;
+        public int Every;
+        public int Step;
+
+        public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in global::Unity.Burst.Intrinsics.v128 chunkEnabledMask)
+        {
+            var requests = chunk.GetBufferAccessor(ref RequestHandle);
+            for (var row = 0; row < chunk.Count; row++)
+                if ((unfilteredChunkIndex + row + Step) % Every == 0)
+                    requests[row].Add(TimelineRequest.Resume(0, 1));
+        }
+    }
+
+    [BurstCompile]
+    [DisableAutoCreation]
+    public partial struct PureRequestSystem : ISystem
+    {
+        public int Every;
+        int _step;
+        EntityQuery _rows;
+        BufferTypeHandle<TimelineRequest> _requests;
+
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            _rows = new EntityQueryBuilder(Allocator.Temp).WithAllRW<TimelineRequest>().WithOptions(EntityQueryOptions.IgnoreComponentEnabledState).Build(ref state);
+            _requests = state.GetBufferTypeHandle<TimelineRequest>(false);
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            if (Every <= 0) return;
+            _requests.Update(ref state);
+            state.Dependency = new PureResumeEveryRowJob { RequestHandle = _requests, Every = Every, Step = _step++ }.ScheduleParallel(_rows, state.Dependency);
+        }
+    }
+
     public enum PureRows
     {
         Eager,
@@ -227,6 +268,7 @@ namespace KindPure
         public readonly SystemHandle TickHandle;
         public readonly SystemHandle MovementHandle;
         public readonly SystemHandle VitalsHandle;
+        public readonly SystemHandle RequestHandle;
         public readonly Entity[] Rows;
         readonly TlLibrary _library;
         readonly TlLibrary _second;
@@ -253,6 +295,7 @@ namespace KindPure
             MovementHandle = spanWalk ? World.CreateSystem<PureSpanWalkMovementSystem>() : World.CreateSystem<PureMovementSystem>();
             VitalsHandle = World.CreateSystem<PureVitalsSystem>();
             _swap = World.CreateSystem<PureSwapEveryTimelineSystem>();
+            RequestHandle = World.CreateSystem<PureRequestSystem>();
             Rows = new Entity[count];
             for (var i = 0; i < count; i++)
                 Rows[i] = Spawn(rows);
@@ -314,8 +357,28 @@ namespace KindPure
             _swap.Update(World.Unmanaged);
         }
 
+        public void RequestEvery(int every)
+        {
+            World.Unmanaged.GetUnsafeSystemRef<PureRequestSystem>(RequestHandle).Every = every;
+        }
+
+        public int RequestHeapBytes(int sample)
+        {
+            Entities.CompleteAllTrackedJobs();
+            var inline = TypeManager.GetTypeInfo(TypeManager.GetTypeIndex<TimelineRequest>()).BufferCapacity;
+            var bytes = 0L;
+            var take = Math.Min(sample, Rows.Length);
+            for (var i = 0; i < take; i++)
+            {
+                var capacity = Entities.GetBuffer<TimelineRequest>(Rows[(long)i * Rows.Length / take], true).Capacity;
+                if (capacity > inline) bytes += (long)capacity * UnsafeUtility.SizeOf<TimelineRequest>();
+            }
+            return (int)(bytes / Math.Max(1, take));
+        }
+
         public void Step()
         {
+            RequestHandle.Update(World.Unmanaged);
             TickHandle.Update(World.Unmanaged);
             MovementHandle.Update(World.Unmanaged);
             VitalsHandle.Update(World.Unmanaged);

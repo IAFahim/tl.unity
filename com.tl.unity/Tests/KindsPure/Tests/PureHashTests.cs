@@ -29,6 +29,27 @@ namespace KindPure
         }
 
         [Test]
+        public unsafe void AMassStartGivesItsRequestBlocksBackAndARowThatRequestsEveryStepKeepsItsBlock()
+        {
+            using var game = PureShapeBench.World(_library, 256, 4);
+            game.Step();
+            Assert.Greater(game.RequestHeapBytes(256), 0);
+            for (var i = 0; i < 64; i++) game.Step();
+            Assert.AreEqual(0, game.RequestHeapBytes(256));
+            game.RequestEvery(1);
+            game.Step();
+            game.Step();
+            game.Entities.CompleteAllTrackedJobs();
+            var block = (long)game.Entities.GetBuffer<TimelineRequest>(game.Rows[0], true).GetUnsafeReadOnlyPtr();
+            for (var i = 0; i < 130; i++)
+            {
+                game.Step();
+                game.Entities.CompleteAllTrackedJobs();
+                Assert.AreEqual(block, (long)game.Entities.GetBuffer<TimelineRequest>(game.Rows[0], true).GetUnsafeReadOnlyPtr(), "step " + i);
+            }
+        }
+
+        [Test]
         public unsafe void RatedZeroCrossingStepKeepsFusedKindsActive()
         {
             using var game = new PureWorld(2, _library);
