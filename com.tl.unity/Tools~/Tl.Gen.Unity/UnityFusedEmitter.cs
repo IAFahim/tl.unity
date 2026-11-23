@@ -183,6 +183,7 @@ namespace Tl.Gen.Unity
             W(writer, "public bool Vector;");
             W(writer, "public ulong Skip;");
             W(writer, "public int Cell;");
+            W(writer, "public " + V256 + " CellIndex;");
             W(writer, "public " + V256 + " FloatLanes;");
             W(writer, "public " + V256 + " IntLanes;");
             W(writer, "[ReadOnly] public DynamicComponentTypeHandle PlaybackHandle;");
@@ -255,6 +256,7 @@ namespace Tl.Gen.Unity
             }
             W(writer, "var __fast = Index.TickFastPulses != null ? *Index.TickFastPulses : 0ul;");
             W(writer, "Entity* __ents = null;");
+            W(writer, "var __hits = stackalloc uint[256];");
             W(writer, "var __chunkOn = " + string.Join(" && ", on) + ";");
             W(writer, "ulong __d0 = 0, __d1 = 0;");
             W(writer, "var __first = (global::Tl.Playback*)__pb.GetUnsafeReadOnlyPtrAndLength(0, out var __firstCount);");
@@ -281,17 +283,20 @@ namespace Tl.Gen.Unity
                 W(writer, "}");
                 W(writer, "}");
             }
-            W(writer, "else");
-            W(writer, "{");
-            W(writer, "for (var __row = 0; __row < __count; __row++)");
-            W(writer, "{");
-            W(writer, "var __s = (global::Tl.Playback*)__pb.GetUnsafeReadOnlyPtrAndLength(__row, out var __len0);");
-            W(writer, "if (!global::Tl.Unity.DenseSlots.IsDense(__s, __len0)) continue;");
-            W(writer, "if (__row < 64) __d0 |= 1ul << __row; else __d1 |= 1ul << (__row - 64);");
-            W(writer, "var __n = __len0;");
-            EmitFusedRow(writer, systems, shapes, kinds, columnOf, anyFloat, anyInt, anyPick, scalarSpans, false);
-            W(writer, "}");
-            W(writer, "}");
+            foreach (var fast in new[] { true, false })
+            {
+                W(writer, fast ? "else if (__chunkOn)" : "else");
+                W(writer, "{");
+                W(writer, "for (var __row = 0; __row < __count; __row++)");
+                W(writer, "{");
+                W(writer, "var __s = (global::Tl.Playback*)__pb.GetUnsafeReadOnlyPtrAndLength(__row, out var __len0);");
+                W(writer, "if (!global::Tl.Unity.DenseSlots.IsDense(__s, __len0)) continue;");
+                W(writer, "if (__row < 64) __d0 |= 1ul << __row; else __d1 |= 1ul << (__row - 64);");
+                W(writer, "var __n = __len0;");
+                EmitFusedRow(writer, systems, shapes, kinds, columnOf, anyFloat, anyInt, anyPick, scalarSpans, fast);
+                W(writer, "}");
+                W(writer, "}");
+            }
             W(writer, "if (((__l0 & ~__d0 & __m0) | (__l1 & ~__d1 & __m1)) != 0) Mixed[global::System.Threading.Interlocked.Increment(ref *MixedCount) - 1] = new global::Tl.Unity.FusedMixed { Chunk = chunk, Dense = new global::Unity.Burst.Intrinsics.v128(__d0, __d1) };");
             for (var g = 0; g < kinds.Count; g++)
             {
@@ -321,12 +326,12 @@ namespace Tl.Gen.Unity
                 var g = kinds.IndexOf(kind);
                 W(writer, Lanes(kind.Decl) ? Identity(kind.Decl, "__t" + g) + "__f" + g + " = false;" : "__t" + g + " = default; __f" + g + " = false;");
             }
-            if (full) W(writer, "__any = 0; __cell = 0;");
+            if (full) W(writer, "__any = 0; __cell = 0; __nh = 0;");
             W(writer, "for (var __i = 0; __i < __n; __i++)");
             W(writer, "{");
             W(writer, "var __r = " + RowAt("__i") + ";");
             W(writer, "var __m = *(uint*)__r;");
-            if (full) W(writer, "__any |= __m; __cell |= *(uint*)(__r + Cell);");
+            if (full) W(writer, "__any |= __m; { var __cv = *(uint*)(__r + Cell); __cell |= __cv; if (__cv != 0) __hits[__nh++] = __cv; }");
             foreach (var kind in scalar)
             {
                 var g = kinds.IndexOf(kind);
@@ -349,6 +354,7 @@ namespace Tl.Gen.Unity
         {
             W(writer, "{");
             W(writer, "uint __any = 0, __cell = 0;");
+            W(writer, "var __nh = 0;");
             for (var g = 0; g < kinds.Count; g++)
                 if (kinds[g].Span)
                     W(writer, kinds[g].Decl.ValueTypeName + " __t" + g + " = default; var __f" + g + " = false;");
@@ -370,6 +376,7 @@ namespace Tl.Gen.Unity
             W(writer, "{");
             W(writer, "var __w = " + Avx + ".mm256_load_si256(" + RowAt("__i") + ");");
             W(writer, "__hd = " + Avx2 + ".mm256_or_si256(__hd, __w);");
+            W(writer, "{ var __cv = " + Avx2 + ".mm256_permutevar8x32_epi32(__w, CellIndex).UInt0; if (__cv != 0) __hits[__nh++] = __cv; }");
             if (anyFloat) W(writer, "__fs = " + Avx + ".mm256_add_ps(__fs, " + Avx + ".mm256_and_ps(__w, FloatLanes));");
             if (anyInt) W(writer, "__is = " + Avx2 + ".mm256_add_epi32(__is, " + Avx2 + ".mm256_and_si256(__w, IntLanes));");
             foreach (var kind in kinds.FindAll(k => k.Lane == "pick"))
@@ -427,7 +434,7 @@ namespace Tl.Gen.Unity
                     foreach (var kind in pulses)
                     {
                         W(writer, "{");
-                        EmitLaneApply(writer, kind, kinds.IndexOf(kind), ApplyArgs(shapes[s], columnOf[s], kind.Decl.ApplyParams));
+                        EmitHitApply(writer, kind, kinds.IndexOf(kind), ApplyArgs(shapes[s], columnOf[s], kind.Decl.ApplyParams));
                         W(writer, "}");
                     }
                     W(writer, "}");
@@ -515,6 +522,22 @@ namespace Tl.Gen.Unity
             W(writer, body);
             W(writer, "}");
             W(writer, "}");
+        }
+
+        static void EmitHitApply(StringBuilder writer, FusedKind kind, int g, string args)
+        {
+            var t = kind.Decl.ValueTypeName;
+            if (!kind.Decl.Each) W(writer, t + " __pt = default; var __ph = false;");
+            W(writer, "for (var __h = 0; __h < __nh; __h++)");
+            W(writer, "{");
+            W(writer, "var __st = Start" + g + " + (__hits[__h] - 1);");
+            W(writer, "for (var __p = __st[0]; __p < __st[1]; __p++)");
+            W(writer, "{");
+            W(writer, "ref readonly var __v = ref ((" + t + "*)Values" + g + ")[__p];");
+            W(writer, kind.Decl.Each ? kind.Decl.TypeName + ".Apply(in __v" + args + ");" : "if (__ph) " + kind.Decl.TypeName + ".Combine(ref __pt, in __v); else { __pt = __v; __ph = true; }");
+            W(writer, "}");
+            W(writer, "}");
+            if (!kind.Decl.Each) W(writer, "if (__ph) " + kind.Decl.TypeName + ".Apply(in __pt" + args + ");");
         }
 
         static void EmitLaneApply(StringBuilder writer, FusedKind kind, int g, string args)
@@ -745,6 +768,7 @@ namespace Tl.Gen.Unity
             W(writer, "Vector = __fits,");
             W(writer, "Skip = Skip,");
             W(writer, "Cell = __fits ? dense->CellLane : 0,");
+            W(writer, "CellIndex = new " + V256 + "(__fits ? dense->CellLane >> 2 : 0),");
             W(writer, "FloatLanes = __floats,");
             W(writer, "IntLanes = __ints,");
             W(writer, "PlaybackHandle = _playback,");

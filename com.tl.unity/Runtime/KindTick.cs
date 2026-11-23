@@ -483,6 +483,7 @@ namespace Tl.Unity
         bool StepDense(global::Tl.Playback* raw, int n, uint* leave, ushort from, ushort to)
         {
             if (DenseSlots.DueOf(raw) != to) return true;
+            var records = stackalloc uint[KindDense.MaxSlots];
             for (var i = 0; i < n; i++)
             {
                 var record = leave[(ushort)(raw[i].Tick + from)];
@@ -491,12 +492,13 @@ namespace Tl.Unity
                     DenseSlots.Settle(Space, raw, n, from);
                     return false;
                 }
+                records[i] = record;
             }
             var least = 0xFFFFu;
             for (var i = 0; i < n; i++)
             {
                 var origin = raw[i].Tick;
-                var record = leave[(ushort)(origin + from)];
+                var record = records[i];
                 var gap = record & 0xFFFFu;
                 if (gap == 1)
                 {
