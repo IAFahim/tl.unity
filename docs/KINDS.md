@@ -172,7 +172,7 @@ A row with `TimelineHorizon`, `TimelineClock` and a `PlaybackDue` buffer in its 
 
 ## Dense rows
 
-Schedule the generated `TimelineJobs.Fused` to combine compatible kind systems in one chunk walk. An eager or glide row can run dense
+Schedule one generated `TimelineJobs.Fused` job set per library to combine compatible kind systems in one chunk walk. An eager or glide row can run dense
 when its live slots play at 1x, it has no sampled copies or pending pulse entries, and its span kinds use the shared precombined
 table. The tick system adds `TimelineDenseChunk` metadata to the archetype's chunks. Rows with `TimelineClock` use the lazy path.
 

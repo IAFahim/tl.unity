@@ -14,13 +14,12 @@ namespace Tl.Unity
         [NativeDisableUnsafePtrRestriction] public DenseSpace* Space;
     }
 
-    public unsafe struct TimelineDenseChunk : IComponentData
+    public struct TimelineDenseChunk : IComponentData
     {
         public ulong Dense0;
         public ulong Dense1;
         public uint WalkSequence;
         public byte State;
-        public fixed ushort Since[128];
     }
 
     public unsafe struct DenseSpace
@@ -70,7 +69,10 @@ namespace Tl.Unity
         {
             var t = timeline - 1;
             var j = row - RowBase[t] - (reverse ? Half : 0);
-            return (ushort)(reverse ? Duration[t] - 1 - j : j);
+            var duration = Duration[t];
+            var tick = reverse ? duration - 1 - j : j;
+            if (tick == duration) return 0;
+            return (ushort)(tick == -1 ? duration - 1 : tick);
         }
     }
 

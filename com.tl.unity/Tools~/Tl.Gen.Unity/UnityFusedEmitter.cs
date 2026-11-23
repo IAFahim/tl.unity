@@ -736,13 +736,7 @@ namespace Tl.Gen.Unity
             W(writer, "{");
             W(writer, "var dense = index.Dense;");
             W(writer, "if (dense == null || !dense->Fits || (!DenseEnabled && !dense->Ready) || _dense.IsEmptyIgnoreFilter)");
-            W(writer, "{");
-            W(writer, "global::Tl.Unity.KindDense.Register(dense, 0, 0);");
-            W(writer, "var __unfused = dependsOn;");
-            for (var s = 0; s < systems.Count; s++)
-                W(writer, "if ((Skip >> " + s + " & 1) == 0) __unfused = _system" + s + ".Schedule(ref state, view, index, forward, __unfused);");
-            W(writer, "return __unfused;");
-            W(writer, "}");
+            W(writer, "return ScheduleUnfused(ref state, view, index, forward, dependsOn);");
             for (var g = 0; g < kinds.Count; g++)
                 W(writer, "var __kid" + g + " = index.KindOf(" + KindId(kinds[g].Info.Key) + ");");
             var spans = kinds.FindAll(k => k.Span);
@@ -751,7 +745,7 @@ namespace Tl.Gen.Unity
                 var needs = new List<string>();
                 foreach (var kind in spans)
                     needs.Add("index.NeedsSpanValues(__kid" + kinds.IndexOf(kind) + ")");
-                W(writer, "if (" + string.Join(" && ", needs) + ") { dependsOn.Complete(); var __fill = new TlFusedFill { Index = index }; index.SpanValues(__kid" + kinds.IndexOf(spans[0]) + ", ref __fill); }");
+                W(writer, "if (dense->Table == null && " + string.Join(" && ", needs) + ") { dependsOn.Complete(); var __fill = new TlFusedFill { Index = index }; index.SpanValues(__kid" + kinds.IndexOf(spans[0]) + ", ref __fill); }");
             }
             for (var s = 0; s < systems.Count; s++)
                 W(writer, "var __job" + s + " = _system" + s + ".Prepare(ref state, view, index, forward, dependsOn);");
@@ -765,6 +759,7 @@ namespace Tl.Gen.Unity
             for (var g = 0; g < kinds.Count; g++)
                 if (!kinds[g].Span) table.Add("(__kid" + g + " < 0 || index.PulseValuesTable[__kid" + g + "].Data != null)");
             W(writer, "var __fits = " + string.Join(" && ", table) + ";");
+            W(writer, "if (!__fits) return ScheduleUnfused(ref state, view, index, forward, dependsOn);");
             W(writer, "var __spanKinds = 0ul;");
             W(writer, "var __laneKinds = 0ul;");
             for (var g = 0; g < kinds.Count; g++)
@@ -856,6 +851,12 @@ namespace Tl.Gen.Unity
                 W(writer, "}");
             }
             W(writer, "return new global::Tl.Unity.FusedFreeJob { Items = __items, Count = __mixedCount }.Schedule(__dep);");
+            W(writer, "}");
+            W(writer, "JobHandle ScheduleUnfused(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward, JobHandle dependsOn)");
+            W(writer, "{");
+            for (var s = 0; s < systems.Count; s++)
+                W(writer, "if ((Skip >> " + s + " & 1) == 0) dependsOn = _system" + s + ".Schedule(ref state, view, index, forward, dependsOn);");
+            W(writer, "return dependsOn;");
             W(writer, "}");
             W(writer, "}");
             W(writer, "}");

@@ -485,7 +485,7 @@ namespace Tl.Unity
                         if (DenseSlots.IsDense(raw, n)) DenseSlots.Settle(Space, raw, n, from);
                         if (horizons != null) horizons[row] = 0;
                     }
-                    else if (!settleAll && !pending && (copiesRo == null || copiesRo[row].Copies == 0) && Densify(raw, n, leave, from, info, row))
+                    else if (!settleAll && !pending && (copiesRo == null || copiesRo[row].Copies == 0) && Densify(raw, n, leave, from))
                     {
                         if (StepDense(raw, n, leave, from, to)) continue;
                         if (horizons != null) horizons[row] = 0;
@@ -511,7 +511,7 @@ namespace Tl.Unity
             }
         }
 
-        bool Densify(global::Tl.Playback* raw, int n, uint* leave, ushort from, TimelineDenseChunk* info, int row)
+        bool Densify(global::Tl.Playback* raw, int n, uint* leave, ushort from)
         {
             if (n == 0 || n > KindDense.MaxSlots) return false;
             var space = Space;
@@ -540,7 +540,6 @@ namespace Tl.Unity
                 DenseSlots.SetDue(s, (ushort)(from + StepDir * (int)(record & 0xFFFFu)), DenseSlots.ExactEnd(record));
             }
             raw->Phase |= DenseSlots.Marker;
-            if (info != null) info->Since[row] = from;
             return true;
         }
 

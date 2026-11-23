@@ -156,6 +156,8 @@ namespace Tl.Unity
 
         public static int Read(EntityManager manager, Entity entity, global::Tl.Playback* into, int capacity)
         {
+            if (manager.HasChunkComponent<TimelineDenseChunk>(entity))
+                manager.CompleteDependencyBeforeRO<TimelineDenseChunk>();
             var slots = manager.GetBuffer<Playback>(entity, true);
             var count = global::System.Math.Min(slots.Length, capacity);
             var raw = (global::Tl.Playback*)slots.GetUnsafeReadOnlyPtr();

@@ -269,7 +269,7 @@ namespace KindPure
         }
 
         [Test]
-        public void SkippingTheFusedScheduleKeepsEveryPulseAcrossWrapsAndRewinds()
+        public unsafe void SkippingTheFusedScheduleKeepsEveryPulseAcrossWrapsAndRewinds()
         {
             const int rows = 24, steps = 120;
             using var dense = new PureWorld(rows, _first, true);
@@ -285,7 +285,17 @@ namespace KindPure
                 var forward = step % 11 < 8;
                 dense.Step(forward, true, run);
                 plain.Step(forward, true, run);
-                if (run) Assert.AreEqual("", FirstDifference(dense, plain, step));
+                if (run)
+                    Assert.AreEqual("", FirstDifference(dense, plain, step));
+                else
+                    for (var row = 0; row < rows; row++)
+                    {
+                        var actual = default(global::Tl.Playback);
+                        var expected = default(global::Tl.Playback);
+                        Assert.AreEqual(1, TimelineTicks.Read(dense.Entities, dense.Rows[row], &actual, 1));
+                        Assert.AreEqual(1, TimelineTicks.Read(plain.Entities, plain.Rows[row], &expected, 1));
+                        Assert.AreEqual(expected.Tick, actual.Tick, $"step {step}, row {row}");
+                    }
                 if (step == 4) Assert.Greater(dense.DenseRows(), 0);
             }
         }
