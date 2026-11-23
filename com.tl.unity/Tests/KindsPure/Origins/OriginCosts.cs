@@ -96,6 +96,7 @@ namespace KindPure.Origins
         LanePulses,
         Composite,
         CompositeSlotFree,
+        CompositeScalar,
     }
 
     public unsafe struct CostPlan : IDisposable
@@ -232,6 +233,42 @@ namespace KindPure.Origins
                 }
             }
             var speed = pickKey >= 0 ? ((float*)(rows + ((ushort)(origins[pickKey & 255] + frame) << 3)))[1] : 0f;
+            motion.X += speed * stats.Walk;
+            motion.Y += lift * stats.Jump;
+            vitals.Health -= damage;
+            vitals.Stamina += stat;
+            return any;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static uint MoveLanesScalar(int* rows, ushort* origins, int active, uint frame, ref Motion motion, in Stats stats, ref Vitals vitals)
+        {
+            var lift = 0f;
+            var speed = 0f;
+            var best = 0;
+            var has = false;
+            var any = 0u;
+            var damage = 0;
+            var stat = 0;
+            for (var slot = 0; slot < active; slot++)
+            {
+                var row = rows + ((ushort)(origins[slot] + frame) << 3);
+                var head = row[0];
+                any |= (uint)head;
+                lift += ((float*)row)[3];
+                damage += row[4];
+                stat += row[5];
+                if ((head & 1) != 0)
+                {
+                    var priority = row[2] >> 8;
+                    if (!has || priority >= best)
+                    {
+                        best = priority;
+                        speed = ((float*)row)[1];
+                        has = true;
+                    }
+                }
+            }
             motion.X += speed * stats.Walk;
             motion.Y += lift * stats.Jump;
             vitals.Health -= damage;
@@ -501,6 +538,67 @@ namespace KindPure.Origins
                 if (active == 2) any = CostKernels.MoveLanes(Plan.Rows, origins, 2, Frame, ref motion[row], in stats[row], ref vitals[row]);
                 else if (active == 4) any = CostKernels.MoveLanes(Plan.Rows, origins, 4, Frame, ref motion[row], in stats[row], ref vitals[row]);
                 else any = CostKernels.MoveLanes(Plan.Rows, origins, active, Frame, ref motion[row], in stats[row], ref vitals[row]);
+                var bit = 1ul << (row & 63);
+                if ((any & 1) != 0) { if (row < 64) listedA0 |= bit; else listedA1 |= bit; }
+                if ((any & 2) != 0) { if (row < 64) listedB0 |= bit; else listedB1 |= bit; }
+            }
+            CostMoveJob.Diff(in chunk, ref ActiveAHandle, activeA, listedA0, listedA1, all0, all1);
+            CostMoveJob.Diff(in chunk, ref ActiveBHandle, activeB, listedB0, listedB1, all0, all1);
+        }
+    }
+
+    [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard, CompileSynchronously = true)]
+    public unsafe struct CostComposedScalarJob : IJobChunk
+    {
+        public CostPlan Plan;
+        public uint Frame;
+        public int Fixed;
+        [ReadOnly] public DynamicComponentTypeHandle OriginsHandle;
+        [ReadOnly] public ComponentTypeHandle<CostDense> DenseHandle;
+        [ReadOnly] public ComponentTypeHandle<CostPlaying> PlayingHandle;
+        public ComponentTypeHandle<CostActiveA> ActiveAHandle;
+        [ReadOnly] public ComponentTypeHandle<CostEnabledA> EnabledAHandle;
+        public ComponentTypeHandle<CostActiveB> ActiveBHandle;
+        [ReadOnly] public ComponentTypeHandle<CostEnabledB> EnabledBHandle;
+        public ComponentTypeHandle<Motion> MotionHandle;
+        [ReadOnly] public ComponentTypeHandle<Stats> StatsHandle;
+        public ComponentTypeHandle<Vitals> VitalsHandle;
+
+        public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
+        {
+            var count = chunk.Count;
+            var all0 = count >= 64 ? ~0ul : (1ul << count) - 1;
+            var all1 = count <= 64 ? 0ul : count >= 128 ? ~0ul : (1ul << (count - 64)) - 1;
+            var playing = chunk.GetEnableableBits(ref PlayingHandle);
+            var denseBits = chunk.GetEnableableBits(ref DenseHandle);
+            var activeA = chunk.GetEnableableBits(ref ActiveAHandle);
+            var enabledA = chunk.GetEnableableBits(ref EnabledAHandle);
+            var activeB = chunk.GetEnableableBits(ref ActiveBHandle);
+            var enabledB = chunk.GetEnableableBits(ref EnabledBHandle);
+            var rows0 = (activeA.ULong0 | playing.ULong0) & enabledA.ULong0 & (activeB.ULong0 | playing.ULong0) & enabledB.ULong0 & denseBits.ULong0;
+            var rows1 = (activeA.ULong1 | playing.ULong1) & enabledA.ULong1 & (activeB.ULong1 | playing.ULong1) & enabledB.ULong1 & denseBits.ULong1;
+            if ((rows0 & all0) != all0 || (rows1 & all1) != all1) return;
+            var dense = (CostDense*)chunk.GetRequiredComponentDataPtrRO(ref DenseHandle);
+            var motion = (Motion*)chunk.GetRequiredComponentDataPtrRW(ref MotionHandle);
+            var stats = (Stats*)chunk.GetRequiredComponentDataPtrRO(ref StatsHandle);
+            var vitals = (Vitals*)chunk.GetRequiredComponentDataPtrRW(ref VitalsHandle);
+            var fixedOrigins = Fixed > 0 ? (ushort*)chunk.GetDynamicComponentDataArrayReinterpret<ushort>(ref OriginsHandle, Fixed * sizeof(ushort)).GetUnsafeReadOnlyPtr() : null;
+            var buffers = Fixed > 0 ? default : chunk.GetUntypedBufferAccessor(ref OriginsHandle);
+            ulong listedA0 = 0, listedA1 = 0, listedB0 = 0, listedB1 = 0;
+            for (var row = 0; row < count; row++)
+            {
+                ushort* origins;
+                int active;
+                if (Fixed > 0)
+                {
+                    origins = fixedOrigins + row * Fixed;
+                    active = dense[row].Count;
+                }
+                else origins = (ushort*)buffers.GetUnsafePtrAndLength(row, out active);
+                uint any;
+                if (active == 2) any = CostKernels.MoveLanesScalar(Plan.Rows, origins, 2, Frame, ref motion[row], in stats[row], ref vitals[row]);
+                else if (active == 4) any = CostKernels.MoveLanesScalar(Plan.Rows, origins, 4, Frame, ref motion[row], in stats[row], ref vitals[row]);
+                else any = CostKernels.MoveLanesScalar(Plan.Rows, origins, active, Frame, ref motion[row], in stats[row], ref vitals[row]);
                 var bit = 1ul << (row & 63);
                 if ((any & 1) != 0) { if (row < 64) listedA0 |= bit; else listedA1 |= bit; }
                 if ((any & 2) != 0) { if (row < 64) listedB0 |= bit; else listedB1 |= bit; }
@@ -848,6 +946,11 @@ namespace KindPure.Origins
                 done = new CostVitalsLaneJob { Plan = _plan, Frame = _frame, Fixed = _fixed, OriginsHandle = _entities.GetDynamicComponentTypeHandle(ComponentType.ReadOnly(_originType.TypeIndex)), DenseHandle = _entities.GetComponentTypeHandle<CostDense>(true), ActiveHandle = _entities.GetComponentTypeHandle<CostActiveA>(true), EnabledHandle = _entities.GetComponentTypeHandle<CostEnabledA>(true), VitalsHandle = vitalsHandle }.ScheduleParallel(_characters, done);
                 done = new CostTickJob { Plan = _plan, Frame = _frame, Fixed = _fixed, Checks = true, TwoKinds = false, Lanes = null, Threads = _threads, OriginsHandle = originsHandle, SpillHandle = spillHandle, DuesHandle = duesHandle, DenseHandle = denseHandle, PlayingHandle = _entities.GetComponentTypeHandle<CostPlaying>(true), EntityHandle = entityHandle }.ScheduleParallel(_characters, done);
             }
+            else if (_level == CostLevel.CompositeScalar)
+            {
+                done = new CostComposedScalarJob { Plan = _plan, Frame = _frame, Fixed = _fixed, OriginsHandle = _entities.GetDynamicComponentTypeHandle(ComponentType.ReadOnly(_originType.TypeIndex)), DenseHandle = _entities.GetComponentTypeHandle<CostDense>(true), PlayingHandle = _entities.GetComponentTypeHandle<CostPlaying>(true), ActiveAHandle = _entities.GetComponentTypeHandle<CostActiveA>(false), EnabledAHandle = _entities.GetComponentTypeHandle<CostEnabledA>(true), ActiveBHandle = _entities.GetComponentTypeHandle<CostActiveB>(false), EnabledBHandle = _entities.GetComponentTypeHandle<CostEnabledB>(true), MotionHandle = motionHandle, StatsHandle = statsHandle, VitalsHandle = vitalsHandle }.ScheduleParallel(_characters, default);
+                done = new CostTickJob { Plan = _plan, Frame = _frame, Fixed = _fixed, Checks = true, TwoKinds = false, Lanes = null, Threads = _threads, OriginsHandle = originsHandle, SpillHandle = spillHandle, DuesHandle = duesHandle, DenseHandle = denseHandle, PlayingHandle = _entities.GetComponentTypeHandle<CostPlaying>(true), EntityHandle = entityHandle }.ScheduleParallel(_characters, done);
+            }
             else if (_level >= CostLevel.Composite)
             {
                 done = new CostComposedJob { Plan = _plan, Frame = _frame, Fixed = _fixed, OriginsHandle = _entities.GetDynamicComponentTypeHandle(ComponentType.ReadOnly(_originType.TypeIndex)), DenseHandle = _entities.GetComponentTypeHandle<CostDense>(true), PlayingHandle = _entities.GetComponentTypeHandle<CostPlaying>(true), ActiveAHandle = _entities.GetComponentTypeHandle<CostActiveA>(false), EnabledAHandle = _entities.GetComponentTypeHandle<CostEnabledA>(true), ActiveBHandle = _entities.GetComponentTypeHandle<CostActiveB>(false), EnabledBHandle = _entities.GetComponentTypeHandle<CostEnabledB>(true), MotionHandle = motionHandle, StatsHandle = statsHandle, VitalsHandle = vitalsHandle }.ScheduleParallel(_characters, default);
@@ -915,7 +1018,7 @@ namespace KindPure.Origins
             var args = Environment.GetCommandLineArgs();
             var log = Path.Combine(UnityEngine.Application.dataPath, "..", "OriginCosts.log");
             var cells = "1000000x2,1000000x4,50000x40,50000x100";
-            var levels = "U1,Chunk,Dues,Walks,Checks,ScalarPick,TwoKinds,SlotFree,LanePulses,Composite,CompositeSlotFree";
+            var levels = "U1,Chunk,Dues,Walks,Checks,ScalarPick,TwoKinds,SlotFree,LanePulses,Composite,CompositeSlotFree,CompositeScalar";
             var warmup = 40;
             var measure = 16;
             var runs = 5;
