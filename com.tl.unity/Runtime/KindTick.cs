@@ -142,6 +142,7 @@ namespace Tl.Unity
         [NativeDisableUnsafePtrRestriction] public int* Counters;
         public int StepDir;
         public uint LastSystemVersion;
+        public bool Sweep;
         public int HorizonLimit;
         public bool ForgetHorizons;
         public ushort Now;
@@ -222,7 +223,7 @@ namespace Tl.Unity
                 }
                 clocks = null;
             }
-            var requested = hasRequest && chunk.DidChange(ref RequestHandle, LastSystemVersion);
+            var requested = hasRequest && (Sweep || chunk.DidChange(ref RequestHandle, LastSystemVersion));
             var playing = chunk.GetEnableableBits(ref PlayingHandle);
             if (!requested && playing.ULong0 == 0 && (count <= 64 || playing.ULong1 == 0)) return;
             var buffers = Index.WorkerBuffers != null && (uint)ThreadIndex < (uint)Index.ThreadCount && Index.KindCount > 0 ? Index.WorkerBuffers + ThreadIndex * Index.KindCount : null;
@@ -257,7 +258,11 @@ namespace Tl.Unity
                 for (var row = 0; row < count; row++)
                 {
                     var queue = requests[row];
-                    if (queue.Length == 0) continue;
+                    if (queue.Length == 0)
+                    {
+                        if (Sweep && queue.Capacity != 0) queue.TrimExcess();
+                        continue;
+                    }
                     if (horizons != null) horizons[row] = 0;
                     if (clocks != null) TimelineTicks.Decode((global::Tl.Playback*)playbacks[row].GetUnsafePtr(), playbacks[row].Length, clocks[row]);
                     else if (Space != null && DenseSlots.IsDense((global::Tl.Playback*)playbacks[row].GetUnsafePtr(), playbacks[row].Length))

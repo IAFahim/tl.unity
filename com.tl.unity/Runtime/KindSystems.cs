@@ -219,6 +219,7 @@ namespace Tl.Unity
                 ClockHandle = _clockHandle,
                 DueHandle = _dueHandle,
                 Now = _now,
+                Sweep = (_now & 63) == 0,
                 Handles = handles,
                 Tables = index.Tables,
                 Counters = counters,
