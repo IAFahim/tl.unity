@@ -10,7 +10,7 @@ How a Timeline asset made in Unity's Timeline window becomes data that Burst sys
 |---|---|---|
 | `TlTrack` | sub-asset of the `.playable` | the clip type (`Template`, a generated `<Clip>_TlData` mirror; a clip in a namespace gets the namespace in front, `Tl.Pack.Force.ForceClip` -> `Tl_Pack_Force_ForceClip_TlData`, so same-named clips never clash). One package class for every clip type. |
 | `TlClip` | sub-asset | the clip's values as the same mirror (`[SerializeReference]`), so Unity's Inspector, Undo, prefab and copy logic apply |
-| `<Clip>_TlMenu` | `Assets/Tl Generated/Editor/<Clip>_TlMenu.cs`, written by Tl, never saved in a timeline | the **+** menu entry; picking it creates a real `TlTrack` in one Undo step. Timeline wants every track class in a file named after the class, so Tl writes one tiny file per clip (rewritten or deleted when the clip changes; commit or ignore it) |
+| `<Clip>_TlMenu` | `Assets/Tl Generated/Editor/<Clip>_TlMenu.cs`, written by Tl, never saved in a timeline | the **+** menu entry; picking it creates a real `TlTrack` in one Undo step. Timeline wants every track class in a file named after the class, so Tl writes one tiny file per clip (rewritten or deleted when the clip changes; commit or ignore it). Clips get one when compiled from `Assets/`, from a `com.tl.pack.*` package, or from any assembly marked `[assembly: Tl.Unity.TlMenuEntries]` (a UPM package of clips opts in this way, IAFahim/tl.unity#50) |
 | `TlTimelineSettings` | marker at time 0, made by the Tl section on the first change | When it ends (Stop, Loop, Hold, Next), Play next, Channel. Duplicating or renaming the `.playable` keeps it. |
 | `TlMarker` | marker sub-asset, on the marker row at the top or on any track | one Tl marker (`IMarker<T>`): the values of `T` as a generated `<T>_TlMarkerData` mirror. Right-click the marker row > the marker type name adds one (a `<T>_TlMarkerMenu` stub file, swapped for a real `TlMarker` in one Undo step); its tick is its time. It bakes into the timeline like `tl` markers, so the `[Pulse(..., On = ClipEvent.Marker)]` methods run at that tick. |
 | `PlayableDirector` | the object, in a SubScene | Playable, Play On Awake, Initial Time. Unity's Wrap Mode is not used. |
@@ -55,6 +55,15 @@ when preview ends; the scene is not marked changed.
 Not previewed: components other than the object's own Transform, systems outside `TlSimulationGroup` (physics, transform hierarchy,
 other packages), children of the object, and objects in a closed SubScene. The Scene view shows the preview; the Game view in Edit mode
 draws Entities' own Editor world.
+
+For other packages that preview more than the Transform (IAFahim/tl.unity#49):
+- `TlPreview.Evaluated` is raised for every director the Timeline window previews.
+- `TlPreview.Version(director)` changes when anything the preview reads changes.
+- `TlPreview.Record(director, readTick)` steps the Playable from start to end on the cached bake.
+  - It calls `readTick(entities, entity, tick)` after every tick.
+  - It calls it once more, with the tick after the last, for the state after the end.
+
+`com.tl.unity.ui` records its UI columns this way once per edit, then shows the playhead tick.
 
 ## Plain .NET and other hosts
 

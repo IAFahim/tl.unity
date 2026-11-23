@@ -51,6 +51,10 @@ namespace Tl.Unity.Editor
             public float Scale;
         }
 
+        public delegate void TickReader(EntityManager entities, Entity director, uint tick);
+
+        public static event Action<PlayableDirector> Evaluated;
+
         static readonly Dictionary<PlayableDirector, Session> s_Sessions = new Dictionary<PlayableDirector, Session>();
         static List<Type> s_Systems;
 
@@ -81,6 +85,7 @@ namespace Tl.Unity.Editor
         {
             if (director == null || EditorApplication.isPlayingOrWillChangePlaymode || !AnimationMode.InAnimationMode())
                 return;
+            Evaluated?.Invoke(director);
             var session = SessionOf(director, out var rebaked);
             if (session == null)
                 return;
@@ -99,6 +104,73 @@ namespace Tl.Unity.Editor
             if (session == null)
                 return default;
             return Simulate(session, TlTimelinePacker.Ticks(time, TlProjectSettings.instance.TicksPerSecond));
+        }
+
+        public static long Version(PlayableDirector director) => director == null ? 0 : VersionOf(director);
+
+        public static bool Record(PlayableDirector director, TickReader readTick)
+        {
+            if (director == null || readTick == null)
+                return false;
+            var session = SessionOf(director, out _);
+            if (session == null)
+                return false;
+            using var world = new World("Tl Preview Record", WorldFlags.Editor);
+            DefaultWorldInitialization.AddSystemsToRootLevelSystemGroups(world, Systems());
+            var source = session.Baked.EntityManager;
+            using (var all = source.UniversalQuery.ToEntityArray(Allocator.Temp))
+                world.EntityManager.CopyEntitiesFrom(source, all);
+            var entities = world.EntityManager;
+            using var query = entities.CreateEntityQuery(ComponentType.ReadOnly<TlTimelineSet>(), ComponentType.ReadOnly<Playback>());
+            if (query.IsEmpty)
+                return false;
+            var entity = query.GetSingletonEntity();
+            if (entities.HasComponent<LocalTransform>(entity))
+                entities.SetComponentData(entity, LocalTransform.FromPositionRotationScale(session.Position, session.Rotation, session.Scale.x));
+            var init = world.GetExistingSystemManaged<InitializationSystemGroup>();
+            var group = world.GetExistingSystemManaged<TlSimulationGroup>();
+            var ticksPerSecond = TlProjectSettings.instance.TicksPerSecond;
+            var delta = 1f / ticksPerSecond;
+            var limit = (int)TlTimelinePacker.Ticks(director.playableAsset is TimelineAsset timeline ? timeline.duration : 0, ticksPerSecond) + 64;
+            ushort playable = 0;
+            var started = false;
+            var lastTick = 0u;
+            var read = false;
+            for (var step = 0; step < limit; step++)
+            {
+                world.SetTime(new TimeData(step * (double)delta, delta));
+                init.Update();
+                group?.Update();
+                entities.CompleteAllTrackedJobs();
+                if (playable == 0)
+                {
+                    var set = entities.GetBuffer<TlTimelineSet>(entity, true);
+                    playable = set.Length > 0 ? set[0].Id : (ushort)0;
+                }
+                var playbacks = entities.GetBuffer<Playback>(entity, true);
+                var followed = -1;
+                for (var i = 0; i < playbacks.Length && playable != 0; i++)
+                    if (playbacks[i].Timeline == playable)
+                    {
+                        followed = i;
+                        break;
+                    }
+                if (followed < 0)
+                {
+                    if (!started)
+                        continue;
+                    readTick(entities, entity, read ? lastTick + 1 : 0);
+                    return true;
+                }
+                started = true;
+                var playback = playbacks[followed];
+                if ((playback.Flags & global::Tl.PlaybackFlags.StartPending) != 0 || (read && playback.Tick == lastTick))
+                    continue;
+                lastTick = playback.Tick;
+                read = true;
+                readTick(entities, entity, lastTick);
+            }
+            return started;
         }
 
         public static void Clear()

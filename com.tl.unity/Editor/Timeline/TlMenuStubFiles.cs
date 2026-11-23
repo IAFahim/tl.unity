@@ -79,7 +79,7 @@ namespace Tl.Unity.Editor
             var inAssets = AssembliesCompiledFromAssets();
             foreach (var type in TypeCache.GetTypesDerivedFrom<TlClipData>())
             {
-                if (type.IsAbstract || type.Namespace != "Tl.Generated" || !inAssets.Contains(type.Assembly.GetName().Name))
+                if (type.IsAbstract || type.Namespace != "Tl.Generated" || !(inAssets.Contains(type.Assembly.GetName().Name) || type.Assembly.IsDefined(typeof(TlMenuEntriesAttribute), false)))
                     continue;
                 var marker = typeof(TlMarkerData).IsAssignableFrom(type);
                 var suffix = marker ? MarkerMirrorSuffix : MirrorSuffix;
