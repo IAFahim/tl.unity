@@ -205,7 +205,11 @@ namespace Tl.Gen.Unity
                     W(writer, "public int Off" + g + ";");
                     W(writer, "public uint Lm" + g + ";");
                     W(writer, "public uint Vm" + g + ";");
-                    if (kinds[g].Lane == "pick") W(writer, "public int Key" + g + ";");
+                    if (kinds[g].Lane == "pick")
+                    {
+                        W(writer, "public int Key" + g + ";");
+                        W(writer, "public " + V256 + " KeyIndex" + g + ";");
+                    }
                 }
                 else
                 {
@@ -356,16 +360,30 @@ namespace Tl.Gen.Unity
             W(writer, "var __hd = default(" + V256 + ");");
             if (anyFloat) W(writer, "var __fs = " + Avx + ".mm256_set1_ps(-0f);");
             if (anyInt) W(writer, "var __is = default(" + V256 + ");");
-            if (anyPick) W(writer, "var __ky = " + Avx + ".mm256_set1_epi32(-1);");
+            foreach (var kind in kinds.FindAll(k => k.Lane == "pick"))
+            {
+                var g = kinds.IndexOf(kind);
+                W(writer, "var __kk" + g + " = " + Avx + ".mm256_set1_epi32(-1);");
+                W(writer, "var __br" + g + " = default(" + V256 + ");");
+            }
             W(writer, "for (var __i = 0; __i < __n; __i++)");
             W(writer, "{");
             W(writer, "var __w = " + Avx + ".mm256_load_si256(" + RowAt("__i") + ");");
             W(writer, "__hd = " + Avx2 + ".mm256_or_si256(__hd, __w);");
             if (anyFloat) W(writer, "__fs = " + Avx + ".mm256_add_ps(__fs, " + Avx + ".mm256_and_ps(__w, FloatLanes));");
             if (anyInt) W(writer, "__is = " + Avx2 + ".mm256_add_epi32(__is, " + Avx2 + ".mm256_and_si256(__w, IntLanes));");
-            if (anyPick) W(writer, "__ky = " + Avx2 + ".mm256_max_epi32(__ky, " + Avx2 + ".mm256_or_si256(__w, " + Avx + ".mm256_set1_epi32(__i)));");
+            foreach (var kind in kinds.FindAll(k => k.Lane == "pick"))
+            {
+                var g = kinds.IndexOf(kind);
+                W(writer, "{");
+                W(writer, "var __kb = " + Avx2 + ".mm256_or_si256(" + Avx2 + ".mm256_permutevar8x32_epi32(__w, KeyIndex" + g + "), " + Avx + ".mm256_set1_epi32(__i));");
+                W(writer, "var __gt = " + Avx2 + ".mm256_cmpgt_epi32(__kb, __kk" + g + ");");
+                W(writer, "__kk" + g + " = " + Avx2 + ".mm256_max_epi32(__kk" + g + ", __kb);");
+                W(writer, "__br" + g + " = " + Avx2 + ".mm256_blendv_epi8(__br" + g + ", __w, __gt);");
+                W(writer, "}");
+            }
             W(writer, "}");
-            W(writer, "__any = ((uint*)&__hd)[0];");
+            W(writer, "__any = __hd.UInt0;");
             W(writer, "__cell = ((uint*)&__hd)[Cell >> 2];");
             for (var g = 0; g < kinds.Count; g++)
             {
@@ -376,9 +394,8 @@ namespace Tl.Gen.Unity
                     W(writer, "__t" + g + " = ((" + kind.Decl.ValueTypeName + "*)&__is)[Off" + g + " >> 2]; __f" + g + " = (__any & Vm" + g + ") != 0;");
                 else if (kind.Lane == "pick")
                 {
-                    W(writer, "var __k" + g + " = ((int*)&__ky)[Key" + g + " >> 2];");
-                    W(writer, "__f" + g + " = __k" + g + " >= 0;");
-                    W(writer, "if (__f" + g + ") __t" + g + " = *(" + kind.Decl.ValueTypeName + "*)(" + RowAt("__k" + g + " & 255") + " + Off" + g + ");");
+                    W(writer, "__f" + g + " = __kk" + g + ".SInt0 >= 0;");
+                    W(writer, "if (__f" + g + ") __t" + g + " = *(" + kind.Decl.ValueTypeName + "*)((byte*)&__br" + g + " + Off" + g + ");");
                 }
             }
             if (scalarSpans.Count != 0) EmitScalarSpans(writer, scalarSpans, kinds, false);
@@ -748,7 +765,11 @@ namespace Tl.Gen.Unity
                     W(writer, "Off" + g + " = __fits && __kid" + g + " >= 0 ? index.Values[__kid" + g + "].Front : 0,");
                     W(writer, "Lm" + g + " = __fits && __kid" + g + " >= 0 ? 1u << index.Values[__kid" + g + "].Shift : 0u,");
                     W(writer, "Vm" + g + " = __fits && __kid" + g + " >= 0 ? 1u << (index.Values[__kid" + g + "].Shift + (forward ? 1 : 2)) : 0u,");
-                    if (kinds[g].Lane == "pick") W(writer, "Key" + g + " = __fits && __kid" + g + " >= 0 ? dense->KeyLanes[__kid" + g + "] : 0,");
+                    if (kinds[g].Lane == "pick")
+                    {
+                        W(writer, "Key" + g + " = __fits && __kid" + g + " >= 0 ? dense->KeyLanes[__kid" + g + "] : 0,");
+                        W(writer, "KeyIndex" + g + " = new " + V256 + "(__fits && __kid" + g + " >= 0 ? dense->KeyLanes[__kid" + g + "] >> 2 : 0),");
+                    }
                 }
                 else
                 {

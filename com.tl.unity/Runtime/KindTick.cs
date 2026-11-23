@@ -419,7 +419,7 @@ namespace Tl.Unity
                     var pending = (pendingWord >> bit & 1) != 0;
                     if (DenseSlots.IsDense(raw, n))
                     {
-                        if (!settleAll && !pending && StepDense(raw, n, leave, from, to)) continue;
+                        if (!settleAll && !pending && (DenseSlots.DueOf(raw) != to || StepDense(raw, n, leave, from, to))) continue;
                         if (DenseSlots.IsDense(raw, n)) DenseSlots.Settle(Space, raw, n, from);
                         if (horizons != null) horizons[row] = 0;
                     }
