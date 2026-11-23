@@ -81,6 +81,8 @@ namespace Tl.Unity
                     var n = lane->Count;
                     if (n == 0) continue;
                     var items = lane->Items;
+                    var flushing = Entity.Null;
+                    var insertAt = 0;
                     for (var i = 0; i < n; i++)
                     {
                         var e = items[i].Entity;
@@ -91,10 +93,18 @@ namespace Tl.Unity
                         var s = starts[c];
                         var cnt = starts[c + 1] - s;
                         if (cnt <= 0) continue;
+                        if (e != flushing)
+                        {
+                            flushing = e;
+                            insertAt = 0;
+                        }
                         var acc = info.Chunk.GetUntypedBufferAccessor(ref *entryHandle);
                         var len = acc.GetBufferLength(info.IndexInChunk);
                         acc.ResizeUninitialized(info.IndexInChunk, len + cnt);
-                        var dstBase = (byte*)acc.GetUnsafePtr(info.IndexInChunk) + (long)len * stride;
+                        var rowBase = (byte*)acc.GetUnsafePtr(info.IndexInChunk);
+                        UnsafeUtility.MemMove(rowBase + (long)(insertAt + cnt) * stride, rowBase + (long)insertAt * stride, (long)(len - insertAt) * stride);
+                        var dstBase = rowBase + (long)insertAt * stride;
+                        insertAt += cnt;
                         var src = pv->Data + (long)s * vbytes;
                         for (var p = 0; p < cnt; p++)
                         {
@@ -128,10 +138,6 @@ namespace Tl.Unity
         public ComponentTypeHandle<TimelineHorizon> HorizonHandle;
         public ComponentTypeHandle<TimelineClock> ClockHandle;
         public BufferTypeHandle<PlaybackDue> DueHandle;
-        public ComponentTypeHandle<PlaybackDense> DenseHandle;
-        public BufferTypeHandle<PlaybackOrigin> OriginHandle;
-        public ComponentTypeHandle<DenseOrigins> DenseOriginsHandle;
-        public ComponentTypeHandle<DenseDues> DenseDuesHandle;
         [NativeDisableContainerSafetyRestriction] public KindHandleSet Handles;
         [NativeDisableUnsafePtrRestriction] public int* Counters;
         public int StepDir;
@@ -139,6 +145,8 @@ namespace Tl.Unity
         public int HorizonLimit;
         public bool ForgetHorizons;
         public ushort Now;
+        [NativeDisableUnsafePtrRestriction] public KindDense* Dense;
+        [NativeDisableUnsafePtrRestriction] public DenseSpace* Space;
         public ushort DenseFrom;
         public bool DenseReady;
         public bool DenseForget;
@@ -150,9 +158,10 @@ namespace Tl.Unity
         {
             CountManagedRun(Counters);
             var count = chunk.Count;
+            var playbackChanged = Space != null && chunk.DidChange(ref PlaybackHandle, LastSystemVersion);
             var cache = Index.WorkerCache != null && (uint)ThreadIndex < (uint)Index.ThreadCount ? Index.WorkerCache + ThreadIndex : null;
             var arch = chunk.Archetype;
-            bool hasClock, hasDue, hasHorizon, hasRequest, hasDense;
+            bool hasClock, hasDue, hasHorizon, hasRequest;
             if (cache != null && (cache->Flags & 1) != 0 && cache->Archetype.Equals(arch))
             {
                 var cf = cache->Flags;
@@ -160,7 +169,6 @@ namespace Tl.Unity
                 hasDue = (cf & 4) != 0;
                 hasHorizon = (cf & 8) != 0;
                 hasRequest = (cf & 16) != 0;
-                hasDense = (cf & 64) != 0;
             }
             else
             {
@@ -168,12 +176,11 @@ namespace Tl.Unity
                 hasDue = hasClock && chunk.Has(ref DueHandle);
                 hasHorizon = chunk.Has(ref HorizonHandle);
                 hasRequest = chunk.Has(ref RequestHandle);
-                hasDense = chunk.Has(ref DenseHandle) && chunk.Has(ref OriginHandle) && chunk.Has(ref DenseOriginsHandle) && chunk.Has(ref DenseDuesHandle);
                 if (cache != null)
                 {
                     cache->Archetype = arch;
                     cache->Reach = 0;
-                    cache->Flags = (byte)(1 | (hasClock ? 2 : 0) | (hasDue ? 4 : 0) | (hasHorizon ? 8 : 0) | (hasRequest ? 16 : 0) | (hasDense ? 64 : 0));
+                    cache->Flags = (byte)(1 | (hasClock ? 2 : 0) | (hasDue ? 4 : 0) | (hasHorizon ? 8 : 0) | (hasRequest ? 16 : 0));
                 }
             }
             byte* horizons = null;
@@ -217,24 +224,6 @@ namespace Tl.Unity
             }
             var requested = hasRequest && chunk.DidChange(ref RequestHandle, LastSystemVersion);
             var playing = chunk.GetEnableableBits(ref PlayingHandle);
-            var dense = new DenseRows();
-            if (hasDense)
-            {
-                var bits = chunk.GetEnableableBits(ref DenseHandle);
-                dense.Bits0 = bits.ULong0;
-                dense.Bits1 = count > 64 ? bits.ULong1 : 0ul;
-                if ((dense.Bits0 | dense.Bits1) != 0)
-                {
-                    var settleAll = DenseForget || !DenseReady || chunk.DidChange(ref PlaybackHandle, LastSystemVersion);
-                    var settle0 = settleAll ? dense.Bits0 : dense.Bits0 & ~playing.ULong0;
-                    var settle1 = settleAll ? dense.Bits1 : dense.Bits1 & ~playing.ULong1;
-                    if ((settle0 | settle1) != 0)
-                    {
-                        var all = chunk.GetBufferAccessor(ref PlaybackHandle);
-                        UndenseRows(in chunk, ref dense, all, settle0, settle1, horizons, clocks, dues);
-                    }
-                }
-            }
             if (!requested && playing.ULong0 == 0 && (count <= 64 || playing.ULong1 == 0)) return;
             var buffers = Index.WorkerBuffers != null && (uint)ThreadIndex < (uint)Index.ThreadCount && Index.KindCount > 0 ? Index.WorkerBuffers + ThreadIndex * Index.KindCount : null;
             var masks = Index.WorkerMasks != null && (uint)ThreadIndex < (uint)Index.ThreadCount && Index.KindCount > 0 ? Index.WorkerMasks + ThreadIndex * Index.KindCount : null;
@@ -269,9 +258,10 @@ namespace Tl.Unity
                 {
                     var queue = requests[row];
                     if (queue.Length == 0) continue;
-                    if (dense.Has(row)) Undense(in chunk, ref dense, playbacks, row, horizons, clocks, dues);
                     if (horizons != null) horizons[row] = 0;
                     if (clocks != null) TimelineTicks.Decode((global::Tl.Playback*)playbacks[row].GetUnsafePtr(), playbacks[row].Length, clocks[row]);
+                    else if (Space != null && DenseSlots.IsDense((global::Tl.Playback*)playbacks[row].GetUnsafePtr(), playbacks[row].Length))
+                        DenseSlots.Settle(Space, (global::Tl.Playback*)playbacks[row].GetUnsafePtr(), playbacks[row].Length, DenseFrom);
                     var slots = new KindSlots(playbacks[row], &ctx, row);
                     for (var r = 0; r < queue.Length; r++)
                         global::Tl.PlaybackRules.Apply(ref slots, Index.Timelines, Index.TimelineCount, queue[r].Op, queue[r].Timeline, queue[r].At);
@@ -294,9 +284,9 @@ namespace Tl.Unity
                 ctx.HadSampled = hadSampled;
                 var anyClosed = (ctx.Closed0 | ctx.Closed1) != 0;
                 var sink = new UnityPulseSink { Cursor = (KindCursor*)UnsafeUtility.AddressOf(ref ctx), EntityHandle = EntityHandle, Entities = null, ThreadIndex = ThreadIndex, IsActive = true };
-                if (hasDense && DenseReady)
+                if (Space != null && clocks == null)
                 {
-                    StepDense(in chunk, in tables, ref ctx, ref sink, ref dense, playbacks, playing, copiesRo, anyClosed, horizons, clocks, dues, reverse);
+                    TickDense(in chunk, in tables, ref ctx, ref sink, playbacks, playing, copiesRo, anyClosed, horizons, reverse, playbackChanged);
                     return;
                 }
                 if (clocks == null && horizons == null)
@@ -388,378 +378,134 @@ namespace Tl.Unity
         }
     }
 
-    internal unsafe struct DenseLanes
-    {
-        public KindPulseLane* Base;
-        public int Stride;
-        public ulong Reach;
-        public Entity* Entities;
-        public global::Tl.KindPulseValues* Values;
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Push(in ArchetypeChunk chunk, ulong kinds, int row, int cell)
-        {
-            for (kinds &= Reach; kinds != 0; kinds &= kinds - 1)
-            {
-                var kind = (int)global::Unity.Mathematics.math.tzcnt(kinds);
-                var start = Values[kind].Start;
-                if (start[cell] != start[cell + 1]) Base[kind * Stride].Push(in chunk, Entities[row], row, cell);
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Rewind(ulong kinds, int row)
-        {
-            for (kinds &= Reach; kinds != 0; kinds &= kinds - 1) Base[(int)global::Unity.Mathematics.math.tzcnt(kinds) * Stride].Rewind(Entities[row]);
-        }
-    }
-
-    internal struct DenseRows
-    {
-        public ulong Bits0;
-        public ulong Bits1;
-        public EnabledMask Mask;
-        public bool HasMask;
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool Has(int row) => ((row < 64 ? Bits0 >> row : Bits1 >> (row - 64)) & 1) != 0;
-    }
-
     public unsafe partial struct KindTickJob
     {
-        void SetDense(in ArchetypeChunk chunk, ref DenseRows dense, int row, bool value)
+        void TickDense(in ArchetypeChunk chunk, in global::Tl.KindTables tables, ref KindCursor ctx, ref UnityPulseSink sink, BufferAccessor<Playback> playbacks, v128 playing, TimelinePlaying* copiesRo, bool anyClosed, byte* horizons, ulong reverse, bool playbackChanged)
         {
-            if (!dense.HasMask)
-            {
-                dense.Mask = chunk.GetEnabledMask(ref DenseHandle);
-                dense.HasMask = true;
-            }
-            dense.Mask[row] = value;
-            var bit = 1ul << (row & 63);
-            if (row < 64) dense.Bits0 = value ? dense.Bits0 | bit : dense.Bits0 & ~bit;
-            else dense.Bits1 = value ? dense.Bits1 | bit : dense.Bits1 & ~bit;
-        }
-
-        void Undense(in ArchetypeChunk chunk, ref DenseRows dense, BufferAccessor<Playback> playbacks, int row, byte* horizons, ushort* clocks, BufferAccessor<PlaybackDue> dues)
-        {
-            var buffer = playbacks[row];
-            TimelineTicks.Decode((global::Tl.Playback*)buffer.GetUnsafePtr(), buffer.Length, DenseFrom);
-            SetDense(in chunk, ref dense, row, false);
-            if (horizons != null) horizons[row] = 0;
-            if (clocks != null) DueNow(dues[row], buffer.Length);
-        }
-
-        void UndenseRows(in ArchetypeChunk chunk, ref DenseRows dense, BufferAccessor<Playback> playbacks, ulong rows0, ulong rows1, byte* horizons, ushort* clocks, BufferAccessor<PlaybackDue> dues)
-        {
-            for (; rows0 != 0; rows0 &= rows0 - 1) Undense(in chunk, ref dense, playbacks, (int)global::Unity.Mathematics.math.tzcnt(rows0), horizons, clocks, dues);
-            for (; rows1 != 0; rows1 &= rows1 - 1) Undense(in chunk, ref dense, playbacks, 64 + (int)global::Unity.Mathematics.math.tzcnt(rows1), horizons, clocks, dues);
-        }
-
-        [global::Unity.Burst.CompilerServices.SkipLocalsInit]
-        void StepDense(in ArchetypeChunk chunk, in global::Tl.KindTables tables, ref KindCursor ctx, ref UnityPulseSink sink, ref DenseRows dense, BufferAccessor<Playback> playbacks, v128 playing, TimelinePlaying* copiesRo, bool anyClosed, byte* horizons, ushort* clocks, BufferAccessor<PlaybackDue> dues, ulong reverse)
-        {
-            var spills = chunk.GetBufferAccessor(ref OriginHandle);
-            var nexts = (PlaybackDense*)chunk.GetRequiredComponentDataPtrRW(ref DenseHandle);
-            var inlineOrigins = (ushort*)chunk.GetRequiredComponentDataPtrRW(ref DenseOriginsHandle);
-            var inlineDues = (ushort*)chunk.GetRequiredComponentDataPtrRW(ref DenseDuesHandle);
-            var to = (ushort)(DenseFrom + StepDir);
             var count = chunk.Count;
-            var hits = stackalloc byte[KindDense.MaxSlots];
-            var records = stackalloc ulong[KindDense.MaxSlots];
-            var heads = stackalloc ushort*[64];
-            var tails = stackalloc ushort*[64];
-            var batchSlot = stackalloc byte[64 * PlaybackDense.Inline];
-            var batchRecord = stackalloc ulong[64 * PlaybackDense.Inline];
-            var batchEnd = stackalloc int[64];
-            var lanes = clocks == null && (uint)ThreadIndex < (uint)Index.ThreadCount;
-            ctx.EnsureReach();
-            var pulses = new DenseLanes
-            {
-                Base = Index.PulseLanes + ThreadIndex,
-                Stride = Index.ThreadCount,
-                Reach = ctx.Reach,
-                Entities = (Entity*)chunk.GetNativeArray(EntityHandle).GetUnsafeReadOnlyPtr(),
-                Values = Index.PulseValuesTable,
-            };
-            var plan = Index.Dense;
-            var leave = plan->Leave + (StepDir > 0 ? 0 : plan->Rows);
             var from = DenseFrom;
+            var to = (ushort)(from + StepDir);
+            var fast = Index.TickFastPulses != null ? *Index.TickFastPulses : 0ul;
+            var ready = DenseReady && Dense != null && Dense->Ready;
+            var settleAll = DenseForget || !ready || playbackChanged || (Dense->Lanes & ~fast) != 0;
+            var leave = ready ? Dense->Leave + (StepDir > 0 ? 0 : Dense->Rows) : null;
+            ulong pending0 = 0, pending1 = 0;
+            if (!settleAll)
+            {
+                ctx.EnsureReach();
+                for (var kinds = ctx.Reach & ~Dense->SpanKinds; kinds != 0; kinds &= kinds - 1)
+                {
+                    var active = chunk.GetEnableableBits(ref *KindHandleSet.Active(ctx.Handles, (int)global::Unity.Mathematics.math.tzcnt(kinds)));
+                    pending0 |= active.ULong0;
+                    pending1 |= active.ULong1;
+                }
+            }
             for (var kw = 0; kw < 2; kw++)
             {
                 if (kw == 1 && count <= 64) break;
-                var limit = kw == 0 ? (count >= 64 ? ~0ul : (1ul << count) - 1) : (count >= 128 ? ~0ul : (1ul << (count - 64)) - 1);
-                var playingWord = (kw == 0 ? playing.ULong0 : playing.ULong1) & limit;
-                var denseWord = kw == 0 ? dense.Bits0 : dense.Bits1;
-                var due = (playingWord & denseWord) == 0 ? 0ul : DueRows(nexts + (kw << 6), kw == 0 ? (count < 64 ? count : 64) : count - 64, to) & playingWord & denseWord;
-                var batched = 0;
-                var spilled = 0ul;
-                for (var gather = due; gather != 0; gather &= gather - 1)
-                {
-                    var bit = (int)global::Unity.Mathematics.math.tzcnt(gather);
-                    var at = (kw << 6) + bit;
-                    var n = nexts[at].Count;
-                    if (n <= PlaybackDense.Inline)
-                    {
-                        var o = inlineOrigins + at * PlaybackDense.Inline;
-                        var d = inlineDues + at * PlaybackDense.Inline;
-                        heads[bit] = o;
-                        tails[bit] = d;
-                        for (var i = 0; i < n; i++)
-                        {
-                            if (d[i] != to) continue;
-                            batchSlot[batched] = (byte)i;
-                            batchRecord[batched] = leave[(ushort)(o[i] + from)];
-                            batched++;
-                        }
-                    }
-                    else
-                    {
-                        spilled |= 1ul << bit;
-                        heads[bit] = (ushort*)spills[at].GetUnsafePtr();
-                        tails[bit] = heads[bit] + n;
-                    }
-                    batchEnd[bit] = batched;
-                }
-                var cursor = 0;
-                for (var kb = (playingWord & ~denseWord) | due; kb != 0; kb &= kb - 1)
+                var kb = kw == 0 ? playing.ULong0 : playing.ULong1;
+                var pendingWord = kw == 0 ? pending0 : pending1;
+                while (kb != 0)
                 {
                     var bit = (int)global::Unity.Mathematics.math.tzcnt(kb);
+                    kb &= kb - 1;
                     var row = (kw << 6) + bit;
+                    if (row >= count) break;
+                    if (copiesRo != null && copiesRo[row].Copies != 0) ctx.Sampled(row, 0);
                     sink.IsActive = !anyClosed || !ctx.IsClosed(row);
-                    if ((due >> bit & 1) != 0)
+                    var buffer = playbacks[row];
+                    var raw = (global::Tl.Playback*)buffer.GetUnsafePtr();
+                    var n = buffer.Length;
+                    var pending = (pendingWord >> bit & 1) != 0;
+                    if (DenseSlots.IsDense(raw, n))
                     {
-                        if ((spilled >> bit & 1) != 0)
-                        {
-                            if (DenseStep(in tables, in chunk, ref pulses, playbacks, heads[bit], tails[bit], nexts[row].Count, ref nexts[row].Next, row, to, hits, records, lanes && sink.Active)) continue;
-                        }
-                        else
-                        {
-                            var first = cursor;
-                            cursor = batchEnd[bit];
-                            if (DenseCommit(in tables, in chunk, ref pulses, playbacks, heads[bit], tails[bit], nexts[row].Count, batchSlot + first, batchRecord + first, cursor - first, ref nexts[row].Next, row, to, lanes && sink.Active)) continue;
-                        }
-                        Undense(in chunk, ref dense, playbacks, row, horizons, clocks, dues);
+                        if (!settleAll && !pending && StepDense(raw, n, leave, from, to)) continue;
+                        if (DenseSlots.IsDense(raw, n)) DenseSlots.Settle(Space, raw, n, from);
+                        if (horizons != null) horizons[row] = 0;
                     }
-                    else if (copiesRo != null && copiesRo[row].Copies != 0) ctx.Sampled(row, 0);
-                    bool live;
-                    var touched = true;
-                    if (clocks != null)
+                    else if (!settleAll && !pending && (copiesRo == null || copiesRo[row].Copies == 0) && Densify(raw, n, leave, from))
                     {
-                        if (horizons[row] != 0)
-                        {
-                            horizons[row]--;
-                            clocks[row] = (ushort)(clocks[row] + StepDir);
-                            live = true;
-                            touched = false;
-                        }
-                        else live = TickLazy(in tables, ref ctx, playbacks[row], dues[row], ref clocks[row], ref horizons[row], row, reverse, ref sink);
+                        if (StepDense(raw, n, leave, from, to)) continue;
+                        if (horizons != null) horizons[row] = 0;
                     }
-                    else if (horizons != null)
+                    if (horizons != null)
                     {
-                        var slots = playbacks[row];
                         var steps = horizons[row];
                         if (steps != 0)
                         {
                             horizons[row] = (byte)(steps - 1);
-                            global::Tl.GlideKernel.RunScalar((ulong*)slots.GetUnsafePtr(), slots.Length, reverse);
-                            live = true;
-                            touched = false;
+                            global::Tl.GlideKernel.RunScalar((ulong*)raw, n, reverse);
+                            continue;
                         }
+                        if (global::Tl.KindRules.TickEntity(in tables, raw, n, ref ctx, row, StepDir, ref sink))
+                            horizons[row] = global::Tl.Horizon.OfKindRun(raw, playbacks[row].Length, in tables, in Index.Calm, reverse, HorizonLimit);
                         else
-                        {
-                            live = global::Tl.KindRules.TickEntity(in tables, (global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, ref ctx, row, StepDir, ref sink);
-                            if (live)
-                            {
-                                var after = playbacks[row];
-                                horizons[row] = global::Tl.Horizon.OfKindRun((global::Tl.Playback*)after.GetUnsafePtr(), after.Length, in tables, in Index.Calm, reverse, HorizonLimit);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        var slots = playbacks[row];
-                        live = global::Tl.KindRules.TickEntity(in tables, (global::Tl.Playback*)slots.GetUnsafePtr(), slots.Length, ref ctx, row, StepDir, ref sink);
-                    }
-                    if (!live)
-                    {
-                        ctx.SetPlaying(ref PlayingHandle, row, false);
+                            ctx.SetPlaying(ref PlayingHandle, row, false);
                         continue;
                     }
-                    if (touched) TryDensify(in chunk, ref dense, playbacks[row], spills[row], inlineOrigins + row * PlaybackDense.Inline, inlineDues + row * PlaybackDense.Inline, ref nexts[row], row, to, clocks);
+                    if (!global::Tl.KindRules.TickEntity(in tables, raw, n, ref ctx, row, StepDir, ref sink))
+                        ctx.SetPlaying(ref PlayingHandle, row, false);
                 }
             }
         }
 
-        static ulong DueRows(PlaybackDense* nexts, int rows, ushort to)
+        bool Densify(global::Tl.Playback* raw, int n, uint* leave, ushort from)
         {
-            var due = 0ul;
-            var i = 0;
-            if (X86.Avx2.IsAvx2Supported)
-            {
-                var low = new v256(0x0000FFFFu);
-                var target = new v256((uint)to);
-                for (; i + 8 <= rows; i += 8)
-                {
-                    var next = X86.Avx2.mm256_and_si256(X86.Avx.mm256_loadu_si256(nexts + i), low);
-                    due |= (ulong)(uint)X86.Avx.mm256_movemask_ps(X86.Avx2.mm256_cmpeq_epi32(next, target)) << i;
-                }
-            }
-            for (; i < rows; i++) due |= (nexts[i].Next == to ? 1ul : 0ul) << i;
-            return due;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        bool DenseCommit(in global::Tl.KindTables tables, in ArchetypeChunk chunk, ref DenseLanes pulses, BufferAccessor<Playback> playbacks, ushort* origins, ushort* dues, int n, byte* slots, ulong* records, int held, ref ushort next, int row, ushort to, bool lanes)
-        {
-            var fast = lanes ? tables.FastPulseMask : 0ul;
-            var plan = Index.Dense;
-            var shifted = false;
-            for (var h = 0; h < held; h++)
-            {
-                var record = records[h];
-                if ((ushort)record == 0) return false;
-                if ((plan->LeaveKinds[(byte)(record >> 48)] & ~fast) != 0) return false;
-                shifted |= (ushort)(record >> 16) != 0;
-            }
-            for (var h = 0; h < held; h++)
-            {
-                var record = records[h];
-                var kinds = plan->LeaveKinds[(byte)(record >> 48)];
-                if (kinds != 0) pulses.Push(in chunk, kinds, row, (int)(ushort)(record >> 32));
-            }
-            var step = StepDir;
-            global::Tl.Playback* playback = shifted ? (global::Tl.Playback*)playbacks[row].GetUnsafePtr() : null;
-            for (var h = 0; h < held; h++)
-            {
-                var i = slots[h];
-                var record = records[h];
-                var shift = (ushort)(record >> 16);
-                if (shift != 0)
-                {
-                    origins[i] = (ushort)(origins[i] + shift);
-                    var s = playback + i;
-                    if (s->Timeline != 0) s->Tick = (s->Flags & global::Tl.PlaybackFlags.Reverse) != 0 ? (ushort)(s->Tick - shift) : (ushort)(s->Tick + shift);
-                }
-                dues[i] = (ushort)(to + step * (ushort)record);
-            }
-            var least = (int)ushort.MaxValue;
+            if (n == 0 || n > KindDense.MaxSlots) return false;
+            var space = Space;
             for (var i = 0; i < n; i++)
             {
-                var ahead = (ushort)((dues[i] - to) * step);
-                if (ahead < least) least = ahead;
-            }
-            next = (ushort)(to + step * least);
-            return true;
-        }
-
-        bool DenseStep(in global::Tl.KindTables tables, in ArchetypeChunk chunk, ref DenseLanes pulses, BufferAccessor<Playback> playbacks, ushort* origins, ushort* dues, int n, ref ushort next, int row, ushort to, byte* hits, ulong* records, bool lanes)
-        {
-            var step = StepDir;
-            var held = DueScan.Equal(dues, n, to, hits);
-            var plan = Index.Dense;
-            var leave = plan->Leave + (step > 0 ? 0 : plan->Rows);
-            var from = DenseFrom;
-            for (var h = 0; h < held; h++) records[h] = leave[(ushort)(origins[hits[h]] + from)];
-            var fast = lanes ? tables.FastPulseMask : 0ul;
-            for (var h = 0; h < held; h++)
-            {
-                var record = records[h];
-                if ((ushort)record == 0 || (plan->LeaveKinds[(byte)(record >> 48)] & ~fast) != 0) return false;
-            }
-            global::Tl.Playback* slots = null;
-            for (var h = 0; h < held; h++)
-            {
-                var i = hits[h];
-                var record = records[h];
-                var kinds = plan->LeaveKinds[(byte)(record >> 48)];
-                if (kinds != 0) pulses.Push(in chunk, kinds, row, (int)(ushort)(record >> 32));
-                var shift = (ushort)(record >> 16);
-                if (shift != 0)
-                {
-                    origins[i] = (ushort)(origins[i] + shift);
-                    if (slots == null) slots = (global::Tl.Playback*)playbacks[row].GetUnsafePtr();
-                    var s = slots + i;
-                    if (s->Timeline != 0) s->Tick = (s->Flags & global::Tl.PlaybackFlags.Reverse) != 0 ? (ushort)(s->Tick - shift) : (ushort)(s->Tick + shift);
-                }
-                dues[i] = (ushort)(to + step * (ushort)record);
-            }
-            var least = 1;
-            if (n <= 16)
-            {
-                least = ushort.MaxValue;
-                for (var i = 0; i < n; i++)
-                {
-                    var ahead = (ushort)((dues[i] - to) * step);
-                    if (ahead < least) least = ahead;
-                }
-            }
-            next = (ushort)(to + step * least);
-            return true;
-        }
-
-        void TryDensify(in ArchetypeChunk chunk, ref DenseRows dense, DynamicBuffer<Playback> buffer, DynamicBuffer<PlaybackOrigin> spill, ushort* inlineOrigins, ushort* inlineDues, ref PlaybackDense state, int row, ushort to, ushort* clocks)
-        {
-            var copies = (TimelinePlaying*)chunk.GetComponentDataPtrRO(ref PlayingHandle);
-            if (copies != null && copies[row].Copies != 0) return;
-            var n = buffer.Length;
-            if (n == 0 || n >= KindDense.MaxSlots) return;
-            var plan = Index.Dense;
-            var slots = (global::Tl.Playback*)buffer.GetUnsafePtr();
-            var live = false;
-            for (var i = 0; i < n; i++)
-            {
-                var s = slots + i;
-                if (s->Timeline == 0) continue;
-                if ((s->Flags & ~global::Tl.PlaybackFlags.Reverse) != 0 || s->Rate != 0 || plan->Eligible[s->Timeline - 1] == 0) return;
-                live = true;
-            }
-            if (!live) return;
-            if (clocks != null && clocks[row] != 0)
-            {
-                TimelineTicks.Decode(slots, n, clocks[row]);
-                clocks[row] = 0;
-            }
-            ushort* origins, dues;
-            if (n <= PlaybackDense.Inline)
-            {
-                origins = inlineOrigins;
-                dues = inlineDues;
-            }
-            else
-            {
-                spill.ResizeUninitialized(2 * n);
-                origins = (ushort*)spill.GetUnsafePtr();
-                dues = origins + n;
-            }
-            var step = StepDir;
-            var least = (int)ushort.MaxValue;
-            for (var i = 0; i < n; i++)
-            {
-                var s = slots + i;
-                if (s->Timeline == 0)
-                {
-                    origins[i] = (ushort)(0 - to);
-                    dues[i] = (ushort)(to + step);
-                    least = 1;
-                    continue;
-                }
+                var s = raw + i;
                 var t = s->Timeline - 1;
-                var reverse = s->Flags != 0;
-                var duration = (int)(Index.SpanMeta[t] & 0x3FFF_FFFFu);
-                origins[i] = (ushort)(plan->RowOf(t, duration, reverse, s->Tick) - to);
-                var gap = plan->GapOf(t, reverse ? -step : step, s->Tick);
-                dues[i] = (ushort)(to + step * gap);
-                if (gap < least) least = gap;
-                s->Tick = reverse ? (ushort)(s->Tick + to) : (ushort)(s->Tick - to);
+                if ((uint)t >= (uint)space->Timelines || (s->Flags & ~global::Tl.PlaybackFlags.Reverse) != 0 || (s->Rate | s->Phase) != 0) return false;
+                if (Dense->Eligible[t] == 0 || s->Tick >= space->Duration[t]) return false;
             }
-            state.Next = (ushort)(to + step * least);
-            state.Count = (byte)n;
-            SetDense(in chunk, ref dense, row, true);
+            if (raw->Channel != space->Channel[raw->Timeline - 1]) return false;
+            var least = 0xFFFFu;
+            for (var i = 0; i < n; i++)
+            {
+                var s = raw + i;
+                var row = space->RowOf(s->Timeline, s->Flags != 0, s->Tick);
+                var gap = leave[row] & 0xFFFFu;
+                if (gap < least) least = gap;
+                s->Tick = (ushort)(row - from);
+            }
+            raw->Phase = DenseSlots.Marker;
+            DenseSlots.SetDue(raw, (ushort)(from + StepDir * (int)least));
+            return true;
         }
-    }
 
-    public unsafe partial struct KindTickJob
-    {
+        bool StepDense(global::Tl.Playback* raw, int n, uint* leave, ushort from, ushort to)
+        {
+            if (DenseSlots.DueOf(raw) != to) return true;
+            for (var i = 0; i < n; i++)
+            {
+                var record = leave[(ushort)(raw[i].Tick + from)];
+                if (record == 1u)
+                {
+                    DenseSlots.Settle(Space, raw, n, from);
+                    return false;
+                }
+            }
+            var least = 0xFFFFu;
+            for (var i = 0; i < n; i++)
+            {
+                var origin = raw[i].Tick;
+                var record = leave[(ushort)(origin + from)];
+                var gap = record & 0xFFFFu;
+                if (gap == 1)
+                {
+                    origin = (ushort)(origin + (short)(record >> 16));
+                    raw[i].Tick = origin;
+                    gap = leave[(ushort)(origin + to)] & 0xFFFFu;
+                }
+                else gap--;
+                if (gap < least) least = gap;
+            }
+            DenseSlots.SetDue(raw, (ushort)(to + StepDir * (int)least));
+            return true;
+        }
+
         void Unclock(in ArchetypeChunk chunk, int count)
         {
             var clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle);

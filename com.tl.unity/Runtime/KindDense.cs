@@ -2,22 +2,123 @@ using System;
 using System.Runtime.CompilerServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Entities;
 
 namespace Tl.Unity
 {
+    public unsafe struct TimelineDense : IComponentData
+    {
+        public ushort Clock;
+        public sbyte Direction;
+        [NativeDisableUnsafePtrRestriction] public DenseSpace* Space;
+    }
+
+    public unsafe struct DenseSpace
+    {
+        public int* RowBase;
+        public ushort* Duration;
+        public byte* Channel;
+        public int Half;
+        public int Timelines;
+
+        public static DenseSpace* Of(KindDense* dense, global::Tl.LibraryTimeline* timelines, int count)
+        {
+            var space = (DenseSpace*)KindDense.Zeroed(UnsafeUtility.SizeOf<DenseSpace>());
+            var n = Math.Max(1, count);
+            space->RowBase = (int*)KindDense.Zeroed((long)n * 4);
+            space->Duration = (ushort*)KindDense.Zeroed((long)n * 2);
+            space->Channel = (byte*)KindDense.Zeroed(n);
+            space->Half = dense->Half;
+            space->Timelines = count;
+            for (var t = 0; t < count; t++)
+            {
+                space->RowBase[t] = dense->RowBase[t];
+                space->Duration[t] = (ushort)timelines[t].Duration;
+                space->Channel[t] = (byte)timelines[t].Channel;
+            }
+            return space;
+        }
+
+        public static void Release(DenseSpace* space)
+        {
+            if (space == null) return;
+            KindDense.Free(space->RowBase);
+            KindDense.Free(space->Duration);
+            KindDense.Free(space->Channel);
+            KindDense.Free(space);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ushort RowOf(int timeline, bool reverse, int tick)
+        {
+            var t = timeline - 1;
+            return (ushort)(RowBase[t] + (reverse ? Half + Duration[t] - 1 - tick : tick));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ushort TickAt(int timeline, bool reverse, ushort row)
+        {
+            var t = timeline - 1;
+            var j = row - RowBase[t] - (reverse ? Half : 0);
+            return (ushort)(reverse ? Duration[t] - 1 - j : j);
+        }
+    }
+
+    public static unsafe class DenseSlots
+    {
+        public const byte Marker = 0x80;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool IsDense(global::Tl.Playback* slots, int count) => count != 0 && (slots->Phase & Marker) != 0;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ushort DueOf(global::Tl.Playback* slots) => (ushort)(slots->Channel | slots->Rate << 8);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void SetDue(global::Tl.Playback* slots, ushort due)
+        {
+            slots->Channel = (byte)due;
+            slots->Rate = (byte)(due >> 8);
+        }
+
+        public static void Settle(DenseSpace* space, global::Tl.Playback* slots, int count, ushort clock)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                var s = slots + i;
+                s->Tick = space->TickAt(s->Timeline, s->Flags != 0, (ushort)(s->Tick + clock));
+            }
+            slots->Channel = space->Channel[slots->Timeline - 1];
+            slots->Rate = 0;
+            slots->Phase = 0;
+        }
+
+        public static void Read(DenseSpace* space, ushort clock, global::Tl.Playback* slots, int count, global::Tl.Playback* into)
+        {
+            UnsafeUtility.MemCpy(into, slots, (long)count * sizeof(global::Tl.Playback));
+            if (space != null && IsDense(into, count)) Settle(space, into, count, clock);
+        }
+    }
+
     public unsafe struct KindDense
     {
         public const int MaxSlots = 256;
+        public const uint Exact = 0;
 
         public int* RowBase;
         public int Half;
         public int Rows;
-        public ushort* Gap;
-        public ulong* Leave;
-        public ulong* LeaveKinds;
+        public uint* Leave;
         public byte* Eligible;
+        public int* KeyLanes;
+        public ulong SpanKinds;
+        public ulong LaneKinds;
+        public ulong Lanes;
+        public byte* Table;
+        public int Stride;
+        public int CellLane;
         public int TableEpoch;
-        public int EligibleEpoch;
+        public int BuiltEpoch;
         public bool Ready;
 
         public static KindDense* Create(global::Tl.LibraryTimeline* timelines, int timelineCount)
@@ -26,132 +127,130 @@ namespace Tl.Unity
             var count = Math.Max(1, timelineCount);
             dense->RowBase = (int*)Zeroed((long)count * 4);
             dense->Eligible = (byte*)Zeroed(count);
+            dense->KeyLanes = (int*)Zeroed(64 * 4);
+            for (var k = 0; k < 64; k++) dense->KeyLanes[k] = -1;
+            dense->CellLane = -1;
             dense->Half = timelineCount == 0 ? -1 : global::Tl.KindBuild.RowSpace(timelines, timelineCount, dense->RowBase);
             dense->Rows = dense->Half > 0 ? 1 + 2 * dense->Half : 0;
-            dense->EligibleEpoch = -1;
+            dense->BuiltEpoch = -1;
             return dense;
         }
 
         public bool Fits => Half > 0;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int RowOf(int timeline, int duration, bool reverse, int tick) => RowBase[timeline] + (reverse ? Half + duration - 1 - tick : tick);
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ushort GapOf(int timeline, int direction, int tick) => Gap[(direction > 0 ? 0 : Half) + RowBase[timeline] - 1 + tick];
+        public static void Register(KindDense* dense, ulong spanKinds, ulong laneKinds)
+        {
+            if (dense == null || dense->SpanKinds == spanKinds && dense->LaneKinds == laneKinds) return;
+            dense->SpanKinds = spanKinds;
+            dense->LaneKinds = laneKinds;
+            dense->TableEpoch++;
+        }
 
         public static void Refresh(ref KindIndex index)
         {
             var dense = index.Dense;
             if (dense == null) return;
-            dense->EligibleEpoch = dense->TableEpoch;
+            dense->BuiltEpoch = dense->TableEpoch;
             dense->Ready = false;
-            if (!dense->Fits) return;
-            var anyTable = false;
-            for (var k = 0; k < index.KindCount; k++) anyTable |= index.Values[k].Data != null;
-            if (!anyTable) return;
-            if (dense->Leave == null && !BuildLeave(in index, dense))
-            {
-                dense->Half = -1;
-                dense->Rows = 0;
-                return;
-            }
+            Free(dense->Leave);
+            dense->Leave = null;
+            if (!dense->Fits || dense->Table == null || dense->SpanKinds == 0) return;
+            var lanes = 0ul;
+            for (var k = 0; k < index.KindCount && k < 64; k++)
+                if ((dense->LaneKinds >> k & 1) != 0 && index.PulseValuesTable[k].Data != null)
+                    lanes |= 1ul << k;
+            dense->Lanes = lanes;
             for (var t = 0; t < index.TimelineCount; t++)
             {
                 var eligible = index.SpanMeta[t] != 0;
                 for (var p = index.PairStart[t]; eligible && p < index.PairStart[t + 1]; p++)
                 {
                     var feeder = index.Sec.Feeders + (index.Pairs[p] & 0xffff);
-                    if (feeder->Trigger == 0 && (index.Values[feeder->Kind].Data == null || index.HasForeign(feeder->Kind))) eligible = false;
+                    if (feeder->Trigger != 0) continue;
+                    var kind = feeder->Kind;
+                    if (kind >= 64 || (dense->SpanKinds >> kind & 1) == 0 || index.Values[kind].Data != dense->Table || index.HasForeign(kind)) eligible = false;
                 }
                 dense->Eligible[t] = eligible ? (byte)1 : (byte)0;
             }
+            BuildLeave(in index, dense, lanes);
             dense->Ready = true;
         }
 
-        static bool BuildLeave(in KindIndex index, KindDense* dense)
+        static void BuildLeave(in KindIndex index, KindDense* dense, ulong lanes)
         {
             var half = dense->Half;
             var rows = dense->Rows;
-            dense->Gap = (ushort*)Zeroed((long)Math.Max(1, 2 * half) * 2);
-            for (var t = 0; t < index.TimelineCount; t++)
-            {
-                var duration = (int)(index.SpanMeta[t] & 0x3FFF_FFFFu);
-                var pulseBase = index.PulseBase[t];
-                for (var d = 0; d < 2; d++)
-                {
-                    var direction = d == 0 ? 1 : -1;
-                    var gap = dense->Gap + d * half + dense->RowBase[t] - 1;
-                    for (var n = 0; n < duration; n++)
-                    {
-                        var tick = direction > 0 ? duration - 1 - n : n;
-                        var next = tick + direction;
-                        var stop = (uint)next >= (uint)duration || (pulseBase >= 0 && (index.PulseBits[pulseBase + next] & (1 << d)) != 0);
-                        gap[tick] = stop ? (ushort)1 : (ushort)(1 + gap[next]);
-                    }
-                }
-            }
-            dense->Leave = (ulong*)Zeroed((long)2 * rows * 8);
-            dense->LeaveKinds = (ulong*)Zeroed(256 * 8);
-            var distinct = 1;
+            dense->Leave = (uint*)Zeroed((long)2 * rows * 4);
             for (var w = 0; w < 2; w++)
             {
                 var step = w == 0 ? 1 : -1;
-                dense->Leave[w * rows] = 1ul | (ulong)(ushort)(-step) << 16;
+                var leave = dense->Leave + w * rows;
                 for (var t = 0; t < index.TimelineCount; t++)
                 {
                     var duration = (int)(index.SpanMeta[t] & 0x3FFF_FFFFu);
-                    var pulseBase = index.PulseBase[t];
                     var loops = (index.SpanMeta[t] & 0x8000_0000u) != 0;
-                    for (var j = 0; j < duration; j++)
-                        for (var reverse = 0; reverse < 2; reverse++)
+                    var pulseBase = index.PulseBase[t];
+                    for (var reverse = 0; reverse < 2; reverse++)
+                    {
+                        var start = dense->RowBase[t] + (reverse != 0 ? half : 0);
+                        var dir = reverse != 0 ? -step : step;
+                        for (var n = 0; n < duration; n++)
                         {
+                            var j = step > 0 ? duration - 1 - n : n;
+                            var row = start + j;
                             var tick = reverse != 0 ? duration - 1 - j : j;
-                            var row = dense->RowOf(t, duration, reverse != 0, tick);
-                            var direction = reverse != 0 ? -step : step;
-                            var next = tick + direction;
+                            var next = tick + dir;
+                            var exact = false;
+                            var shift = 0;
+                            var arrives = true;
                             if ((uint)next >= (uint)duration)
                             {
-                                if (!loops) continue;
-                                next = next < 0 ? duration - 1 : 0;
+                                if (loops)
+                                {
+                                    next = next < 0 ? duration - 1 : 0;
+                                    shift = start + (reverse != 0 ? duration - 1 - next : next) - row - step;
+                                    exact = Stops(in index, pulseBase, next, dir, lanes);
+                                }
+                                else exact = true;
                             }
-                            var d = direction > 0 ? 0 : 1;
-                            var pulse = pulseBase >= 0 && (index.PulseBits[pulseBase + next] & (1 << d)) != 0;
-                            var cell = pulse ? ((pulseBase + next) << 1) + d : 0;
-                            var kinds = 0;
-                            if (pulse)
+                            else
                             {
-                                var mask = index.PulseMasks[cell];
-                                while (kinds < distinct && dense->LeaveKinds[kinds] != mask) kinds++;
-                                if (kinds == 256 || cell > 0xFFFF) return false;
-                                if (kinds == distinct) dense->LeaveKinds[distinct++] = mask;
+                                exact = Stops(in index, pulseBase, next, dir, lanes);
+                                arrives = exact;
                             }
-                            var shift = (ushort)(dense->RowOf(t, duration, reverse != 0, next) - row - step);
-                            dense->Leave[w * rows + row] = dense->GapOf(t, direction, next) | (ulong)shift << 16 | (ulong)(uint)cell << 32 | (ulong)(uint)kinds << 48;
+                            var gap = arrives ? 1u : 1u + (leave[row + step] & 0xFFFFu);
+                            leave[row] = gap | (exact ? 0u : (uint)(ushort)shift << 16);
                         }
+                    }
                 }
             }
-            return true;
+        }
+
+        static bool Stops(in KindIndex index, int pulseBase, int tick, int dir, ulong lanes)
+        {
+            if (pulseBase < 0) return false;
+            var d = dir > 0 ? 0 : 1;
+            if ((index.PulseBits[pulseBase + tick] & (1 << d)) == 0) return false;
+            return (index.PulseMasks[((pulseBase + tick) << 1) + d] & ~lanes) != 0;
         }
 
         public void Dispose()
         {
             Free(RowBase);
-            Free(Gap);
             Free(Leave);
-            Free(LeaveKinds);
             Free(Eligible);
+            Free(KeyLanes);
             this = default;
         }
 
-        static void* Zeroed(long bytes)
+        internal static void* Zeroed(long bytes)
         {
             var p = UnsafeUtility.Malloc(Math.Max(1L, bytes), 16, Allocator.Persistent);
             UnsafeUtility.MemClear(p, Math.Max(1L, bytes));
             return p;
         }
 
-        static void Free(void* p)
+        internal static void Free(void* p)
         {
             if (p != null) UnsafeUtility.Free(p, Allocator.Persistent);
         }
@@ -169,6 +268,10 @@ namespace Tl.Unity
         internal global::Tl.KindScore Score;
         internal global::Tl.LibraryTimeline* Timelines;
         internal global::Tl.KindValues* Views;
+        internal int* RowBase;
+        internal int* PulseBase;
+        internal byte* PulseBits;
+        internal byte* Data;
         public ulong Kinds;
         public int Stride;
         internal int Align;
@@ -176,11 +279,14 @@ namespace Tl.Unity
         public int Rows;
         internal int Half;
         internal bool Filling;
+        internal int CellLane;
+        internal fixed int Keys[64];
 
-        public static KindDenseBuild Of<TFill>(in global::Tl.KindScore score, global::Tl.LibraryTimeline* timelines, global::Tl.KindValues* views, int* row, ref TFill fill) where TFill : struct, IKindDenseFill
+        public static KindDenseBuild Of<TFill>(in global::Tl.KindScore score, global::Tl.LibraryTimeline* timelines, global::Tl.KindValues* views, int* row, int* pulseBase, byte* pulseBits, ref TFill fill) where TFill : struct, IKindDenseFill
         {
             var half = global::Tl.KindBuild.RowSpace(timelines, score.TimelineCount, row);
-            var b = new KindDenseBuild { Score = score, Timelines = timelines, Views = views, Stride = 4, Align = 4, Half = half };
+            var b = new KindDenseBuild { Score = score, Timelines = timelines, Views = views, RowBase = row, PulseBase = pulseBase, PulseBits = pulseBits, Stride = 4, Align = 4, Half = half, CellLane = -1 };
+            for (var k = 0; k < 64; k++) b.Keys[k] = -1;
             fill.Add(ref b);
             b.Stride = (b.Stride + b.Align - 1) / b.Align * b.Align;
             b.Rows = 1 + 2 * half;
@@ -221,8 +327,79 @@ namespace Tl.Unity
             Kinds |= 1ul << kind;
         }
 
+        public void Key(int kind, int priorityOffset, int priorityBytes, bool signed)
+        {
+            if ((uint)kind >= 64) return;
+            if (!Filling)
+            {
+                if ((Kinds >> kind & 1) == 0 || Keys[kind] >= 0) return;
+                Stride = (Stride + 3) / 4 * 4;
+                Keys[kind] = Stride;
+                Stride += 4;
+                return;
+            }
+            if (Keys[kind] < 0) return;
+            var v = Views + kind;
+            var bias = signed ? 1 << (8 * priorityBytes - 1) : 0;
+            for (var h = 0; h < 2; h++)
+            {
+                var halfAt = Data + (long)h * Rows * Stride;
+                var present = 1u << (v->Shift + 1 + h);
+                for (var r = 0; r < Rows; r++)
+                {
+                    var head = *(uint*)(Data + (long)r * Stride);
+                    var at = halfAt + (long)r * Stride;
+                    var p = at + v->Front + priorityOffset;
+                    var priority = priorityBytes == 1 ? (signed ? (int)*(sbyte*)p : *p) : (signed ? (int)*(short*)p : *(ushort*)p);
+                    *(int*)(at + Keys[kind]) = (head & present) != 0 ? (priority + bias) << 8 : -1;
+                }
+            }
+        }
+
+        public void Cells()
+        {
+            if (!Filling)
+            {
+                if (CellLane >= 0) return;
+                Stride = (Stride + 3) / 4 * 4;
+                CellLane = Stride;
+                Stride += 4;
+                return;
+            }
+            if (CellLane < 0 || PulseBase == null) return;
+            for (var t = 0; t < Score.TimelineCount; t++)
+            {
+                var pb = PulseBase[t];
+                if (pb < 0) continue;
+                var duration = (int)Timelines[t].Duration;
+                for (var tick = 0; tick < duration; tick++)
+                {
+                    var bits = PulseBits[pb + tick];
+                    if (bits == 0) continue;
+                    for (var h = 0; h < 2; h++)
+                    {
+                        var halfAt = Data + (long)h * Rows * Stride;
+                        var forward = RowBase[t] + tick;
+                        var reversed = RowBase[t] + Half + duration - 1 - tick;
+                        var dForward = h;
+                        var dReversed = 1 - h;
+                        if ((bits & (1 << dForward)) != 0) *(uint*)(halfAt + (long)forward * Stride + CellLane) = (uint)(((pb + tick) << 1) + dForward + 1);
+                        if ((bits & (1 << dReversed)) != 0) *(uint*)(halfAt + (long)reversed * Stride + CellLane) = (uint)(((pb + tick) << 1) + dReversed + 1);
+                    }
+                }
+            }
+        }
+
+        public void Wide(int bytes)
+        {
+            if (!Filling) Align = Math.Max(Align, Math.Min(64, bytes));
+        }
+
+        internal int KeyOf(int kind) => Keys[kind];
+
         public void Fill<TFill>(byte* data, ref TFill fill) where TFill : struct, IKindDenseFill
         {
+            Data = data;
             for (var k = 0; k < 64; k++)
                 if ((Kinds >> k & 1) != 0) Views[k].Data = data;
             Filling = true;
@@ -235,5 +412,31 @@ namespace Tl.Unity
     public interface IKindDenseFill
     {
         void Add(ref KindDenseBuild build);
+    }
+
+    public struct FusedMixed
+    {
+        public ArchetypeChunk Chunk;
+        public global::Unity.Burst.Intrinsics.v128 Dense;
+
+        public static unsafe FusedMixed* Allocate(int chunks, out int* count)
+        {
+            count = (int*)UnsafeUtility.Malloc(sizeof(int), 16, Allocator.TempJob);
+            *count = 0;
+            return (FusedMixed*)UnsafeUtility.Malloc((long)Math.Max(1, chunks) * UnsafeUtility.SizeOf<FusedMixed>(), 16, Allocator.TempJob);
+        }
+    }
+
+    [global::Unity.Burst.BurstCompile]
+    public unsafe struct FusedFreeJob : global::Unity.Jobs.IJob
+    {
+        [NativeDisableUnsafePtrRestriction] public FusedMixed* Items;
+        [NativeDisableUnsafePtrRestriction] public int* Count;
+
+        public void Execute()
+        {
+            UnsafeUtility.Free(Items, Allocator.TempJob);
+            UnsafeUtility.Free(Count, Allocator.TempJob);
+        }
     }
 }

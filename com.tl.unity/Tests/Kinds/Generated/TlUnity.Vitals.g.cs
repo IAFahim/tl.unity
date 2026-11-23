@@ -15,8 +15,7 @@ public bool Forward;
 [ReadOnly] public BufferTypeHandle<global::Tl.Unity.Playback> PlaybackHandle;
 [ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelineClock> ClockHandle;
 [ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelinePlaying> PlayingHandle;
-[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.PlaybackDense> DenseHandle;
-public ushort DenseClock;
+public global::Unity.Burst.Intrinsics.v128 Skip;
 public ComponentTypeHandle<Vitals_HealthData> HealthHandle;
 public BufferTypeHandle<global::KindGame.DamageEntry> DamageEntryHandle;
 public ComponentTypeHandle<global::KindGame.DamageActive> DamageActiveHandle;
@@ -31,8 +30,8 @@ var __e0 = default(global::Unity.Burst.Intrinsics.v128);
 var __kid0 = KindSlot_0 != 0 ? KindSlot_0 - 2 : Index.KindOf(804387256);
 if (__kid0 >= 0 && Index.NeedsBufferScan(__kid0) && chunk.Has(ref DamageEntryHandle))
 {
-__a0 = chunk.GetEnableableBits(ref DamageActiveHandle);
-__e0 = chunk.GetEnableableBits(ref DamageEnabledHandle);
+__a0 = __Keep(chunk.GetEnableableBits(ref DamageActiveHandle));
+__e0 = __Keep(chunk.GetEnableableBits(ref DamageEnabledHandle));
 var __m0 = __count >= 64 ? ~0ul : (1ul << __count) - 1;
 var __m1 = __count <= 64 ? 0ul : (__count >= 128 ? ~0ul : (1ul << (__count - 64)) - 1);
 if (((__a0.ULong0 & ~__e0.ULong0 & __m0) | (__a0.ULong1 & ~__e0.ULong1 & __m1)) != 0) global::System.Threading.Interlocked.Increment(ref Index.HeldSeen[__kid0]);
@@ -48,14 +47,13 @@ void Kind_0(in ArchetypeChunk chunk, global::KindGame.Health* __c0)
 var __pbReady = false;
 var __playbacks = default(BufferAccessor<global::Tl.Unity.Playback>);
 ushort* __clocks = null;
-var __dn = chunk.GetEnableableBits(ref DenseHandle);
 if (!chunk.Has(ref DamageEntryHandle)) return;
 var __kid = KindSlot_0 != 0 ? KindSlot_0 - 2 : Index.KindOf(804387256);
 if (__kid < 0) return;
 var __copies = (global::Tl.Unity.TimelinePlaying*)chunk.GetComponentDataPtrRO(ref PlayingHandle);
 var __acc = chunk.GetBufferAccessor(ref DamageEntryHandle);
-var __ema = chunk.GetEnableableBits(ref DamageActiveHandle);
-var __eme = chunk.GetEnableableBits(ref DamageEnabledHandle);
+var __ema = __Keep(chunk.GetEnableableBits(ref DamageActiveHandle));
+var __eme = __Keep(chunk.GetEnableableBits(ref DamageEnabledHandle));
 var __stride = sizeof(global::KindGame.DamageEntry);
 var __count = chunk.Count;
 var __active = chunk.GetEnabledMask(ref DamageActiveHandle);
@@ -77,7 +75,7 @@ var __sampled = __smp != 0;
 if (__sampled)
 {
 if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle); __pbReady = true; }
-var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; if (__cnt + __smp > __pbuf.Capacity) __smp = 0; __sampled = __smp != 0; __clock = global::Tl.Unity.TimelineTicks.ClockOf(__dn, DenseClock, __clocks, __row); __rowInit = true;
+var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; if (__cnt + __smp > __pbuf.Capacity) __smp = 0; __sampled = __smp != 0; __clock = (__clocks == null ? (ushort)0 : __clocks[__row]); __rowInit = true;
 }
 var __sk = __sampled ? global::Tl.KindRules.Depth(__run + __cnt, __smp) : 1;
 for (var __sj = 0; __sj < __sk; __sj++)
@@ -99,7 +97,7 @@ __en->Flags &= ~global::Tl.KindEntryFlags.Ready;
 }
 else
 {
-if (!__rowInit) { if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle); __pbReady = true; } var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; __clock = global::Tl.Unity.TimelineTicks.ClockOf(__dn, DenseClock, __clocks, __row); __rowInit = true; }
+if (!__rowInit) { if (!__pbReady) { __playbacks = chunk.GetBufferAccessor(ref PlaybackHandle); __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle); __pbReady = true; } var __pbuf = __playbacks[__row]; __run = (global::Tl.Playback*)__pbuf.GetUnsafeReadOnlyPtr(); __cnt = __pbuf.Length; __clock = (__clocks == null ? (ushort)0 : __clocks[__row]); __rowInit = true; }
 var __pb = __run + __en->Slot;
 var __tl = Index.Timelines + (__en->Timeline - 1);
 ushort __tick = __en->Slot < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;
@@ -174,6 +172,8 @@ return true;
 }
 public void Combine(ref int total, in int next) { }
 }
+[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+global::Unity.Burst.Intrinsics.v128 __Keep(global::Unity.Burst.Intrinsics.v128 __bits) => new global::Unity.Burst.Intrinsics.v128(__bits.ULong0 & ~Skip.ULong0, __bits.ULong1 & ~Skip.ULong1);
 }
 [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
 public unsafe struct VitalsPulseJob_0 : IJobParallelFor
@@ -398,17 +398,27 @@ Index.HeldSeen[Kind] = 0;
 Index.SlowCount[Kind] = 0;
 }
 }
+[BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
+public unsafe struct VitalsMixedJob : global::Unity.Jobs.IJobParallelForDefer
+{
+[global::Unity.Collections.LowLevel.Unsafe.NativeDisableContainerSafetyRestriction] public VitalsChunkJob Job;
+[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public global::Tl.Unity.FusedMixed* Items;
+public void Execute(int index)
+{
+var job = Job;
+job.Skip = Items[index].Dense;
+job.Execute(Items[index].Chunk, index, false, default);
+}
+}
 public static partial class TimelineJobs
 {
 public struct Vitals
 {
 EntityQuery _query;
-EntityQuery _dense;
 EntityStorageInfoLookup _Storage;
 BufferTypeHandle<global::Tl.Unity.Playback> _PlaybackHandle;
 ComponentTypeHandle<global::Tl.Unity.TimelineClock> _ClockHandle;
 ComponentTypeHandle<global::Tl.Unity.TimelinePlaying> _PlayingHandle;
-ComponentTypeHandle<global::Tl.Unity.PlaybackDense> _DenseHandle;
 ComponentTypeHandle<Vitals_HealthData> _HealthHandle;
 BufferTypeHandle<global::KindGame.DamageEntry> _DamageEntryHandle;
 ComponentTypeHandle<global::KindGame.DamageActive> _DamageActiveHandle;
@@ -427,20 +437,22 @@ builder.Dispose();
 jobs._PlaybackHandle = state.GetBufferTypeHandle<global::Tl.Unity.Playback>(true);
 jobs._ClockHandle = state.GetComponentTypeHandle<global::Tl.Unity.TimelineClock>(true);
 jobs._PlayingHandle = state.GetComponentTypeHandle<global::Tl.Unity.TimelinePlaying>(true);
-jobs._DenseHandle = state.GetComponentTypeHandle<global::Tl.Unity.PlaybackDense>(true);
 jobs._HealthHandle = state.GetComponentTypeHandle<Vitals_HealthData>(false);
 jobs._DamageEntryHandle = state.GetBufferTypeHandle<global::KindGame.DamageEntry>(false);
 jobs._DamageActiveHandle = state.GetComponentTypeHandle<global::KindGame.DamageActive>(false);
 jobs._DamageEnabledHandle = state.GetComponentTypeHandle<global::KindGame.DamageEnabled>(true);
-jobs._dense = global::Tl.Unity.TimelineTicks.DenseQuery(ref state);
 return jobs;
 }
 public JobHandle Schedule(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward, JobHandle dependsOn)
 {
+var job = Prepare(ref state, view, index, forward, dependsOn);
+return Pulses(ref state, index, job.ScheduleParallel(_query, dependsOn));
+}
+public VitalsChunkJob Prepare(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward, JobHandle dependsOn)
+{
 _PlaybackHandle.Update(ref state);
 _ClockHandle.Update(ref state);
 _PlayingHandle.Update(ref state);
-_DenseHandle.Update(ref state);
 _HealthHandle.Update(ref state);
 _DamageEntryHandle.Update(ref state);
 _DamageActiveHandle.Update(ref state);
@@ -448,18 +460,21 @@ _DamageEnabledHandle.Update(ref state);
 _Storage.Update(ref state);
 var __id0 = index.KindOf(804387256);
 if (index.NeedsPulseValues(__id0)) { dependsOn.Complete(); var __kp0 = default(VitalsChunkJob.KindPulses_0); index.PulseValues<int, VitalsChunkJob.KindPulses_0>(__id0, ref __kp0); }
-var job = new VitalsChunkJob { View = view, Index = index, Forward = forward, DenseClock = global::Tl.Unity.TimelineTicks.DenseClock(_dense)
+var job = new VitalsChunkJob { View = view, Index = index, Forward = forward
 , KindSlot_0 = __id0 + 2
 , PlaybackHandle = _PlaybackHandle
 , ClockHandle = _ClockHandle
 , PlayingHandle = _PlayingHandle
-, DenseHandle = _DenseHandle
 , HealthHandle = _HealthHandle
 , DamageEntryHandle = _DamageEntryHandle
 , DamageActiveHandle = _DamageActiveHandle
 , DamageEnabledHandle = _DamageEnabledHandle
  };
-var __dep = job.ScheduleParallel(_query, dependsOn);
+return job;
+}
+public JobHandle Pulses(ref SystemState state, global::Tl.Unity.KindIndex index, JobHandle __dep)
+{
+var __id0 = index.KindOf(804387256);
 var __orderVer = state.EntityManager.GetComponentOrderVersion<global::Tl.Unity.Playback>();
 __dep = new VitalsPulseJob_0 { Index = index, Kind = __id0, OrderVersion = __orderVer, EnabledHandle = _DamageEnabledHandle, HealthHandle = _HealthHandle }.Schedule(index.ThreadCount, 1, __dep);
 __dep = new VitalsFinishJob_0 { Index = index, Kind = __id0, OrderVersion = __orderVer, Storage = _Storage, EntryHandle = _DamageEntryHandle, ActiveHandle = _DamageActiveHandle, EnabledHandle = _DamageEnabledHandle, HealthHandle = _HealthHandle }.Schedule(__dep);

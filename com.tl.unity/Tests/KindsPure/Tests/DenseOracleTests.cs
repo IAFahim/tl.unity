@@ -41,8 +41,8 @@ namespace KindPure
             var b = plain.Entities;
             a.CompleteAllTrackedJobs();
             b.CompleteAllTrackedJobs();
-            var aClock = TimelineTicks.DenseClock(a);
-            var bClock = TimelineTicks.DenseClock(b);
+            var px = stackalloc global::Tl.Playback[KindSlots.MaxSlots];
+            var py = stackalloc global::Tl.Playback[KindSlots.MaxSlots];
             for (var r = 0; r < dense.Rows.Length; r++)
             {
                 var x = dense.Rows[r];
@@ -63,19 +63,15 @@ namespace KindPure
                 if (a.GetBuffer<LiftEntry>(x, true).Length != b.GetBuffer<LiftEntry>(y, true).Length) return at + "Lift entries differ";
                 if (a.GetBuffer<StatChangeEntry>(x, true).Length != b.GetBuffer<StatChangeEntry>(y, true).Length) return at + "StatChange entries differ";
                 if (a.GetBuffer<DamageEntry>(x, true).Length != b.GetBuffer<DamageEntry>(y, true).Length) return at + "Damage entries differ";
-                var ax = TimelineTicks.ClockOf(a, x, aClock);
-                var by = TimelineTicks.ClockOf(b, y, bClock);
-                var sx = a.GetBuffer<Playback>(x, true);
-                var sy = b.GetBuffer<Playback>(y, true);
-                if (sx.Length != sy.Length) return at + "dense has " + sx.Length + " slots, explicit " + sy.Length;
-                for (var i = 0; i < sx.Length; i++)
+                var nx = TimelineTicks.Read(a, x, px, KindSlots.MaxSlots);
+                var ny = TimelineTicks.Read(b, y, py, KindSlots.MaxSlots);
+                if (nx != ny) return at + "dense has " + nx + " slots, explicit " + ny;
+                for (var i = 0; i < nx; i++)
                 {
-                    var p = sx[i];
-                    var q = sy[i];
-                    var tp = TimelineTicks.Real(in p, ax);
-                    var tq = TimelineTicks.Real(in q, by);
-                    if (p.Timeline != q.Timeline || tp != tq || p.Channel != q.Channel || p.Flags != q.Flags || p.Rate != q.Rate || p.Phase != q.Phase)
-                        return at + "slot " + i + " dense " + Slot(in p, tp) + ", explicit " + Slot(in q, tq);
+                    var p = *(Playback*)(px + i);
+                    var q = *(Playback*)(py + i);
+                    if (p.Timeline != q.Timeline || p.Tick != q.Tick || p.Channel != q.Channel || p.Flags != q.Flags || p.Rate != q.Rate || p.Phase != q.Phase)
+                        return at + "slot " + i + " dense " + Slot(in p, p.Tick) + ", explicit " + Slot(in q, q.Tick);
                 }
             }
             return "";
@@ -110,7 +106,7 @@ namespace KindPure
                 digest.Lane(dense.Hash());
                 denseRowSteps += dense.DenseRows();
             }
-            Assert.AreEqual(0, plain.DenseRows(), "the explicit world has no dense components and must never run dense");
+            Assert.AreEqual(0, plain.DenseRows(), "the unfused world must never run dense");
             UnityEngine.Debug.Log("TlDenseOracle: " + control + " " + rows + " denseRowSteps=" + denseRowSteps + " of " + PureControls.Rows * steps);
             Assert.Greater(denseRowSteps * (control == PureControl.Rates ? 100 : 10), PureControls.Rows * steps, control + " with " + rows + " rows: only " + denseRowSteps + " of " + PureControls.Rows * steps + " row-steps ran dense");
             Assert.AreEqual(PrecombineControlTests.DotNetDigest(control).ToString("X16"), digest.Value.ToString("X16"), control + ": the dense world's per-step state hashes differ from the .NET host's");
@@ -193,7 +189,7 @@ namespace KindPure
                 wide += dense.DenseRowsWiderThan(16);
             }
             UnityEngine.Debug.Log("TlDenseOracle: random " + rows + " slots=" + slots + " denseRowSteps=" + denseRowSteps + " of " + Rows * Steps + " rewinds=" + rewinds + " controls=" + controls + " skippedVitals=" + skipped + " spilledRowSteps=" + spilled + " denseRowStepsOver16Slots=" + wide);
-            Assert.AreEqual(0, plain.DenseRows(), "the explicit world has no dense components and must never run dense");
+            Assert.AreEqual(0, plain.DenseRows(), "the unfused world must never run dense");
             Assert.Greater(denseRowSteps * 10, Rows * Steps, "only " + denseRowSteps + " of " + Rows * Steps + " row-steps ran dense");
             Assert.Greater(rewinds, 4, "the script rewound the world too rarely");
             Assert.Greater(controls, Rows * 4, "the script sent too few controls");

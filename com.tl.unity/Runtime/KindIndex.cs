@@ -497,7 +497,7 @@ namespace Tl.Unity
                 ulong kinds;
                 if (Dense != null && Dense->Fits)
                 {
-                    var b = KindDenseBuild.Of(in Score, Timelines, views, row, ref fill);
+                    var b = KindDenseBuild.Of(in Score, Timelines, views, row, PulseBase, PulseBits, ref fill);
                     kinds = b.Kinds;
                     if (kinds != 0)
                     {
@@ -506,6 +506,13 @@ namespace Tl.Unity
                             throw new InvalidOperationException("Tl: a precombined kind table would exceed 2 GB.");
                         data = ZeroedBytes(Math.Max(1L, bytes), 64);
                         b.Fill(data, ref fill);
+                        if (b.CellLane >= 0)
+                        {
+                            Dense->Table = data;
+                            Dense->Stride = b.Stride;
+                            Dense->CellLane = b.CellLane;
+                            for (var k = 0; k < 64; k++) Dense->KeyLanes[k] = b.KeyOf(k);
+                        }
                     }
                 }
                 else

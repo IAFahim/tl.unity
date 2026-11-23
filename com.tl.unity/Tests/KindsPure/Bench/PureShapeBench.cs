@@ -189,7 +189,6 @@ namespace KindPure
                 var row = game.Rows[(long)i * rows / sample];
                 heap += Spilled(entities.GetBuffer<Tl.Unity.Playback>(row, true).Capacity, 4, 8);
                 heap += Spilled(entities.GetBuffer<Tl.Unity.TimelineRequest>(row, true).Capacity, 4, sizeof(Tl.Unity.TimelineRequest));
-                if (entities.HasBuffer<Tl.Unity.PlaybackOrigin>(row)) heap += Spilled(entities.GetBuffer<Tl.Unity.PlaybackOrigin>(row, true).Capacity, 0, 2);
                 heap += Spilled(entities.GetBuffer<LocomotionEntry>(row, true).Capacity, LocomotionKind.InlineCapacity, sizeof(LocomotionEntry));
                 heap += Spilled(entities.GetBuffer<LiftEntry>(row, true).Capacity, LiftKind.InlineCapacity, sizeof(LiftEntry));
                 heap += Spilled(entities.GetBuffer<StatChangeEntry>(row, true).Capacity, StatChangeKind.InlineCapacity, sizeof(StatChangeEntry));

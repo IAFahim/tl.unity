@@ -26,60 +26,8 @@ namespace Tl.Unity
         public ushort Tick;
     }
 
-    [global::System.Runtime.InteropServices.StructLayout(global::System.Runtime.InteropServices.LayoutKind.Sequential, Size = 4)]
-    public struct PlaybackDense : IComponentData, IEnableableComponent
-    {
-        public const int Inline = 4;
-
-        public ushort Next;
-        public byte Count;
-
-        public static ComponentType[] Types => new ComponentType[] { typeof(PlaybackDense), typeof(DenseOrigins), typeof(DenseDues), typeof(PlaybackOrigin) };
-    }
-
-    public unsafe struct DenseOrigins : IComponentData
-    {
-        public fixed ushort Value[PlaybackDense.Inline];
-    }
-
-    public unsafe struct DenseDues : IComponentData
-    {
-        public fixed ushort Value[PlaybackDense.Inline];
-    }
-
-    [InternalBufferCapacity(0)]
-    public struct PlaybackOrigin : IBufferElementData
-    {
-        public ushort Value;
-    }
-
-    public struct TimelineDense : IComponentData
-    {
-        public ushort Clock;
-        public sbyte Direction;
-    }
-
     static unsafe class DueScan
     {
-        public static int Equal(ushort* dues, int count, ushort at, byte* hits)
-        {
-            var held = 0;
-            var i = 0;
-            if (global::Unity.Burst.Intrinsics.X86.Avx2.IsAvx2Supported)
-            {
-                var target = new global::Unity.Burst.Intrinsics.v256(at);
-                for (; i + 16 <= count; i += 16)
-                {
-                    var equal = global::Unity.Burst.Intrinsics.X86.Avx2.mm256_cmpeq_epi16(global::Unity.Burst.Intrinsics.X86.Avx.mm256_loadu_si256(dues + i), target);
-                    for (var bits = (uint)global::Unity.Burst.Intrinsics.X86.Avx2.mm256_movemask_epi8(equal) & 0x55555555u; bits != 0; bits &= bits - 1)
-                        hits[held++] = (byte)(i + (global::Unity.Mathematics.math.tzcnt(bits) >> 1));
-                }
-            }
-            for (; i < count; i++)
-                if (dues[i] == at) hits[held++] = (byte)i;
-            return held;
-        }
-
         public static int Collect(ushort* dues, int count, ushort now, byte* hits, ref int near, ref bool live)
         {
             var held = 0;
@@ -190,29 +138,6 @@ namespace Tl.Unity
             slot->Tick = (slot->Flags & global::Tl.PlaybackFlags.Reverse) != 0 ? (ushort)(slot->Tick + clock) : (ushort)(slot->Tick - clock);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ushort ClockOf(global::Unity.Burst.Intrinsics.v128 dense, ushort denseClock, ushort* clocks, int row)
-            => ((row < 64 ? dense.ULong0 >> row : dense.ULong1 >> (row - 64)) & 1) != 0 ? denseClock : clocks == null ? (ushort)0 : clocks[row];
-
-        public static EntityQuery DenseQuery(ref SystemState state)
-            => new EntityQueryBuilder(global::Unity.Collections.Allocator.Temp).WithAll<TimelineDense>().WithOptions(EntityQueryOptions.IncludeSystems).Build(ref state);
-
-        public static ushort DenseClock(EntityQuery query) => query.IsEmptyIgnoreFilter ? (ushort)0 : query.GetSingleton<TimelineDense>().Clock;
-
-        public static ushort DenseClock(EntityManager manager)
-        {
-            using var query = manager.CreateEntityQuery(new EntityQueryDesc { All = new[] { ComponentType.ReadOnly<TimelineDense>() }, Options = EntityQueryOptions.IncludeSystems });
-            return DenseClock(query);
-        }
-
-        public static ushort ClockOf(EntityManager manager, Entity entity, ushort denseClock)
-        {
-            if (manager.HasComponent<PlaybackDense>(entity) && manager.IsComponentEnabled<PlaybackDense>(entity)) return denseClock;
-            return manager.HasComponent<TimelineClock>(entity) ? manager.GetComponentData<TimelineClock>(entity).Value : (ushort)0;
-        }
-
-        public static ushort ClockOf(EntityManager manager, Entity entity) => ClockOf(manager, entity, DenseClock(manager));
-
         public static void Decode(global::Tl.Playback* slots, int count, ushort clock)
         {
             for (var i = 0; i < count; i++) Decode(slots + i, clock);
@@ -221,6 +146,32 @@ namespace Tl.Unity
         public static void Encode(global::Tl.Playback* slots, int count, ushort clock)
         {
             for (var i = 0; i < count; i++) Encode(slots + i, clock);
+        }
+
+        public static TimelineDense Dense(EntityManager manager)
+        {
+            using var query = manager.CreateEntityQuery(new EntityQueryDesc { All = new[] { ComponentType.ReadOnly<TimelineDense>() }, Options = EntityQueryOptions.IncludeSystems });
+            return query.IsEmptyIgnoreFilter ? default : query.GetSingleton<TimelineDense>();
+        }
+
+        public static int Read(EntityManager manager, Entity entity, global::Tl.Playback* into, int capacity)
+        {
+            var slots = manager.GetBuffer<Playback>(entity, true);
+            var count = global::System.Math.Min(slots.Length, capacity);
+            var raw = (global::Tl.Playback*)slots.GetUnsafeReadOnlyPtr();
+            if (DenseSlots.IsDense(raw, count))
+            {
+                var dense = Dense(manager);
+                DenseSlots.Read(dense.Space, dense.Clock, raw, count, into);
+                return count;
+            }
+            var clock = manager.HasComponent<TimelineClock>(entity) ? manager.GetComponentData<TimelineClock>(entity).Value : (ushort)0;
+            for (var i = 0; i < count; i++)
+            {
+                into[i] = raw[i];
+                Decode(into + i, clock);
+            }
+            return count;
         }
 
         public static ushort Due(global::Tl.Playback* slot, in global::Tl.KindTables tables, in global::Tl.KindCalm calm, ulong worldReverse, ushort now)

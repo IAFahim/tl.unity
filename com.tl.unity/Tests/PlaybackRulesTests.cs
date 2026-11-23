@@ -196,7 +196,6 @@ namespace Tl.Unity.Tests
                 PlaybackHandle = state.GetBufferTypeHandle<Playback>(false),
                 PlayingHandle = state.GetComponentTypeHandle<TimelinePlaying>(false),
                 ClockHandle = state.GetComponentTypeHandle<TimelineClock>(true),
-                DenseHandle = state.GetComponentTypeHandle<PlaybackDense>(false),
                 Swapped = changed,
             }.Run(query);
             var advance = new TimelineAdvanceJob { View = _view, PlaybackHandle = state.GetBufferTypeHandle<Playback>(false) };

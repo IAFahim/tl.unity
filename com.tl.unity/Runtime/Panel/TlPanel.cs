@@ -70,17 +70,17 @@ namespace Tl.Unity
             return index >= 0 && index < set.Length ? NameOf(set[index]) : "-";
         }
 
-        public PanelState State()
+        public unsafe PanelState State()
         {
             if (!TryTimeline(out var entity, out var entry))
                 return default;
-            var manager = _world.EntityManager;
-            var clock = TimelineTicks.ClockOf(manager, entity);
-            foreach (var playback in manager.GetBuffer<Playback>(entity, true))
-                if (playback.Timeline == entry.Id)
+            var slots = stackalloc global::Tl.Playback[KindSlots.MaxSlots];
+            var count = TimelineTicks.Read(_world.EntityManager, entity, slots, KindSlots.MaxSlots);
+            for (var i = 0; i < count; i++)
+                if (slots[i].Timeline == entry.Id)
                 {
-                    var flags = playback.Flags;
-                    return new PanelState(true, TimelineTicks.Real(in playback, clock), playback.Rate == 0 ? (byte)16 : playback.Rate, (flags & PlaybackFlags.Paused) != 0, (flags & PlaybackFlags.Reverse) != 0, (flags & PlaybackFlags.Ended) != 0, playback.Channel);
+                    var flags = slots[i].Flags;
+                    return new PanelState(true, slots[i].Tick, slots[i].Rate == 0 ? (byte)16 : slots[i].Rate, (flags & PlaybackFlags.Paused) != 0, (flags & PlaybackFlags.Reverse) != 0, (flags & PlaybackFlags.Ended) != 0, slots[i].Channel);
                 }
             return default;
         }

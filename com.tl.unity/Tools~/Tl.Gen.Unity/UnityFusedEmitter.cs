@@ -1,0 +1,745 @@
+using System.Collections.Generic;
+using System.Text;
+using System.Text.RegularExpressions;
+using Tl.Gen.CSharp.Model;
+
+namespace Tl.Gen.Unity
+{
+    internal static partial class UnityKindJobEmitter
+    {
+        internal const string FusedFileName = "TlUnity.Fused.g.cs";
+
+        internal sealed class FusedSystem
+        {
+            public UnitySystemModel Model = null!;
+            public SystemAssignment Assignment = null!;
+            public int AssignmentIndex;
+            public IReadOnlyList<UnityKindInfo> Kinds = null!;
+        }
+
+        sealed class FusedKind
+        {
+            public int System;
+            public int Local;
+            public UnityKindInfo Info = null!;
+            public KindDecl Decl => Info.Decl;
+            public bool Span => Decl.Accepts == 0;
+            public string? Lane;
+            public string Priority = "";
+        }
+
+        static readonly string Avx = "global::Unity.Burst.Intrinsics.X86.Avx";
+        static readonly string Avx2 = "global::Unity.Burst.Intrinsics.X86.Avx2";
+        static readonly string V256 = "global::Unity.Burst.Intrinsics.v256";
+
+        internal static bool Fusable(UnitySystemModel model, SystemAssignment assignment, IReadOnlyList<UnityKindInfo> kinds)
+        {
+            if (kinds.Count == 0 || EventConsumers(assignment).Count != 0) return false;
+            var shape = ShapeOf(model, assignment, kinds);
+            foreach (var info in kinds)
+            {
+                var kind = info.Decl;
+                if (kind.Group.Length != 0 || kind.IdleParams is not null || kind.Derived != DerivedKind.None || BindsContext(shape, kind.ApplyParams)) return false;
+                if (kind.Accepts == 0 && !kind.Precombined) return false;
+                if (kind.Accepts == 1 && !kind.PrecombinedPulses) return false;
+                if (kind.Accepts > 1) return false;
+                foreach (var feeder in FeedersOf(assignment, kind))
+                    if (BindsContext(shape, feeder.feeder.Method.Params)) return false;
+            }
+            var values = 0;
+            foreach (var info in kinds)
+                if (info.Decl.Precombined) values++;
+            return values <= 10;
+        }
+
+        internal static string EmitFused(IReadOnlyList<FusedSystem> systems)
+        {
+            var first = systems[0].Model;
+            var ns = first.Namespace.StartsWith("global::") ? first.Namespace.Substring(8) : first.Namespace;
+            var shapes = new List<Shape>();
+            var kinds = new List<FusedKind>();
+            for (var s = 0; s < systems.Count; s++)
+            {
+                shapes.Add(ShapeOf(systems[s].Model, systems[s].Assignment, systems[s].Kinds));
+                for (var k = 0; k < systems[s].Kinds.Count; k++)
+                {
+                    var info = systems[s].Kinds[k];
+                    var kind = new FusedKind { System = s, Local = k, Info = info };
+                    if (kind.Span && kind.Decl.Monoid == 1 && kind.Decl.LaneFields.Count == 1 && kind.Decl.LaneFields[0].Path.Length == 0)
+                        kind.Lane = kind.Decl.LaneFields[0].Type == "float" ? "float" : kind.Decl.LaneFields[0].Type is "int" or "uint" ? "int" : null;
+                    if (kind.Span && kind.Decl.Monoid == 5 && kind.Decl.LaneFields.Count > 0 && kind.Decl.LaneFields[0].Type is "byte" or "sbyte" or "short" or "ushort")
+                    {
+                        kind.Lane = "pick";
+                        kind.Priority = kind.Decl.LaneFields[0].Path.Replace("@", "");
+                    }
+                    kinds.Add(kind);
+                }
+            }
+            var columns = new List<(string type, string element, bool write)>();
+            var columnOf = new List<Dictionary<int, int>>();
+            for (var s = 0; s < systems.Count; s++)
+            {
+                var model = systems[s].Model;
+                var sns = model.Namespace.StartsWith("global::") ? model.Namespace.Substring(8) : model.Namespace;
+                var map = new Dictionary<int, int>();
+                for (var c = 0; c < shapes[s].Columns.Count; c++)
+                {
+                    if (!shapes[s].UsedColumns[c]) continue;
+                    var column = shapes[s].Columns[c];
+                    var type = column.Direct ? column.ElementTypeName : "global::" + sns + "." + ComponentName(model, column);
+                    var at = columns.FindIndex(x => x.type == type);
+                    if (at < 0)
+                    {
+                        at = columns.Count;
+                        columns.Add((type, column.ElementTypeName, !column.ReadOnly));
+                    }
+                    else if (!column.ReadOnly) columns[at] = (type, column.ElementTypeName, true);
+                    map[c] = at;
+                }
+                columnOf.Add(map);
+            }
+            var writer = new StringBuilder();
+            W(writer, "// <auto-generated/>");
+            W(writer, "using Unity.Burst;");
+            W(writer, "using Unity.Collections;");
+            W(writer, "using Unity.Entities;");
+            W(writer, "using Unity.Jobs;");
+            W(writer, "namespace " + ns);
+            W(writer, "{");
+            EmitFusedFill(writer, systems, kinds);
+            EmitFusedJob(writer, systems, shapes, kinds, columns, columnOf);
+            EmitFusedEntry(writer, systems, kinds, columns);
+            W(writer, "}");
+            return writer.ToString().Replace("\r\n", "\n");
+        }
+
+        static string Spans(IReadOnlyList<FusedSystem> systems, FusedKind kind) => systems[kind.System].Model.SystemTypeName + "ChunkJob.KindSpans_" + kind.Local;
+
+        static string Pulses(IReadOnlyList<FusedSystem> systems, FusedKind kind) => systems[kind.System].Model.SystemTypeName + "ChunkJob.KindPulses_" + kind.Local;
+
+        static void EmitFusedFill(StringBuilder writer, IReadOnlyList<FusedSystem> systems, List<FusedKind> kinds)
+        {
+            W(writer, "public unsafe struct TlFusedFill : global::Tl.IKindFill, global::Tl.Unity.IKindDenseFill");
+            W(writer, "{");
+            W(writer, "[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public global::Tl.Unity.KindIndex Index;");
+            W(writer, "public void Add(ref global::Tl.KindBuild __b)");
+            W(writer, "{");
+            for (var g = 0; g < kinds.Count; g++)
+            {
+                if (!kinds[g].Span) continue;
+                W(writer, "{ var __kid = Index.KindOf(" + KindId(kinds[g].Info.Key) + "); if (__kid >= 0) { var __s = default(" + Spans(systems, kinds[g]) + "); __b.Add<" + kinds[g].Decl.ValueTypeName + ", " + Spans(systems, kinds[g]) + ">(__kid, 0, Index.Routes, ref __s); } }");
+            }
+            W(writer, "}");
+            W(writer, "public void Add(ref global::Tl.Unity.KindDenseBuild __b)");
+            W(writer, "{");
+            for (var g = 0; g < kinds.Count; g++)
+            {
+                if (!kinds[g].Span) continue;
+                var t = kinds[g].Decl.ValueTypeName;
+                W(writer, "{ var __kid = Index.KindOf(" + KindId(kinds[g].Info.Key) + "); if (__kid >= 0) { var __s = default(" + Spans(systems, kinds[g]) + "); " + t + " __id; " + Identity(kinds[g].Decl, "__id") + "__b.Add<" + t + ", " + Spans(systems, kinds[g]) + ">(__kid, 0, Index.Routes, ref __s, __id); } }");
+            }
+            for (var g = 0; g < kinds.Count; g++)
+            {
+                if (kinds[g].Lane != "pick") continue;
+                var type = kinds[g].Decl.LaneFields[0].Type;
+                W(writer, "{ var __kid = Index.KindOf(" + KindId(kinds[g].Info.Key) + "); if (__kid >= 0) { " + kinds[g].Decl.ValueTypeName + " __v = default; __b.Key(__kid, (int)((byte*)&__v.@" + kinds[g].Priority + " - (byte*)&__v), sizeof(" + type + "), " + (type is "sbyte" or "short" ? "true" : "false") + "); } }");
+            }
+            W(writer, "__b.Cells();");
+            W(writer, "__b.Wide(32);");
+            W(writer, "}");
+            W(writer, "}");
+        }
+
+        static string BitOf(string bits) => "((__row < 64 ? " + bits + ".ULong0 >> __row : " + bits + ".ULong1 >> (__row - 64)) & 1) != 0";
+
+        static string ApplyArgs(Shape shape, Dictionary<int, int> columnOf, IReadOnlyList<ConsumerParam> parameters)
+        {
+            var args = CallArgs(shape, parameters, "", "__row", "");
+            args = Regex.Replace(args, @"__c(\d+)\[", m => "__x" + columnOf[int.Parse(m.Groups[1].Value)] + "[");
+            return args.Length == 0 ? "" : ", " + args;
+        }
+
+        static string ColumnsReady(Shape shape, Dictionary<int, int> columnOf, IReadOnlyList<ConsumerParam> parameters)
+        {
+            var checks = new List<string> { "__h" };
+            foreach (var c in ApplyColumnIndices(shape, parameters))
+                checks.Add("__x" + columnOf[c] + " != null");
+            return string.Join(" && ", checks);
+        }
+
+        static void EmitFusedJob(StringBuilder writer, IReadOnlyList<FusedSystem> systems, List<Shape> shapes, List<FusedKind> kinds, List<(string type, string element, bool write)> columns, List<Dictionary<int, int>> columnOf)
+        {
+            var anyFloat = kinds.Exists(k => k.Lane == "float");
+            var anyInt = kinds.Exists(k => k.Lane == "int");
+            var anyPick = kinds.Exists(k => k.Lane == "pick");
+            var scalarSpans = kinds.FindAll(k => k.Span && k.Lane == null);
+            W(writer, "[BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]");
+            W(writer, "public unsafe struct TlFusedChunkJob : IJobChunk");
+            W(writer, "{");
+            W(writer, "[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public global::Tl.Unity.KindIndex Index;");
+            W(writer, "[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public byte* Half;");
+            W(writer, "public uint Stride;");
+            W(writer, "public ushort Clock;");
+            W(writer, "public bool Vector;");
+            W(writer, "public ulong Skip;");
+            W(writer, "public int Cell;");
+            W(writer, "public " + V256 + " FloatLanes;");
+            W(writer, "public " + V256 + " IntLanes;");
+            W(writer, "[ReadOnly] public DynamicComponentTypeHandle PlaybackHandle;");
+            W(writer, "[ReadOnly] public ComponentTypeHandle<global::Tl.Unity.TimelinePlaying> PlayingHandle;");
+            W(writer, "[ReadOnly] public EntityTypeHandle EntityHandle;");
+            W(writer, "[global::Unity.Collections.LowLevel.Unsafe.NativeSetThreadIndex] public int ThreadIndex;");
+            W(writer, "[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public global::Tl.Unity.FusedMixed* Mixed;");
+            W(writer, "[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public int* MixedCount;");
+            for (var c = 0; c < columns.Count; c++)
+                W(writer, (columns[c].write ? "" : "[ReadOnly] ") + "public ComponentTypeHandle<" + columns[c].type + "> Column" + c + ";");
+            for (var g = 0; g < kinds.Count; g++)
+            {
+                var info = kinds[g].Info;
+                W(writer, "public BufferTypeHandle<" + info.Entry + "> Entry" + g + ";");
+                W(writer, "public ComponentTypeHandle<" + info.Active + "> Active" + g + ";");
+                W(writer, "[ReadOnly] public ComponentTypeHandle<" + info.Enabled + "> Enabled" + g + ";");
+                W(writer, "public int Kid" + g + ";");
+                if (kinds[g].Span)
+                {
+                    W(writer, "public int Off" + g + ";");
+                    W(writer, "public uint Lm" + g + ";");
+                    W(writer, "public uint Vm" + g + ";");
+                    if (kinds[g].Lane == "pick") W(writer, "public int Key" + g + ";");
+                }
+                else
+                {
+                    W(writer, "[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public int* Start" + g + ";");
+                    W(writer, "[global::Unity.Collections.LowLevel.Unsafe.NativeDisableUnsafePtrRestriction] public byte* Values" + g + ";");
+                }
+            }
+            W(writer, "public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in global::Unity.Burst.Intrinsics.v128 chunkEnabledMask)");
+            W(writer, "{");
+            W(writer, "var __count = chunk.Count;");
+            W(writer, "var __m0 = __count >= 64 ? ~0ul : (1ul << __count) - 1;");
+            W(writer, "var __m1 = __count <= 64 ? 0ul : (__count >= 128 ? ~0ul : (1ul << (__count - 64)) - 1);");
+            W(writer, "var __pb = chunk.GetUntypedBufferAccessor(ref PlaybackHandle);");
+            W(writer, "ulong __d0 = 0, __d1 = 0;");
+            W(writer, "var __uni = -1;");
+            W(writer, "for (var __row = 0; __row < __count; __row++)");
+            W(writer, "{");
+            W(writer, "var __s = (global::Tl.Playback*)__pb.GetUnsafeReadOnlyPtrAndLength(__row, out var __n);");
+            W(writer, "if (!global::Tl.Unity.DenseSlots.IsDense(__s, __n)) { __uni = -2; continue; }");
+            W(writer, "if (__row < 64) __d0 |= 1ul << __row; else __d1 |= 1ul << (__row - 64);");
+            W(writer, "__uni = __uni == -1 || __uni == __n ? __n : -2;");
+            W(writer, "}");
+            W(writer, "var __epl = chunk.GetEnableableBits(ref PlayingHandle);");
+            W(writer, "var __l0 = __epl.ULong0;");
+            W(writer, "var __l1 = __epl.ULong1;");
+            for (var g = 0; g < kinds.Count; g++)
+            {
+                W(writer, "var __h" + g + " = Kid" + g + " >= 0 && chunk.Has(ref Entry" + g + ");");
+                W(writer, "var __a" + g + " = __h" + g + " ? chunk.GetEnableableBits(ref Active" + g + ") : default;");
+                W(writer, "__l0 |= __a" + g + ".ULong0;");
+                W(writer, "__l1 |= __a" + g + ".ULong1;");
+            }
+            W(writer, "if (((__l0 & ~__d0 & __m0) | (__l1 & ~__d1 & __m1)) != 0) Mixed[global::System.Threading.Interlocked.Increment(ref *MixedCount) - 1] = new global::Tl.Unity.FusedMixed { Chunk = chunk, Dense = new global::Unity.Burst.Intrinsics.v128(__d0, __d1) };");
+            W(writer, "if ((__d0 | __d1) == 0) return;");
+            for (var g = 0; g < kinds.Count; g++)
+                W(writer, "var __e" + g + " = __h" + g + " ? chunk.GetEnableableBits(ref Enabled" + g + ") : default;");
+            for (var c = 0; c < columns.Count; c++)
+                W(writer, "var __x" + c + " = (" + columns[c].element + "*)chunk.GetComponentDataPtr" + (columns[c].write ? "RW" : "RO") + "(ref Column" + c + ");");
+            for (var g = 0; g < kinds.Count; g++)
+            {
+                var kind = kinds[g];
+                var h = "__h" + g;
+                W(writer, "var __ok" + g + " = " + ColumnsReady(shapes[kind.System], columnOf[kind.System], kind.Decl.ApplyParams).Replace("__h", h) + ";");
+                if (kind.Span) W(writer, "ulong __n" + g + "_0 = 0, __n" + g + "_1 = 0;");
+                else
+                {
+                    W(writer, "var __acc" + g + " = default(BufferAccessor<" + kind.Info.Entry + ">); var __accReady" + g + " = false;");
+                    W(writer, "var __act" + g + " = default(EnabledMask); var __actReady" + g + " = false;");
+                }
+            }
+            W(writer, "var __fast = Index.TickFastPulses != null ? *Index.TickFastPulses : 0ul;");
+            W(writer, "Entity* __ents = null;");
+            var cases = new[] { "2", "4" };
+            foreach (var n in cases)
+            {
+                W(writer, (n == "2" ? "if" : "else if") + " (__d0 == __m0 && __d1 == __m1 && __uni == " + n + ")");
+                W(writer, "{");
+                W(writer, "for (var __row = 0; __row < __count; __row++)");
+                W(writer, "{");
+                W(writer, "var __s = (global::Tl.Playback*)__pb.GetUnsafeReadOnlyPtr(__row);");
+                W(writer, "var __n = " + n + ";");
+                EmitFusedRow(writer, systems, shapes, kinds, columnOf, anyFloat, anyInt, anyPick, scalarSpans);
+                W(writer, "}");
+                W(writer, "}");
+            }
+            W(writer, "else");
+            W(writer, "{");
+            W(writer, "for (var __wd = 0; __wd < 2; __wd++)");
+            W(writer, "{");
+            W(writer, "var __bits = __wd == 0 ? __d0 : __d1;");
+            W(writer, "while (__bits != 0)");
+            W(writer, "{");
+            W(writer, "var __row = (__wd << 6) + (int)global::Unity.Mathematics.math.tzcnt(__bits);");
+            W(writer, "__bits &= __bits - 1;");
+            W(writer, "var __s = (global::Tl.Playback*)__pb.GetUnsafeReadOnlyPtrAndLength(__row, out var __n);");
+            EmitFusedRow(writer, systems, shapes, kinds, columnOf, anyFloat, anyInt, anyPick, scalarSpans);
+            W(writer, "}");
+            W(writer, "}");
+            W(writer, "}");
+            for (var g = 0; g < kinds.Count; g++)
+            {
+                if (!kinds[g].Span) continue;
+                W(writer, "if (__ok" + g + " && (Skip >> " + kinds[g].System + " & 1) == 0)");
+                W(writer, "{");
+                W(writer, "var __z0 = (__n" + g + "_0 ^ __a" + g + ".ULong0) & __d0 & __e" + g + ".ULong0;");
+                W(writer, "var __z1 = (__n" + g + "_1 ^ __a" + g + ".ULong1) & __d1 & __e" + g + ".ULong1;");
+                W(writer, "if ((__z0 | __z1) != 0)");
+                W(writer, "{");
+                W(writer, "var __mask = chunk.GetEnabledMask(ref Active" + g + ");");
+                W(writer, "while (__z0 != 0) { var __b = (int)global::Unity.Mathematics.math.tzcnt(__z0); __z0 &= __z0 - 1; __mask[__b] = (__n" + g + "_0 >> __b & 1) != 0; }");
+                W(writer, "while (__z1 != 0) { var __b = (int)global::Unity.Mathematics.math.tzcnt(__z1); __z1 &= __z1 - 1; __mask[64 + __b] = (__n" + g + "_1 >> __b & 1) != 0; }");
+                W(writer, "}");
+                W(writer, "}");
+            }
+            W(writer, "}");
+            W(writer, "}");
+        }
+
+        static string RowAt(string slot) => "(Half + (nuint)(ushort)(__s[" + slot + "].Tick + Clock) * Stride)";
+
+        static void EmitScalarSpans(StringBuilder writer, List<FusedKind> scalar, List<FusedKind> kinds, bool full)
+        {
+            foreach (var kind in scalar)
+            {
+                var g = kinds.IndexOf(kind);
+                W(writer, Lanes(kind.Decl) ? Identity(kind.Decl, "__t" + g) + "__f" + g + " = false;" : "__t" + g + " = default; __f" + g + " = false;");
+            }
+            if (full) W(writer, "__any = 0; __cell = 0;");
+            W(writer, "for (var __i = 0; __i < __n; __i++)");
+            W(writer, "{");
+            W(writer, "var __r = " + RowAt("__i") + ";");
+            W(writer, "var __m = *(uint*)__r;");
+            if (full) W(writer, "__any |= __m; __cell |= *(uint*)(__r + Cell);");
+            foreach (var kind in scalar)
+            {
+                var g = kinds.IndexOf(kind);
+                var t = kind.Decl.ValueTypeName;
+                if (Lanes(kind.Decl))
+                    W(writer, "{ var __rv = (" + t + "*)(__r + Off" + g + "); " + LaneOp(kind.Decl, "__t" + g, "(*__rv)") + "}");
+                else
+                    W(writer, "if ((__m & Vm" + g + ") != 0) { ref readonly var __sv = ref *(" + t + "*)(__r + Off" + g + "); if (__f" + g + ") " + kind.Decl.TypeName + ".Combine(ref __t" + g + ", in __sv); else { __t" + g + " = __sv; __f" + g + " = true; } }");
+            }
+            W(writer, "}");
+            foreach (var kind in scalar)
+                if (Lanes(kind.Decl))
+                {
+                    var g = kinds.IndexOf(kind);
+                    W(writer, "__f" + g + " = (__any & Vm" + g + ") != 0;");
+                }
+        }
+
+        static void EmitFusedRow(StringBuilder writer, IReadOnlyList<FusedSystem> systems, List<Shape> shapes, List<FusedKind> kinds, List<Dictionary<int, int>> columnOf, bool anyFloat, bool anyInt, bool anyPick, List<FusedKind> scalarSpans)
+        {
+            W(writer, "{");
+            W(writer, "uint __any = 0, __cell = 0;");
+            for (var g = 0; g < kinds.Count; g++)
+                if (kinds[g].Span)
+                    W(writer, kinds[g].Decl.ValueTypeName + " __t" + g + " = default; var __f" + g + " = false;");
+            var all = kinds.FindAll(k => k.Span);
+            W(writer, "if (" + Avx2 + ".IsAvx2Supported)");
+            W(writer, "{");
+            W(writer, "if (Vector)");
+            W(writer, "{");
+            W(writer, "var __hd = default(" + V256 + ");");
+            if (anyFloat) W(writer, "var __fs = " + Avx + ".mm256_set1_ps(-0f);");
+            if (anyInt) W(writer, "var __is = default(" + V256 + ");");
+            if (anyPick) W(writer, "var __ky = " + Avx + ".mm256_set1_epi32(-1);");
+            W(writer, "for (var __i = 0; __i < __n; __i++)");
+            W(writer, "{");
+            W(writer, "var __w = " + Avx + ".mm256_load_si256(" + RowAt("__i") + ");");
+            W(writer, "__hd = " + Avx2 + ".mm256_or_si256(__hd, __w);");
+            if (anyFloat) W(writer, "__fs = " + Avx + ".mm256_add_ps(__fs, " + Avx + ".mm256_and_ps(__w, FloatLanes));");
+            if (anyInt) W(writer, "__is = " + Avx2 + ".mm256_add_epi32(__is, " + Avx2 + ".mm256_and_si256(__w, IntLanes));");
+            if (anyPick) W(writer, "__ky = " + Avx2 + ".mm256_max_epi32(__ky, " + Avx2 + ".mm256_or_si256(__w, " + Avx + ".mm256_set1_epi32(__i)));");
+            W(writer, "}");
+            W(writer, "__any = ((uint*)&__hd)[0];");
+            W(writer, "__cell = ((uint*)&__hd)[Cell >> 2];");
+            for (var g = 0; g < kinds.Count; g++)
+            {
+                var kind = kinds[g];
+                if (kind.Lane == "float")
+                    W(writer, "__t" + g + " = ((float*)&__fs)[Off" + g + " >> 2]; __f" + g + " = (__any & Vm" + g + ") != 0;");
+                else if (kind.Lane == "int")
+                    W(writer, "__t" + g + " = ((" + kind.Decl.ValueTypeName + "*)&__is)[Off" + g + " >> 2]; __f" + g + " = (__any & Vm" + g + ") != 0;");
+                else if (kind.Lane == "pick")
+                {
+                    W(writer, "var __k" + g + " = ((int*)&__ky)[Key" + g + " >> 2];");
+                    W(writer, "__f" + g + " = __k" + g + " >= 0;");
+                    W(writer, "if (__f" + g + ") __t" + g + " = *(" + kind.Decl.ValueTypeName + "*)(" + RowAt("__k" + g + " & 255") + " + Off" + g + ");");
+                }
+            }
+            if (scalarSpans.Count != 0) EmitScalarSpans(writer, scalarSpans, kinds, false);
+            W(writer, "}");
+            W(writer, "else");
+            W(writer, "{");
+            EmitScalarSpans(writer, all, kinds, true);
+            W(writer, "}");
+            W(writer, "}");
+            W(writer, "else");
+            W(writer, "{");
+            EmitScalarSpans(writer, all, kinds, true);
+            W(writer, "}");
+            for (var s = 0; s < systems.Count; s++)
+            {
+                W(writer, "if ((Skip >> " + s + " & 1) != 0)");
+                W(writer, "{");
+                for (var g = 0; g < kinds.Count; g++)
+                {
+                    if (kinds[g].System != s || kinds[g].Span) continue;
+                    W(writer, "if (__cell != 0 && __h" + g + ")");
+                    W(writer, "{");
+                    W(writer, "if ((__fast >> Kid" + g + " & 1) != 0)");
+                    W(writer, "{");
+                    EmitLanePush(writer, g);
+                    W(writer, "}");
+                    W(writer, "else");
+                    W(writer, "{");
+                    EmitLaneSpill(writer, kinds[g], g);
+                    W(writer, "}");
+                    W(writer, "}");
+                }
+                W(writer, "}");
+                W(writer, "else");
+                W(writer, "{");
+                for (var g = 0; g < kinds.Count; g++)
+                {
+                    var kind = kinds[g];
+                    if (kind.System != s) continue;
+                    var args = ApplyArgs(shapes[s], columnOf[s], kind.Decl.ApplyParams);
+                    if (kind.Span)
+                    {
+                        W(writer, "if (__ok" + g + " && " + BitOf("__e" + g) + ")");
+                        W(writer, "{");
+                        W(writer, "if (__f" + g + ") " + kind.Decl.TypeName + ".Apply(in __t" + g + args + ");");
+                        W(writer, "if ((__any & Lm" + g + ") != 0) { if (__row < 64) __n" + g + "_0 |= 1ul << __row; else __n" + g + "_1 |= 1ul << (__row - 64); }");
+                        W(writer, "}");
+                    }
+                    else EmitFusedEntries(writer, kind, g, args);
+                }
+                for (var g = 0; g < kinds.Count; g++)
+                {
+                    var kind = kinds[g];
+                    if (kind.System != s || kind.Span) continue;
+                    var args = ApplyArgs(shapes[s], columnOf[s], kind.Decl.ApplyParams);
+                    W(writer, "if (__cell != 0 && __h" + g + ")");
+                    W(writer, "{");
+                    W(writer, "var __on = __ok" + g + " && " + BitOf("__e" + g) + ";");
+                    W(writer, "if ((__fast >> Kid" + g + " & 1) != 0)");
+                    W(writer, "{");
+                    W(writer, "if (__on)");
+                    W(writer, "{");
+                    EmitLaneApply(writer, kind, g, args);
+                    W(writer, "}");
+                    W(writer, "else");
+                    W(writer, "{");
+                    EmitLanePush(writer, g);
+                    W(writer, "}");
+                    W(writer, "}");
+                    W(writer, "else if (!__on)");
+                    W(writer, "{");
+                    EmitLaneSpill(writer, kind, g);
+                    W(writer, "}");
+                    W(writer, "}");
+                }
+                W(writer, "}");
+            }
+            W(writer, "}");
+        }
+
+        static void EmitLaneWalk(StringBuilder writer, FusedKind kind, int g, string body)
+        {
+            W(writer, "for (var __i = 0; __i < __n; __i++)");
+            W(writer, "{");
+            W(writer, "var __c = *(uint*)(" + RowAt("__i") + " + Cell);");
+            W(writer, "if (__c == 0) continue;");
+            W(writer, "var __st = Start" + g + " + (__c - 1);");
+            W(writer, "for (var __p = __st[0]; __p < __st[1]; __p++)");
+            W(writer, "{");
+            W(writer, "ref readonly var __v = ref ((" + kind.Decl.ValueTypeName + "*)Values" + g + ")[__p];");
+            W(writer, body);
+            W(writer, "}");
+            W(writer, "}");
+        }
+
+        static void EmitLaneApply(StringBuilder writer, FusedKind kind, int g, string args)
+        {
+            if (kind.Decl.Each)
+            {
+                EmitLaneWalk(writer, kind, g, kind.Decl.TypeName + ".Apply(in __v" + args + ");");
+                return;
+            }
+            W(writer, kind.Decl.ValueTypeName + " __pt = default; var __ph = false;");
+            EmitLaneWalk(writer, kind, g, "if (__ph) " + kind.Decl.TypeName + ".Combine(ref __pt, in __v); else { __pt = __v; __ph = true; }");
+            W(writer, "if (__ph) " + kind.Decl.TypeName + ".Apply(in __pt" + args + ");");
+        }
+
+        static void EmitLanePush(StringBuilder writer, int g)
+        {
+            W(writer, "if (__ents == null) __ents = (Entity*)global::Unity.Collections.LowLevel.Unsafe.NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(chunk.GetNativeArray(EntityHandle));");
+            W(writer, "for (var __i = 0; __i < __n; __i++)");
+            W(writer, "{");
+            W(writer, "var __c = *(uint*)(" + RowAt("__i") + " + Cell);");
+            W(writer, "if (__c != 0) Index.PushPulse(Kid" + g + ", ThreadIndex, in chunk, __ents[__row], __row, (int)__c - 1);");
+            W(writer, "}");
+        }
+
+        static void EmitLaneSpill(StringBuilder writer, FusedKind kind, int g)
+        {
+            var entry = kind.Info.Entry;
+            W(writer, "if (!__accReady" + g + ") { __acc" + g + " = chunk.GetBufferAccessor(ref Entry" + g + "); __accReady" + g + " = true; }");
+            W(writer, "var __buf = __acc" + g + "[__row];");
+            W(writer, "var __at = 0;");
+            W(writer, "var __was = __buf.Length;");
+            W(writer, "for (var __i = 0; __i < __n; __i++)");
+            W(writer, "{");
+            W(writer, "var __c = *(uint*)(" + RowAt("__i") + " + Cell);");
+            W(writer, "if (__c == 0) continue;");
+            W(writer, "var __st = Start" + g + " + (__c - 1);");
+            W(writer, "var __cnt = __st[1] - __st[0];");
+            W(writer, "if (__cnt <= 0) continue;");
+            W(writer, "var __len = __buf.Length;");
+            W(writer, "__buf.ResizeUninitialized(__len + __cnt);");
+            W(writer, "var __data = (byte*)__buf.GetUnsafePtr();");
+            W(writer, "global::Unity.Collections.LowLevel.Unsafe.UnsafeUtility.MemMove(__data + (long)(__at + __cnt) * sizeof(" + entry + "), __data + (long)__at * sizeof(" + entry + "), (long)(__len - __at) * sizeof(" + entry + "));");
+            W(writer, "for (var __p = 0; __p < __cnt; __p++)");
+            W(writer, "{");
+            W(writer, "var __dst = __data + (long)(__at + __p) * sizeof(" + entry + ");");
+            W(writer, "global::Unity.Collections.LowLevel.Unsafe.UnsafeUtility.MemClear(__dst, sizeof(" + entry + "));");
+            W(writer, "((global::Tl.KindEntry*)__dst)->Flags = global::Tl.KindEntryFlags.Pulse;");
+            W(writer, "*(" + kind.Decl.ValueTypeName + "*)(__dst + 8) = ((" + kind.Decl.ValueTypeName + "*)Values" + g + ")[__st[0] + __p];");
+            W(writer, "}");
+            W(writer, "__at += __cnt;");
+            W(writer, "}");
+            W(writer, "if (__at != 0)");
+            W(writer, "{");
+            W(writer, "Index.HeldBufferKinds[Kid" + g + "] = 1;");
+            W(writer, "if (__was == 0) { if (!__actReady" + g + ") { __act" + g + " = chunk.GetEnabledMask(ref Active" + g + "); __actReady" + g + " = true; } __act" + g + "[__row] = true; }");
+            W(writer, "}");
+        }
+
+        static void EmitFusedEntries(StringBuilder writer, FusedKind kind, int g, string args)
+        {
+            var t = kind.Decl.ValueTypeName;
+            W(writer, "if (__ok" + g + " && " + BitOf("__e" + g) + ")");
+            W(writer, "{");
+            W(writer, "var __slow = (__fast >> Kid" + g + " & 1) == 0;");
+            W(writer, "if (__slow || " + BitOf("__a" + g) + ")");
+            W(writer, "{");
+            W(writer, "if (!__accReady" + g + ") { __acc" + g + " = chunk.GetBufferAccessor(ref Entry" + g + "); __accReady" + g + " = true; }");
+            W(writer, "var __buf = __acc" + g + "[__row];");
+            W(writer, "var __len = __buf.Length;");
+            W(writer, "var __data = (byte*)__buf.GetUnsafePtr();");
+            if (kind.Decl.Each)
+            {
+                W(writer, "if (__slow && __cell != 0)");
+                W(writer, "{");
+                EmitLaneWalk(writer, kind, g, kind.Decl.TypeName + ".Apply(in __v" + args + ");");
+                W(writer, "}");
+                W(writer, "for (var __j = 0; __j < __len; __j++)");
+                W(writer, "{");
+                W(writer, "var __en = (global::Tl.KindEntry*)(__data + (long)__j * sizeof(" + kind.Info.Entry + "));");
+                W(writer, "if (__en->Timeline != 0) continue;");
+                W(writer, kind.Decl.TypeName + ".Apply(in *(" + t + "*)((byte*)__en + 8)" + args + ");");
+                W(writer, "}");
+            }
+            else
+            {
+                W(writer, t + " __pt = default; var __ph = false;");
+                W(writer, "if (__slow && __cell != 0)");
+                W(writer, "{");
+                EmitLaneWalk(writer, kind, g, "if (__ph) " + kind.Decl.TypeName + ".Combine(ref __pt, in __v); else { __pt = __v; __ph = true; }");
+                W(writer, "}");
+                W(writer, "for (var __j = 0; __j < __len; __j++)");
+                W(writer, "{");
+                W(writer, "var __en = (global::Tl.KindEntry*)(__data + (long)__j * sizeof(" + kind.Info.Entry + "));");
+                W(writer, "if (__en->Timeline != 0) continue;");
+                W(writer, "ref readonly var __ev = ref *(" + t + "*)((byte*)__en + 8);");
+                W(writer, "if (__ph) " + kind.Decl.TypeName + ".Combine(ref __pt, in __ev); else { __pt = __ev; __ph = true; }");
+                W(writer, "}");
+                W(writer, "if (__ph) " + kind.Decl.TypeName + ".Apply(in __pt" + args + ");");
+            }
+            W(writer, "if (__len != 0)");
+            W(writer, "{");
+            W(writer, "__buf.ResizeUninitialized(0);");
+            W(writer, "if (!__actReady" + g + ") { __act" + g + " = chunk.GetEnabledMask(ref Active" + g + "); __actReady" + g + " = true; }");
+            W(writer, "__act" + g + "[__row] = false;");
+            W(writer, "}");
+            W(writer, "if (__buf.Capacity > 0) __buf.TrimExcess();");
+            W(writer, "}");
+            W(writer, "}");
+        }
+
+        static void EmitFusedEntry(StringBuilder writer, IReadOnlyList<FusedSystem> systems, List<FusedKind> kinds, List<(string type, string element, bool write)> columns)
+        {
+            var auto = systems[0].Model.Namespace == TlGenUnityGenerator.AutoNamespace;
+            W(writer, (auto ? "internal" : "public") + " static partial class TimelineJobs");
+            W(writer, "{");
+            W(writer, "public unsafe struct Fused : global::Tl.Unity.ITlKindJobs");
+            W(writer, "{");
+            W(writer, "public bool DenseEnabled;");
+            W(writer, "public ulong Skip;");
+            for (var s = 0; s < systems.Count; s++)
+                W(writer, "TimelineJobs." + systems[s].Model.SystemTypeName + " _system" + s + ";");
+            W(writer, "EntityQuery _query;");
+            W(writer, "EntityQuery _dense;");
+            W(writer, "DynamicComponentTypeHandle _playback;");
+            W(writer, "ComponentTypeHandle<global::Tl.Unity.TimelinePlaying> _playing;");
+            W(writer, "EntityTypeHandle _entities;");
+            for (var c = 0; c < columns.Count; c++)
+                W(writer, "ComponentTypeHandle<" + columns[c].type + "> _column" + c + ";");
+            for (var g = 0; g < kinds.Count; g++)
+            {
+                var info = kinds[g].Info;
+                W(writer, "BufferTypeHandle<" + info.Entry + "> _entry" + g + ";");
+                W(writer, "ComponentTypeHandle<" + info.Active + "> _active" + g + ";");
+                W(writer, "ComponentTypeHandle<" + info.Enabled + "> _enabled" + g + ";");
+            }
+            W(writer, "public void Create(ref SystemState state)");
+            W(writer, "{");
+            W(writer, "DenseEnabled = true;");
+            for (var s = 0; s < systems.Count; s++)
+                W(writer, "_system" + s + " = TimelineJobs." + systems[s].Model.SystemTypeName + ".Create(ref state);");
+            W(writer, "var builder = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.Playback>();");
+            W(writer, "var any = new NativeList<ComponentType>(" + kinds.Count + ", Allocator.Temp);");
+            foreach (var kind in kinds)
+                W(writer, "any.Add(ComponentType.ReadWrite<" + kind.Info.Entry + ">());");
+            W(writer, "builder.WithAny(ref any);");
+            W(writer, "_query = builder.Build(ref state);");
+            W(writer, "any.Dispose();");
+            W(writer, "builder.Dispose();");
+            W(writer, "_dense = new EntityQueryBuilder(Allocator.Temp).WithAll<global::Tl.Unity.TimelineDense>().WithOptions(EntityQueryOptions.IncludeSystems).Build(ref state);");
+            W(writer, "_playback = state.GetDynamicComponentTypeHandle(ComponentType.ReadOnly<global::Tl.Unity.Playback>());");
+            W(writer, "_playing = state.GetComponentTypeHandle<global::Tl.Unity.TimelinePlaying>(true);");
+            W(writer, "_entities = state.GetEntityTypeHandle();");
+            for (var c = 0; c < columns.Count; c++)
+                W(writer, "_column" + c + " = state.GetComponentTypeHandle<" + columns[c].type + ">(" + (columns[c].write ? "false" : "true") + ");");
+            for (var g = 0; g < kinds.Count; g++)
+            {
+                var info = kinds[g].Info;
+                W(writer, "_entry" + g + " = state.GetBufferTypeHandle<" + info.Entry + ">(false);");
+                W(writer, "_active" + g + " = state.GetComponentTypeHandle<" + info.Active + ">(false);");
+                W(writer, "_enabled" + g + " = state.GetComponentTypeHandle<" + info.Enabled + ">(true);");
+            }
+            W(writer, "}");
+            W(writer, "public JobHandle Schedule(ref SystemState state, global::Tl.LibraryView view, global::Tl.Unity.KindIndex index, bool forward, JobHandle dependsOn)");
+            W(writer, "{");
+            W(writer, "var dense = index.Dense;");
+            W(writer, "if (!DenseEnabled || dense == null || !dense->Fits || _dense.IsEmptyIgnoreFilter)");
+            W(writer, "{");
+            W(writer, "global::Tl.Unity.KindDense.Register(dense, 0, 0);");
+            W(writer, "var __unfused = dependsOn;");
+            for (var s = 0; s < systems.Count; s++)
+                W(writer, "if ((Skip >> " + s + " & 1) == 0) __unfused = _system" + s + ".Schedule(ref state, view, index, forward, __unfused);");
+            W(writer, "return __unfused;");
+            W(writer, "}");
+            for (var g = 0; g < kinds.Count; g++)
+                W(writer, "var __kid" + g + " = index.KindOf(" + KindId(kinds[g].Info.Key) + ");");
+            var spans = kinds.FindAll(k => k.Span);
+            if (spans.Count != 0)
+            {
+                var needs = new List<string>();
+                foreach (var kind in spans)
+                    needs.Add("index.NeedsSpanValues(__kid" + kinds.IndexOf(kind) + ")");
+                W(writer, "if (" + string.Join(" && ", needs) + ") { dependsOn.Complete(); var __fill = new TlFusedFill { Index = index }; index.SpanValues(__kid" + kinds.IndexOf(spans[0]) + ", ref __fill); }");
+            }
+            for (var s = 0; s < systems.Count; s++)
+                W(writer, "var __job" + s + " = _system" + s + ".Prepare(ref state, view, index, forward, dependsOn);");
+            var table = new List<string> { "dense->Table != null", "dense->CellLane >= 0", "dense->Stride == 32" };
+            foreach (var kind in spans)
+            {
+                var g = kinds.IndexOf(kind);
+                table.Add("(__kid" + g + " < 0 || index.Values[__kid" + g + "].Data == dense->Table)");
+                if (kind.Lane == "pick") table.Add("(__kid" + g + " < 0 || dense->KeyLanes[__kid" + g + "] >= 0)");
+            }
+            W(writer, "var __fits = " + string.Join(" && ", table) + ";");
+            W(writer, "var __spanKinds = 0ul;");
+            W(writer, "var __laneKinds = 0ul;");
+            for (var g = 0; g < kinds.Count; g++)
+            {
+                if (kinds[g].Span) W(writer, "if (__fits && __kid" + g + " >= 0 && __kid" + g + " < 64 && !index.HasForeign(__kid" + g + ")) __spanKinds |= 1ul << __kid" + g + ";");
+                else W(writer, "if (__fits && __kid" + g + " >= 0 && __kid" + g + " < 64 && index.PulseValuesTable[__kid" + g + "].Data != null) __laneKinds |= 1ul << __kid" + g + ";");
+            }
+            W(writer, "global::Tl.Unity.KindDense.Register(dense, __spanKinds, __laneKinds);");
+            W(writer, "var __items = global::Tl.Unity.FusedMixed.Allocate(_query.CalculateChunkCountWithoutFiltering(), out var __mixedCount);");
+            W(writer, "_playback.Update(ref state);");
+            W(writer, "_playing.Update(ref state);");
+            W(writer, "_entities.Update(ref state);");
+            for (var c = 0; c < columns.Count; c++)
+                W(writer, "_column" + c + ".Update(ref state);");
+            for (var g = 0; g < kinds.Count; g++)
+            {
+                W(writer, "_entry" + g + ".Update(ref state);");
+                W(writer, "_active" + g + ".Update(ref state);");
+                W(writer, "_enabled" + g + ".Update(ref state);");
+            }
+            W(writer, "var __floats = default(" + V256 + ");");
+            W(writer, "var __ints = default(" + V256 + ");");
+            for (var g = 0; g < kinds.Count; g++)
+            {
+                if (kinds[g].Lane == "float") W(writer, "if (__fits && __kid" + g + " >= 0) ((uint*)&__floats)[index.Values[__kid" + g + "].Front >> 2] = ~0u;");
+                if (kinds[g].Lane == "int") W(writer, "if (__fits && __kid" + g + " >= 0) ((uint*)&__ints)[index.Values[__kid" + g + "].Front >> 2] = ~0u;");
+            }
+            W(writer, "var __clock = _dense.GetSingleton<global::Tl.Unity.TimelineDense>().Clock;");
+            W(writer, "var job = new TlFusedChunkJob");
+            W(writer, "{");
+            W(writer, "Index = index,");
+            W(writer, "Half = __fits ? dense->Table + (forward ? 0 : (long)dense->Rows * dense->Stride) : null,");
+            W(writer, "Stride = (uint)(__fits ? dense->Stride : 32),");
+            W(writer, "Clock = __clock,");
+            W(writer, "Vector = __fits,");
+            W(writer, "Skip = Skip,");
+            W(writer, "Cell = __fits ? dense->CellLane : 0,");
+            W(writer, "FloatLanes = __floats,");
+            W(writer, "IntLanes = __ints,");
+            W(writer, "PlaybackHandle = _playback,");
+            W(writer, "PlayingHandle = _playing,");
+            W(writer, "EntityHandle = _entities,");
+            W(writer, "Mixed = __items,");
+            W(writer, "MixedCount = __mixedCount,");
+            for (var c = 0; c < columns.Count; c++)
+                W(writer, "Column" + c + " = _column" + c + ",");
+            for (var g = 0; g < kinds.Count; g++)
+            {
+                W(writer, "Entry" + g + " = _entry" + g + ",");
+                W(writer, "Active" + g + " = _active" + g + ",");
+                W(writer, "Enabled" + g + " = _enabled" + g + ",");
+                W(writer, "Kid" + g + " = __fits ? __kid" + g + " : -1,");
+                if (kinds[g].Span)
+                {
+                    W(writer, "Off" + g + " = __fits && __kid" + g + " >= 0 ? index.Values[__kid" + g + "].Front : 0,");
+                    W(writer, "Lm" + g + " = __fits && __kid" + g + " >= 0 ? 1u << index.Values[__kid" + g + "].Shift : 0u,");
+                    W(writer, "Vm" + g + " = __fits && __kid" + g + " >= 0 ? 1u << (index.Values[__kid" + g + "].Shift + (forward ? 1 : 2)) : 0u,");
+                    if (kinds[g].Lane == "pick") W(writer, "Key" + g + " = __fits && __kid" + g + " >= 0 ? dense->KeyLanes[__kid" + g + "] : 0,");
+                }
+                else
+                {
+                    W(writer, "Start" + g + " = __fits && __kid" + g + " >= 0 ? index.PulseValuesTable[__kid" + g + "].Start : null,");
+                    W(writer, "Values" + g + " = __fits && __kid" + g + " >= 0 ? index.PulseValuesTable[__kid" + g + "].Data : null,");
+                }
+            }
+            W(writer, "};");
+            W(writer, "var __dep = job.ScheduleParallel(_query, dependsOn);");
+            for (var s = 0; s < systems.Count; s++)
+            {
+                W(writer, "if ((Skip >> " + s + " & 1) == 0)");
+                W(writer, "{");
+                W(writer, "__dep = new " + systems[s].Model.SystemTypeName + "MixedJob { Job = __job" + s + ", Items = __items }.Schedule(__mixedCount, 1, __dep);");
+                W(writer, "__dep = _system" + s + ".Pulses(ref state, index, __dep);");
+                W(writer, "}");
+            }
+            W(writer, "return new global::Tl.Unity.FusedFreeJob { Items = __items, Count = __mixedCount }.Schedule(__dep);");
+            W(writer, "}");
+            W(writer, "}");
+            W(writer, "}");
+        }
+    }
+}

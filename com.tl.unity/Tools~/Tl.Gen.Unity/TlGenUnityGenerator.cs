@@ -246,6 +246,28 @@ namespace Tl.Gen.Unity
                 context.AddSource(UnityRegistrationEmitter.FileName, SourceText.From(UnityRegistrationEmitter.Emit(components, id), System.Text.Encoding.UTF8));
             if (kinds.Count != 0 || events.Count != 0)
                 context.AddSource("TlUnity.KindTypes.g.cs", SourceText.From(UnityKindEmitter.EmitKinds(assignments, kinds, new List<string>(events), id, key), System.Text.Encoding.UTF8));
+            var fused = new List<UnityKindJobEmitter.FusedSystem>();
+            var fusable = true;
+            foreach (var model in models)
+            {
+                if (model is null || ReferenceEquals(model, auto))
+                    continue;
+                var index = UnityKindPlan.AssignmentOf(assignments, model);
+                if (index < 0 || assignments[index].Kinds.Count == 0)
+                    continue;
+                var own = new List<UnityKindInfo>();
+                foreach (var kind in assignments[index].Kinds)
+                    foreach (var info in kinds)
+                        if (info.Key == kind.Id && !info.Foreign)
+                            own.Add(info);
+                if (own.Count == 0)
+                    continue;
+                if (!UnityKindJobEmitter.Fusable(model, assignments[index], own))
+                    fusable = false;
+                fused.Add(new UnityKindJobEmitter.FusedSystem { Model = model, Assignment = assignments[index], AssignmentIndex = index, Kinds = own });
+            }
+            if (fusable && fused.Count != 0)
+                context.AddSource(UnityKindJobEmitter.FusedFileName, SourceText.From(UnityKindJobEmitter.EmitFused(fused), System.Text.Encoding.UTF8));
             foreach (var model in models)
             {
                 if (model is null)
