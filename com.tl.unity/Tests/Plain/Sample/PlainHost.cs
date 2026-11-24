@@ -36,22 +36,12 @@ namespace PlainGame
                 JumpPower[row] = new JumpPower { Value = jumpPower };
                 Health[row] = new Health { Value = health };
             }
-            InstallGeneratedCode();
             _world = new TimelineWorld(library);
             _players = new PlaybackTable(rows);
             _kinds = new KindStore(_world, _players);
             _damage = DamageKind.Pulses(_kinds);
             _stat = StatChangeKind.Pulses(_kinds);
             _cues = new Events<Cue>(16);
-        }
-
-        static void InstallGeneratedCode()
-        {
-            var mine = typeof(PlainHost).Assembly;
-            foreach (var module in TlGenerated.Modules)
-                if (module.GetType().Assembly == mine)
-                    return;
-            TlSystems.TlModule.Install();
         }
 
         public bool IsDisposed => _disposed;

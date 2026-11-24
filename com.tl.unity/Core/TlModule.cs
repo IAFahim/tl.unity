@@ -45,21 +45,7 @@ sealed class SystemRegistry
         public readonly ITlModule Module;
         public readonly int Index;
     }
-    internal nint ViewStamp;
-    internal uint ViewBytes;
-    internal int ViewCount;
-    internal ulong ViewGeneration;
     internal int ModuleVersion;
-    internal readonly ConcurrentDictionary<FilterKey, SystemStep[]> Filters = new();
-
-    internal void Reset(nint stamp, uint bytes, int count, ulong generation)
-    {
-        ViewStamp = stamp;
-        ViewBytes = bytes;
-        ViewCount = count;
-        ViewGeneration = generation;
-        Filters.Clear();
-    }
 
     internal void RefreshModules()
     {
