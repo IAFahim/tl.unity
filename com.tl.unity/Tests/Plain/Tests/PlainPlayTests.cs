@@ -44,7 +44,7 @@ namespace PlainGame.Tests
         }
 
         [Test]
-        public void TwoSessionsInOneDomainGiveTheSameHashAndInstallTheModuleOnce()
+        public void TwoSessionsInOneDomainGiveTheSameHashAndInstallNoModule()
         {
             PlainHost first;
             using (first = NewHost())
@@ -57,7 +57,7 @@ namespace PlainGame.Tests
             foreach (var module in TlGenerated.Modules)
                 if (module.GetType().Assembly == mine)
                     installed++;
-            Assert.AreEqual(1, installed);
+            Assert.AreEqual(0, installed);
         }
 
         [Test]
