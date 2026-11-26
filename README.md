@@ -1062,7 +1062,7 @@ Things to know:
 | One entity's events | `drained.Of(entity)` after `events.Drain()` | `DynamicBuffer<TimelineEvent<T>>` | same run (slot order, then raise order); `Record.Entity` and `Record.Sequence` are host-specific |
 | Event methods above 1x | see tl docs | once per step, at the last tick | use `[Pulse]` (chapter 10) |
 | Columns | any unmanaged struct | a partial top-level `[TlState]` struct or an `IComponentData`; a kind that writes anything else fits no system | ECS components; the shared rule is open in IAFahim/tl#665 |
-| A declared `[TimelineSystem]` with events and no kinds of its own | its event methods run | not run (the generated job calls an empty `RunStep`) | open in IAFahim/tl#665 |
+| A declared `[TimelineSystem]` with events and no kinds of its own | its event methods run | not run (the generated job calls an empty `RunStep`); warns `TLUNITY9109`. Consumers outside `[TimelineSystem]` run in the generated system | open in IAFahim/tl#665 |
 | `TLGEN107` (context taken by `ref`) | warning; the system runs sequentially | not reported | ECS schedules the job |
 | `FoldsPulses` | game pulses fold | accepted, not folded; warns `TLUNITY9108` | open: Unity has no folding sender yet |
 | A marker with no data, or a clip whose bake throws | the bake throws | skipped with a warning, so the rest of the timeline still bakes | by design: the Editor keeps baking the scene |
