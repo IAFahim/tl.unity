@@ -24,6 +24,7 @@ public sealed unsafe partial class KindStore
     bool _denseValues;
     internal bool DenseEnabled = true;
     internal bool PulseHitsEnabled = true;
+    internal bool SpanValuesEnabled = true;
 
     void BuildRows()
     {

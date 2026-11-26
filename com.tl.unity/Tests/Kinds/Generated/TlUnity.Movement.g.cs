@@ -520,6 +520,7 @@ if (__buf.Capacity > global::KindGame.KindCapacity.StatChange) __buf.TrimExcess(
 void Events(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks)
 {
 var __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle);
+var __copies = (global::Tl.Unity.TimelinePlaying*)chunk.GetComponentDataPtrRO(ref PlayingHandle);
 byte* __h0 = stackalloc byte[global::Tl.Events<global::KindGame.Cue>.HeaderBytes];
 var __has0 = chunk.Has(ref CuesEventHandle);
 var __acc0 = __has0 ? chunk.GetBufferAccessor(ref CuesEventHandle) : default;
@@ -528,6 +529,7 @@ for (var __row = 0; __row < chunk.Count; __row++)
 var __slots = __playbacks[__row];
 var __pbs = (global::Tl.Playback*)__slots.GetUnsafeReadOnlyPtr();
 var __n = __slots.Length;
+var __smp = __copies == null ? 0 : (int)__copies[__row].Copies; if (__n + __smp > __slots.Capacity) __smp = 0; var __pcs = __pbs + __n;
 var __o0 = default(DynamicBuffer<global::Tl.Unity.TimelineEvent<global::KindGame.Cue>>);
 var __cap0 = 0;
 if (__has0) { __o0 = __acc0[__row]; __o0.Clear(); __cap0 = __o0.Capacity < 8 ? 8 : __o0.Capacity; }
@@ -537,17 +539,19 @@ while (true)
 global::Tl.Events<global::KindGame.Cue> __eb0;
 if (__has0) { __o0.EnsureCapacity(__cap0); __eb0 = new global::Tl.Events<global::KindGame.Cue>(__h0, (global::Tl.EventRecord<global::KindGame.Cue>*)__o0.GetUnsafePtr(), __o0.Capacity); }
 else __eb0 = new global::Tl.Events<global::KindGame.Cue>(__h0, null, 0);
+var __pq = 0;
 for (var __s = 0; __s < __n; __s++)
 {
 var __ps = __pbs + __s;
-if (__ps->Timeline == 0 || (__ps->Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Stopping)) != 0) continue;
+if (__ps->Timeline == 0) continue;
 var __pcopy = *__ps;
 global::Tl.Unity.TimelineTicks.Decode(&__pcopy, (__clocks == null ? (ushort)0 : __clocks[__row]));
-var __pb = &__pcopy;
-var __pk = global::Tl.PlaybackRules.Crossings(in __pcopy);
+var __pb = &__pcopy; var __pk = 1; global::Tl.Playback* __pc = null;
+if (__pcopy.Rate != 0 && (__pk = global::Tl.KindRules.CopiesOf(__pcs, __smp, ref __pq, in __pcopy, out __pc)) == 0 && global::Tl.PlaybackRules.Crossed(in __pcopy) != 0) __pk = 1;
 for (var __j = 0; __j < __pk; __j++)
 {
-if (__j > 0 && (global::Tl.PlaybackRules.Advance(ref __pcopy, View.Timelines, View.TimelineCount, Forward) != global::Tl.AdvanceResult.Kept || (__pcopy.Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused)) != 0)) break;
+if (__pc != null) __pb = __pc + __j;
+if ((__pb->Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Stopping)) != 0) continue;
 if (Index.LacksPairs(__pb->Timeline, 4096UL)) continue;
 var __tl = global::Tl.LibraryViewReader.GetTimeline(in View, new global::Tl.TimelineId(__pb->Timeline));
 if (__tl == null || __tl->Duration == 0) continue;

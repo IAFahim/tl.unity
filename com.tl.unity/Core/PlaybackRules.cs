@@ -247,6 +247,25 @@ public static unsafe class PlaybackRules
     public static int Crossings(in Playback slot) => slot.Rate == 0 ? 1 : (slot.Phase + slot.Rate) >> 4;
 
     [MethodImpl(KindStore.Inline)]
+    public static int Crossed(in Playback slot) => slot.Rate == 0 ? 1 : slot.Rate <= slot.Phase ? 0 : (slot.Rate - slot.Phase + 15) >> 4;
+
+    public static int Rewind(ref Playback slot, int crossed, LibraryTimeline* timelines, int timelineCount, bool forward)
+    {
+        var index = (uint)(slot.Timeline - 1);
+        if (crossed <= 0 || index >= (uint)timelineCount || (slot.Flags & (PlaybackFlags.Ended | PlaybackFlags.Paused | PlaybackFlags.Stopping | PlaybackFlags.StartPending | PlaybackFlags.ReenterPending)) != 0) return 0;
+        var tick = slot.Tick + (forward == ((slot.Flags & PlaybackFlags.Reverse) == 0) ? -crossed : crossed);
+        if ((uint)tick >= timelines[index].Duration) return 0;
+        var from = slot;
+        from.Tick = (ushort)tick;
+        var walk = from;
+        for (var j = 0; j < crossed; j++)
+            if (Advance(ref walk, timelines, timelineCount, forward) != AdvanceResult.Kept || (walk.Flags & (PlaybackFlags.Ended | PlaybackFlags.Paused)) != 0) return 0;
+        if (walk.Timeline != slot.Timeline || walk.Tick != slot.Tick || walk.Flags != slot.Flags) return 0;
+        slot = from;
+        return crossed;
+    }
+
+    [MethodImpl(KindStore.Inline)]
     public static int Cross(ref Playback slot)
     {
         if (slot.Rate == 0) return 1;

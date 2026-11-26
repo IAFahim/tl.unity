@@ -1112,6 +1112,16 @@ namespace Tl.Unity.Tracks.Tests
         {
             var pinned = new Dictionary<ushort, string[]>
             {
+                { 8, new[]
+                    {
+                        "10: start 5 end  active 5 chime 5",
+                        "12: start  end 5 active 5 chime 5",
+                        "14: start 7 end 7 active 7 chime 12",
+                        "16: start 8 end  active 8 chime 20",
+                        "18: start  end  active 8 chime 20",
+                        "20: start  end 8 active 8 chime 20"
+                    }
+                },
                 { 16, new[]
                     {
                         "5: start 5 end  active 5 chime 5",
@@ -1128,41 +1138,47 @@ namespace Tl.Unity.Tracks.Tests
                 },
                 { 24, new[]
                     {
-                        "3: start 5 end  active 5 chime 0",
-                        "4: start  end 5 active 5 chime 5",
-                        "5: start 7,8 end 7 active 7,8 chime 12",
-                        "6: start  end  active 8 chime 20",
+                        "4: start 5 end 5 active 5,5 chime 5",
+                        "5: start 7 end 7 active 7 chime 12",
+                        "6: start 8 end  active 8,8 chime 20",
                         "7: start  end 8 active 8 chime 20",
                         "8: start 12 end 12 active 12 chime 32",
-                        "9: start 13 end  active 13,13 chime 45",
-                        "10: start  end 13 active 13 chime 45"
+                        "9: start 13 end  active 13 chime 45",
+                        "10: start  end 13 active 13,13 chime 45"
                     }
                 },
                 { 32, new[]
                     {
-                        "2: start 5 end  active 5 chime 0",
-                        "3: start 7 end 5,7 active 5,7 chime 5",
-                        "4: start 8 end  active 8,8 chime 20",
-                        "5: start  end 8 active 8 chime 20",
-                        "6: start 12,13 end 12 active 12,13 chime 32",
-                        "7: start  end 13 active 13,13 chime 45"
+                        "3: start 5 end 5 active 5,5 chime 5",
+                        "4: start 7,8 end 7 active 7,8 chime 20",
+                        "5: start  end 8 active 8,8 chime 20",
+                        "6: start 12 end 12 active 12 chime 32",
+                        "7: start 13 end  active 13,13 chime 45",
+                        "8: start  end 13 active 13 chime 45"
                     }
                 },
                 { 40, new[]
                     {
+                        "2: start 5 end  active 5 chime 5",
+                        "3: start 7 end 5,7 active 5,7 chime 12",
+                        "4: start 8 end 8 active 8,8,8 chime 20",
+                        "5: start 12 end 12 active 12 chime 32",
+                        "6: start 13 end 13 active 13,13,13 chime 45"
+                    }
+                },
+                { 48, new[]
+                    {
                         "2: start 5 end 5 active 5,5 chime 5",
-                        "3: start 7,8 end 7 active 7,8,8 chime 12",
-                        "4: start  end 8 active 8 chime 20",
-                        "5: start 12,13 end 12 active 12,13,13 chime 32",
-                        "6: start  end 13 active 13 chime 45"
+                        "3: start 7,8 end 7 active 7,8,8 chime 20",
+                        "4: start 12 end 8,12 active 8,12 chime 32",
+                        "5: start 13 end 13 active 13,13,13 chime 45"
                     }
                 },
                 { 64, new[]
                     {
-                        "1: start 5,7 end 5,7 active 5,5,7 chime 0",
-                        "2: start 8 end 8 active 8,8,8 chime 20",
-                        "3: start 12,13 end 12,13 active 12,13,13,13 chime 32",
-                        "4: start  end  active  chime 45"
+                        "2: start 5,7,8 end 5,7 active 5,5,7,8 chime 20",
+                        "3: start 12 end 8,12 active 8,8,12 chime 32",
+                        "4: start 13 end 13 active 13,13,13 chime 45"
                     }
                 },
             };

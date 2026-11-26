@@ -145,6 +145,8 @@ namespace Tl
                 return _view;
             }
         }
+        public LibraryView SystemView => _view;
+
         internal void AdoptView(LibraryView view)
         {
             _glideViewEscaped = true;
