@@ -90,6 +90,7 @@ public sealed unsafe partial class KindStore : IDisposable
     bool _disposed;
     string[] _kindNames = Array.Empty<string>();
     Dictionary<string, int> _kindIndex = new(StringComparer.Ordinal);
+    readonly Dictionary<Type, nint> _columns = new();
     int[] _valueBytes = Array.Empty<int>();
     byte[] _accepts = Array.Empty<byte>();
     bool[] _folds = Array.Empty<bool>();
@@ -161,6 +162,13 @@ public sealed unsafe partial class KindStore : IDisposable
     {
         var t = _tables[kind];
         return t == null ? default : new KindStats(t->Rows, t->ColdMaxLength(), t->ColdOverflows(), t->StorageBytesPerRow);
+    }
+
+    public Span<T> Column<T>() where T : unmanaged
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(KindStore));
+        if (!_columns.TryGetValue(typeof(T), out var at)) _columns.Add(typeof(T), at = (nint)Zeroed((nuint)(sizeof(T) * _players.EntityCapacity)));
+        return new Span<T>((void*)at, _players.EntityCapacity);
     }
 
     public KindPulses<T> Pulses<T>(string kind) where T : unmanaged
@@ -1108,6 +1116,8 @@ public sealed unsafe partial class KindStore : IDisposable
         if (_disposed) return;
         _disposed = true;
         Release();
+        foreach (var column in _columns.Values) NativeMemory.AlignedFree((void*)column);
+        _columns.Clear();
         _players.AttachKinds(null);
         GC.SuppressFinalize(this);
     }

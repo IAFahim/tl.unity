@@ -188,7 +188,7 @@ namespace Tl.Gen.Unity
                 if (diagnostic.Code == "TLGEN107")
                     continue;
                 var info = diagnostic.Code == "TLGEN115";
-                var warning = diagnostic.Code is "TLGEN98" or "TLGEN113" or "TLGEN114";
+                var warning = diagnostic.Code is "TLGEN98" or "TLGEN113" or "TLGEN114" or "TLGEN117";
                 if (!warning && !info)
                     failed = true;
                 context.ReportDiagnostic(Diagnostic.Create(

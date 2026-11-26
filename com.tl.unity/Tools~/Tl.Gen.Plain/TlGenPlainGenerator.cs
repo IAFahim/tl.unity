@@ -46,7 +46,7 @@ namespace Tl.Gen.Plain
             var emitted = Tl.Gen.CSharp.SystemGeneration.Emit(csharp, id);
             foreach (var diagnostic in emitted.Diagnostics)
                 context.ReportDiagnostic(Diagnostic.Create(
-                    new DiagnosticDescriptor(diagnostic.Code, "Invalid timeline declaration", "{0}", "Tl.Generation", diagnostic.Code == "TLGEN115" ? DiagnosticSeverity.Info : diagnostic.Code is "TLGEN98" or "TLGEN113" or "TLGEN114" ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error, true),
+                    new DiagnosticDescriptor(diagnostic.Code, "Invalid timeline declaration", "{0}", "Tl.Generation", diagnostic.Code == "TLGEN115" ? DiagnosticSeverity.Info : diagnostic.Code is "TLGEN98" or "TLGEN113" or "TLGEN114" or "TLGEN117" ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error, true),
                     Location(diagnostic), diagnostic.Message));
             if (emitted.Artifacts.Count == 0)
                 return;
