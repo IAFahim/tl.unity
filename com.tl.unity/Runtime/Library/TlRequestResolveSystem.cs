@@ -102,26 +102,27 @@ namespace Tl.Unity
     [UpdateBefore(typeof(TimelineKindTickSystem))]
     public unsafe partial struct TlKindReachSystem : ISystem
     {
-        EntityQuery _partial;
+        EntityQuery _requesting;
         BufferTypeHandle<TimelineRequest> _requests;
         EntityTypeHandle _entities;
-        NativeQueue<TlKindGrow> _grow;
+        NativeList<DynamicComponentTypeHandle> _entries;
         ulong _identity;
         uint _generation;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
+            _requesting = new EntityQueryBuilder(Allocator.Temp).WithAll<Playback, TimelineRequest>().WithOptions(EntityQueryOptions.IgnoreComponentEnabledState).Build(ref state);
+            _requesting.SetChangedVersionFilter(ComponentType.ReadOnly<TimelineRequest>());
             _requests = state.GetBufferTypeHandle<TimelineRequest>(true);
             _entities = state.GetEntityTypeHandle();
-            _grow = new NativeQueue<TlKindGrow>(Allocator.Persistent);
+            _entries = new NativeList<DynamicComponentTypeHandle>(Allocator.Persistent);
             state.RequireForUpdate<TimelineLibrary>();
         }
 
         public void OnDestroy(ref SystemState state)
         {
-            state.CompleteDependency();
-            _grow.Dispose();
+            _entries.Dispose();
         }
 
         [BurstCompile]
@@ -136,47 +137,55 @@ namespace Tl.Unity
             {
                 _identity = identity;
                 _generation = library.Generation;
-                _partial = Partial(ref state, in index);
+                _entries.Clear();
+                for (var k = 0; k < index.KindCount; k++)
+                    _entries.Add(state.GetDynamicComponentTypeHandle(ComponentType.ReadOnly(index.EntryTypes[k].TypeIndex)));
             }
-            if (_partial.IsEmpty)
+            if (_requesting.IsEmpty)
                 return;
+            _requesting.CompleteDependency();
+            for (var k = 0; k < _entries.Length; k++)
+            {
+                var handle = _entries[k];
+                handle.Update(ref state);
+                _entries[k] = handle;
+            }
             _requests.Update(ref state);
             _entities.Update(ref state);
-            new TlKindReachJob
+            var grow = new NativeList<TlKindGrow>(Allocator.Temp);
+            var chunks = _requesting.ToArchetypeChunkArray(Allocator.Temp);
+            for (var c = 0; c < chunks.Length; c++)
             {
-                Requests = _requests,
-                Entities = _entities,
-                Closure = index.Closure,
-                TimelineCount = index.TimelineCount,
-                Bound = index.Bound,
-                Grow = _grow.AsParallelWriter(),
-            }.ScheduleParallel(_partial, state.Dependency).Complete();
-            if (_grow.IsEmpty())
-                return;
-            var manager = state.EntityManager;
-            while (_grow.TryDequeue(out var grow))
-                Add(manager, in index, grow.Entity, grow.Kinds);
-        }
-
-        static EntityQuery Partial(ref SystemState state, in KindIndex index)
-        {
-            var builder = new EntityQueryBuilder(Allocator.Temp);
-            var none = new NativeList<ComponentType>(1, Allocator.Temp);
-            var first = true;
-            for (var k = 0; k < index.KindCount; k++)
-            {
-                if ((index.Bound & (1ul << k)) == 0) continue;
-                if (!first) builder.AddAdditionalQuery();
-                first = false;
-                none.Clear();
-                none.Add(ComponentType.ReadOnly(index.EntryTypes[k].TypeIndex));
-                builder.WithAll<Playback, TimelineRequest>().WithNone(ref none).WithOptions(EntityQueryOptions.IgnoreComponentEnabledState);
+                var chunk = chunks[c];
+                var missing = index.Bound;
+                for (var bits = index.Bound; bits != 0; bits &= bits - 1)
+                {
+                    var k = math.tzcnt(bits);
+                    var handle = _entries[k];
+                    if (chunk.Has(ref handle))
+                        missing &= ~(1ul << k);
+                }
+                if (missing == 0)
+                    continue;
+                var buffers = chunk.GetBufferAccessor(ref _requests);
+                var entities = chunk.GetNativeArray(_entities);
+                for (var row = 0; row < chunk.Count; row++)
+                {
+                    var requests = buffers[row];
+                    var needed = 0ul;
+                    for (var i = 0; i < requests.Length; i++)
+                    {
+                        var request = requests[i];
+                        if (request.Op == global::Tl.RequestOp.Start && request.Timeline != 0 && request.Timeline <= index.TimelineCount)
+                            needed |= index.Closure[request.Timeline - 1];
+                    }
+                    if ((needed & missing) != 0)
+                        grow.Add(new TlKindGrow { Entity = entities[row], Kinds = needed & missing });
+                }
             }
-            var query = builder.Build(ref state);
-            query.SetChangedVersionFilter(ComponentType.ReadWrite<TimelineRequest>());
-            none.Dispose();
-            builder.Dispose();
-            return query;
+            var manager = state.EntityManager;
+            for (var i = 0; i < grow.Length; i++)
+                Add(manager, in index, grow[i].Entity, grow[i].Kinds);
         }
 
         static void Add(EntityManager manager, in KindIndex index, Entity entity, ulong kinds)
@@ -215,37 +224,6 @@ namespace Tl.Unity
                     types.Clear();
                 }
                 types.Add(type);
-            }
-        }
-    }
-
-    [BurstCompile]
-    public unsafe struct TlKindReachJob : IJobChunk
-    {
-        [ReadOnly] public BufferTypeHandle<TimelineRequest> Requests;
-        [ReadOnly] public EntityTypeHandle Entities;
-        [NativeDisableUnsafePtrRestriction] public ulong* Closure;
-        public int TimelineCount;
-        public ulong Bound;
-        public NativeQueue<TlKindGrow>.ParallelWriter Grow;
-
-        public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
-        {
-            var buffers = chunk.GetBufferAccessor(ref Requests);
-            var entities = chunk.GetNativeArray(Entities);
-            for (var row = 0; row < chunk.Count; row++)
-            {
-                var requests = buffers[row];
-                var needed = 0ul;
-                for (var i = 0; i < requests.Length; i++)
-                {
-                    var request = requests[i];
-                    if (request.Op == global::Tl.RequestOp.Start && request.Timeline != 0 && request.Timeline <= TimelineCount)
-                        needed |= Closure[request.Timeline - 1];
-                }
-                needed &= Bound;
-                if (needed != 0)
-                    Grow.Enqueue(new TlKindGrow { Entity = entities[row], Kinds = needed });
             }
         }
     }
