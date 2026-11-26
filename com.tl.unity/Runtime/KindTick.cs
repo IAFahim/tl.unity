@@ -318,7 +318,11 @@ namespace Tl.Unity
                     var slots = new KindSlots(playbacks[row], &ctx, row);
                     BySlot((TimelineRequest*)queue.GetUnsafePtr(), queue.Length);
                     for (var r = 0; r < queue.Length; r++)
+                    {
+                        if (queue[r].Op == global::Tl.RequestOp.Start && queue[r].Timeline > Index.TimelineCount)
+                            System.Threading.Interlocked.Increment(ref Counters[KindCounter.DroppedStarts]);
                         global::Tl.PlaybackRules.Apply(ref slots, Index.Timelines, Index.TimelineCount, queue[r].Op, queue[r].Timeline, queue[r].At);
+                    }
                     queue.Clear();
                     if (clocks != null)
                     {

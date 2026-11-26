@@ -332,6 +332,18 @@ namespace KindGame
         }
 
         [Test]
+        public void AStartOfAnIdPastTheLibraryIsDroppedAndCountedAndIdZeroIsANoOp()
+        {
+            var before = _game.Slots(0).Length;
+            var requests = _game.Entities.GetBuffer<TimelineRequest>(_game.Rows[0]);
+            requests.Add(TimelineRequest.Start(0, 60000));
+            requests.Add(TimelineRequest.Start(0, 0));
+            _game.Step();
+            Assert.AreEqual(1, _game.Tick.DroppedStarts);
+            Assert.AreEqual(before, _game.Slots(0).Length);
+        }
+
+        [Test]
         public void AStartWhoseKindsTheEntityCannotReachIsDroppedAndCounted()
         {
             var bare = _game.Entities.CreateEntity(typeof(Playback), typeof(TimelineRequest), typeof(TimelinePlaying));
