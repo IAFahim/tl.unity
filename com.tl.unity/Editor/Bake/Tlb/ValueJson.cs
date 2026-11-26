@@ -4,6 +4,43 @@ using System.Text.Json;
 
 namespace Tl.Gen.Tlb;
 
+internal sealed class TextTable
+{
+    [ThreadStatic] static TextTable? _current;
+    internal readonly SortedDictionary<ulong, string> Strings = new();
+
+    internal static TextTable? Current => _current;
+
+    internal static Scope Use(TextTable table) => new(table);
+
+    internal static TextTable Of(IEnumerable<string> texts, string context)
+    {
+        var table = new TextTable();
+        foreach (var text in texts)
+            if (!string.IsNullOrEmpty(text))
+                table.Add(text, context);
+        return table;
+    }
+
+    internal static ulong Key(string text, string context) => _current?.Add(text, context) ?? TlText.Of(text).Value;
+
+    internal ulong Add(string text, string context)
+    {
+        var key = TlText.Of(text).Value;
+        if (Strings.TryGetValue(key, out var known) && known != text)
+            throw new BakeDiagnosticException($"{context}: texts '{known}' and '{text}' share one key; reword one of them.");
+        Strings[key] = text;
+        return key;
+    }
+
+    internal readonly struct Scope : IDisposable
+    {
+        readonly TextTable? _previous;
+        internal Scope(TextTable table) { _previous = _current; _current = table; }
+        public void Dispose() => _current = _previous;
+    }
+}
+
 internal static class ValueJson
 {
     internal static object Read(Type type, JsonElement element, string context, LibraryManifest? manifest = null)
@@ -35,6 +72,13 @@ internal static class ValueJson
                 throw new BakeDiagnosticException($"unknown timeline: field '{field}' in {owner} names unknown timeline '{name}'.");
             }
             throw new BakeDiagnosticException($"wrong-typed value: field '{field}' in {owner} expected timeline name, got {element.ValueKind}.");
+        }
+        if (type == typeof(TlText))
+        {
+            if (element.ValueKind != JsonValueKind.String)
+                throw new BakeDiagnosticException($"wrong-typed value: field '{field}' in {owner} expected text string, got {element.ValueKind}.");
+            var text = element.GetString()!;
+            return text.Length == 0 ? default(TlText) : new TlText(TextTable.Key(text, context));
         }
         if (type.IsEnum)
         {
@@ -121,6 +165,14 @@ internal static class ValueJson
             var name = id == 0 ? "" : manifest?.Timelines.FirstOrDefault(p => p.Value == id).Key;
             if (name == null) throw new BakeDiagnosticException($"cannot export unresolved timeline id {id}; provide its manifest.");
             writer.WriteStringValue(name);
+        }
+        else if (type == typeof(TlText))
+        {
+            var key = ((TlText)value).Value;
+            string? text = "";
+            if (key != 0 && (TextTable.Current == null || !TextTable.Current.Strings.TryGetValue(key, out text)))
+                throw new BakeDiagnosticException($"cannot export text key {key}; the timeline carries no string for it.");
+            writer.WriteStringValue(text);
         }
         else if (type.IsEnum)
         {

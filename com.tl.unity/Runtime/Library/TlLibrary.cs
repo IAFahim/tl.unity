@@ -51,6 +51,8 @@ namespace Tl.Unity
 
         public ushort IdOf(Hash128 asset) => _ids.TryGetValue(asset, out var id) ? id : (ushort)0;
 
+        public string Text(global::Tl.TlText text) => _world == null ? "" : _world.Text(text);
+
         public ushort Find(string name)
         {
             for (var i = 0; i < _entries.Count; i++)

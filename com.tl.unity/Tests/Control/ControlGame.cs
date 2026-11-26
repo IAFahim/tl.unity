@@ -10,6 +10,19 @@ public struct ThenPlayClip
     public float Gain;
 }
 
+[TlClip("Say")]
+public struct SayClip
+{
+    public TlText Line;
+    public float Gain;
+}
+
+public struct SayTrack : ITlTrack<SayClip>
+{
+    [Feeds(typeof(ControlKind))]
+    public static float Evaluate(in TlFrame<SayClip> frame) => frame.Clip.Gain;
+}
+
 [TlKind]
 public struct ControlKind
 {

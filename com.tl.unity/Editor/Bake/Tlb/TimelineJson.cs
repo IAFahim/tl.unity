@@ -11,6 +11,7 @@ public static class TimelineJson
 
     static string Encode(TypedTimeline timeline, LibraryManifest? manifest)
     {
+        using var texts = TextTable.Use(TextTable.Of(timeline.Texts, "texts"));
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
         {
@@ -97,6 +98,10 @@ public static class TimelineJson
             Next = Reference(Label(-3, -1), manifest?.Timelines, Word(tlb, 52), "timeline"),
             Channel = Reference(Label(-2, -1), manifest?.Channels, Word(tlb, 56), "channel"),
         };
+        var textAt = Word(tlb, 72);
+        for (var i = 0; i < Word(tlb, 76); i++)
+            timeline.Texts.Add(Encoding.UTF8.GetString(tlb, Word(tlb, textAt + 16 * i + 8), Word(tlb, textAt + 16 * i + 12)));
+        using var texts = TextTable.Use(TextTable.Of(timeline.Texts, "decode texts"));
         var pairs = new (Type Track, Type Clip)[Word(tlb, 24)];
         for (var i = 0; i < pairs.Length; i++)
         {
