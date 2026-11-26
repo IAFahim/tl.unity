@@ -102,6 +102,7 @@ public readonly unsafe struct TimelineRef
 				if (markerOff < h.FrameOffset || markerOff % 8 != 0 || markerOff > h.HotLength) Fail("TLB marker section out of bounds.");
 				ValidateMarkers(baked, (int)markerOff, (int)markerCount, h.Duration, h.HotLength);
 			}
+			ValidateTexts(baked, U32(baked, 72), U32(baked, 76), h);
 		}
 		var pairs = MemoryMarshal.Cast<byte, NativePair>(baked.Slice((int)h.PairOffset, 48 * (int)h.PairCount));
 		for (var i = 1; i < pairs.Length; i++) if (pairs[i - 1].Key >= pairs[i].Key) Fail("TLB pair keys must be sorted.");
@@ -149,6 +150,34 @@ public readonly unsafe struct TimelineRef
 			if (off > hotLength) Fail("TLB marker payload out of bounds.");
 		}
 		if (off > hotLength) Fail("TLB marker section out of bounds.");
+	}
+
+	internal const int TextRowBytes = 16;
+
+	internal static uint TextCount(ReadOnlySpan<byte> baked, out int at)
+	{
+		at = 0;
+		if (baked.Length < 80 || U32(baked, 4) != 6) return 0;
+		at = (int)U32(baked, 72);
+		return U32(baked, 76);
+	}
+
+	static void ValidateTexts(ReadOnlySpan<byte> baked, uint at, uint count, NativeHeader h)
+	{
+		if (count == 0) { if (at != 0) Fail("TLB text offset must be zero when count is zero."); return; }
+		if (at < h.FrameOffset || at % 8 != 0 || at + (ulong)count * TextRowBytes > h.HotLength) Fail("TLB text section out of bounds.");
+		var blob = at + count * (uint)TextRowBytes;
+		ulong previous = 0;
+		for (var i = 0; i < count; i++)
+		{
+			var row = (int)(at + i * (uint)TextRowBytes);
+			var key = BinaryPrimitives.ReadUInt64LittleEndian(baked.Slice(row));
+			var offset = U32(baked, row + 8);
+			var length = U32(baked, row + 12);
+			if (key == 0 || key <= previous) Fail("TLB text keys must be nonzero and sorted.");
+			if (length == 0 || offset < blob || (ulong)offset + length > h.HotLength) Fail("TLB text string out of bounds.");
+			previous = key;
+		}
 	}
 
 	static void ValidatePool(NativeHeader h, ulong address, uint count, uint valueBytes)

@@ -10,14 +10,37 @@ namespace Tl
         public static TimelineId None => default;
     }
 
+    public readonly struct TlText : IEquatable<TlText>
+    {
+        public readonly ulong Value;
+        public TlText(ulong value) { Value = value; }
+        public bool IsNone => Value == 0;
+        public static TlText None => default;
+        public static TlText Of(string text) => string.IsNullOrEmpty(text) ? default : new TlText(Keying.Of(text));
+        public bool Equals(TlText other) => Value == other.Value;
+        public override bool Equals(object? obj) => obj is TlText other && Value == other.Value;
+        public override int GetHashCode() => Value.GetHashCode();
+        public static bool operator ==(TlText a, TlText b) => a.Value == b.Value;
+        public static bool operator !=(TlText a, TlText b) => a.Value != b.Value;
+    }
+
+    public unsafe struct LibraryText
+    {
+        public ulong Key;
+        public int Length;
+        public byte* Utf8;
+    }
+
     public unsafe struct LibraryView
     {
-        public const uint AbiVersion = 2u;
+        public const uint AbiVersion = 3u;
         public uint Version;
         public int TimelineCount;
         public LibraryTimeline* Timelines;
         public uint ByteCount;
         public KindSectionView Kinds;
+        public int TextCount;
+        public LibraryText* Texts;
     }
 
     public unsafe struct LibraryTimeline
@@ -75,6 +98,20 @@ namespace Tl
         {
             if (id.Value == 0 || id.Value > view.TimelineCount) return null;
             return view.Timelines + (id.Value - 1);
+        }
+
+        public static ReadOnlySpan<byte> Text(in LibraryView view, TlText text)
+        {
+            int lo = 0, hi = view.TextCount - 1;
+            while (text.Value != 0 && lo <= hi)
+            {
+                var m = (lo + hi) >> 1;
+                var key = view.Texts[m].Key;
+                if (key == text.Value) return new ReadOnlySpan<byte>(view.Texts[m].Utf8, view.Texts[m].Length);
+                if (key < text.Value) lo = m + 1;
+                else hi = m - 1;
+            }
+            return ReadOnlySpan<byte>.Empty;
         }
 
         public static LibraryStage* StageAt(LibraryTimeline* tl, ushort tick)

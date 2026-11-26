@@ -293,6 +293,7 @@ internal sealed class FastDoc
     internal string? ChannelName;
     internal readonly List<FastMarker> Markers = new();
     internal LibraryManifest? Manifest;
+    internal TextTable Texts = new();
     internal uint NextId;
     internal uint ChannelId;
 }
@@ -312,8 +313,11 @@ internal static class TimelineBakerFast
     internal static byte[] BakeJsonUtf8(byte[] utf8, BakerAssemblyResolver? resolver = null, BakeWorkspace? workspace = null, bool autoNamespace = false, LibraryManifest? manifest = null)
     {
         resolver ??= new BakerAssemblyResolver();
+        var texts = new TextTable();
+        using var scope = TextTable.Use(texts);
         var doc = TimelineBakerSimd.TryParseFast(utf8, resolver, workspace, out var fast, autoNamespace) ? fast : ParseFast(utf8, resolver, workspace, autoNamespace, manifest);
         if (manifest != null) doc.Manifest = manifest;
+        doc.Texts = texts;
         try
         {
             return TimelineBakerFastCore.BakeFast(doc, resolver);
@@ -2090,6 +2094,18 @@ internal static class TimelineBakerFastCore
             if (doc.Markers.Count > 0) markerOffset = (markerOffset + 7u) & ~7u;
             else markerOffset = 0u;
             var hotLength = doc.Markers.Count > 0 ? markerOffset + markerSize : hotSlotsEnd;
+            var textOffset = 0u;
+            var textBytes = new List<byte[]>(doc.Texts.Strings.Count);
+            if (doc.Texts.Strings.Count > 0)
+            {
+                textOffset = (hotLength + 7u) & ~7u;
+                hotLength = textOffset + (uint)(doc.Texts.Strings.Count * Tl.TimelineRef.TextRowBytes);
+                foreach (var text in doc.Texts.Strings.Values)
+                {
+                    textBytes.Add(Encoding.UTF8.GetBytes(text));
+                    hotLength += (uint)textBytes[^1].Length;
+                }
+            }
             var markerTypes = new List<(Type Track, Type Clip)>();
             var seenMarkerTypes = new HashSet<Type>();
             foreach (var marker in doc.Markers)
@@ -2129,8 +2145,8 @@ internal static class TimelineBakerFastCore
             BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(60), doc.Hold ? 1u : 0u);
             BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(64), markerOffset);
             BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(68), (uint)doc.Markers.Count);
-            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(72), 0u);
-            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(76), 0u);
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(72), textOffset);
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(76), (uint)textBytes.Count);
 
             for (var index = 0; index < pairCount; index++)
             {
@@ -2230,6 +2246,22 @@ internal static class TimelineBakerFastCore
                     BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(moff + 8), marker.Key);
                     marker.Payload.CopyTo(bytes.AsSpan(moff + 16));
                     moff += 16 + ((marker.Payload.Length + 3) & ~3);
+                }
+            }
+
+            if (textBytes.Count > 0)
+            {
+                var row = (int)textOffset;
+                var blob = row + textBytes.Count * Tl.TimelineRef.TextRowBytes;
+                var t = 0;
+                foreach (var key in doc.Texts.Strings.Keys)
+                {
+                    BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(row), key);
+                    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(row + 8), (uint)blob);
+                    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(row + 12), (uint)textBytes[t].Length);
+                    textBytes[t].CopyTo(bytes, blob);
+                    blob += textBytes[t++].Length;
+                    row += Tl.TimelineRef.TextRowBytes;
                 }
             }
 

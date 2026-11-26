@@ -30,6 +30,7 @@ namespace Tl
         ChannelMismatch = 18,
         UnknownNext = 19,
         KindSection = 20,
+        Text = 21,
     }
 
     public sealed unsafe partial class TimelineWorld : IDisposable
@@ -192,6 +193,7 @@ namespace Tl
                     }
                     TrackFree(_view.Timelines);
                 }
+                TrackFree(_view.Texts);
                 TrackFree(_base);
                 foreach (var arena in _arenas) TrackFree((void*)arena);
                 _arenas.Clear();
@@ -202,6 +204,8 @@ namespace Tl
             _view.TimelineCount = 0;
             _view.ByteCount = 0;
             _view.Kinds = default;
+            _view.Texts = null;
+            _view.TextCount = 0;
             _byteCount = 0;
             _manifestCount = 0;
             _generation++;
@@ -247,6 +251,7 @@ namespace Tl
             if (!library.Slice(digestAt).SequenceEqual(calcSpan)) return (LibraryError.DigestMismatch, digestAt, "game.tlib digest mismatch; file is corrupt or truncated.");
             if (count == 0) return (LibraryError.None, -1, "");
             var durations = new LibraryTimeline[count];
+            Dictionary<ulong, string>? texts = null;
             string? prev = null;
             for (uint i = 0; i < count; i++)
             {
@@ -277,6 +282,20 @@ namespace Tl
                 var blobNext = blobVersion == 6 ? U32(blob, 52) : 0u;
                 if (channel != blobChannel) return (LibraryError.ChannelMismatch, (int)tlbOff, $"game.tlib manifest entry '{name}' channel {channel} does not match timeline channel {blobChannel}.");
                 if (blobNext > count) return (LibraryError.UnknownNext, (int)tlbOff, "game.tlib timeline has unknown next id; file is corrupt or truncated.");
+                var textCount = TimelineRef.TextCount(blob, out var textAt);
+                for (var t = 0; t < textCount; t++)
+                {
+                    var row = textAt + t * TimelineRef.TextRowBytes;
+                    var key = BinaryPrimitives.ReadUInt64LittleEndian(blob.Slice(row));
+                    var utf8 = blob.Slice((int)U32(blob, row + 8), (int)U32(blob, row + 12));
+                    string text;
+                    try { text = new UTF8Encoding(false, true).GetString(utf8.ToArray()); }
+                    catch { return (LibraryError.Text, (int)tlbOff + row, $"game.tlib timeline '{name}' text is not valid UTF-8."); }
+                    if (Keying.Of(text) != key) return (LibraryError.Text, (int)tlbOff + row, $"game.tlib timeline '{name}' text '{text}' does not match its key; rebake it.");
+                    texts ??= new Dictionary<ulong, string>();
+                    if (texts.TryGetValue(key, out var known) && known != text) return (LibraryError.Text, (int)tlbOff + row, $"game.tlib texts '{known}' and '{text}' share one key; reword one of them.");
+                    texts[key] = text;
+                }
             }
             if (version == 2u)
             {
@@ -329,6 +348,39 @@ namespace Tl
                 BuildTimeline(timelines + i, (ushort)id, blob, tlbOff);
             }
             if (version == 2u) _view.Kinds = KindSectionReader.CreateView(_base + kindOff, kindLen, (int)count, timelines);
+            LoadTexts(manifestOff, count);
+        }
+
+        unsafe void LoadTexts(uint manifestOff, uint count)
+        {
+            var rows = new List<LibraryText>();
+            for (uint i = 0; i < count; i++)
+            {
+                var at = (int)(manifestOff + i * 32u);
+                var tlbOff = U32(_base, at + 16);
+                var blob = new ReadOnlySpan<byte>(_base + tlbOff, (int)U32(_base, at + 20));
+                var textCount = TimelineRef.TextCount(blob, out var textAt);
+                for (var t = 0; t < textCount; t++)
+                {
+                    var row = textAt + t * TimelineRef.TextRowBytes;
+                    rows.Add(new LibraryText { Key = BinaryPrimitives.ReadUInt64LittleEndian(blob.Slice(row)), Length = (int)U32(blob, row + 12), Utf8 = _base + tlbOff + U32(blob, row + 8) });
+                }
+            }
+            if (rows.Count == 0) return;
+            rows.Sort((a, b) => a.Key.CompareTo(b.Key));
+            var texts = (LibraryText*)TrackAlloc((nuint)(rows.Count * sizeof(LibraryText)));
+            var n = 0;
+            foreach (var row in rows)
+                if (n == 0 || texts[n - 1].Key != row.Key)
+                    texts[n++] = row;
+            _view.Texts = texts;
+            _view.TextCount = n;
+        }
+
+        public string Text(TlText text)
+        {
+            var utf8 = LibraryViewReader.Text(in _view, text);
+            return utf8.IsEmpty ? "" : Encoding.UTF8.GetString(utf8);
         }
 
         unsafe void BuildTimeline(LibraryTimeline* tl, ushort id, ReadOnlySpan<byte> blob, uint tlbOff)

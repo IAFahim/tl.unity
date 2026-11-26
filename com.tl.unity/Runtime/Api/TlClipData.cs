@@ -10,6 +10,7 @@ namespace Tl.Unity
     {
         public static Func<UnityEngine.Object, global::Unity.Entities.Hash128> AssetResolver;
         public static Func<UnityEngine.Object, ushort> LocalIdResolver;
+        public static Action<string> TextCollector;
 
         public abstract string MenuName { get; }
         public abstract Type ClipType { get; }
@@ -26,6 +27,13 @@ namespace Tl.Unity
         public static global::Tl.TimelineId IdOf(UnityEngine.Object timeline)
         {
             return new global::Tl.TimelineId(timeline == null || LocalIdResolver == null ? (ushort)0 : LocalIdResolver(timeline));
+        }
+
+        public static global::Tl.TlText TextOf(string text)
+        {
+            if (!string.IsNullOrEmpty(text))
+                TextCollector?.Invoke(text);
+            return global::Tl.TlText.Of(text);
         }
     }
 }

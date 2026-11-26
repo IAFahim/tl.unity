@@ -179,7 +179,7 @@ namespace Tl.Unity.Editor
                         if (clip.Name != null)
                             item.displayName = clip.Name;
                         var data = (TlClipData)Activator.CreateInstance(mirror);
-                        Fill(data, Unpack(clip.Type, clip.Data), made, timeline, "the clip at " + item.start.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + " s");
+                        Fill(data, Unpack(clip.Type, clip.Data), made, typed.Texts, timeline, "the clip at " + item.start.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + " s");
                         ((TlClip)item.asset).Data = data;
                         EditorUtility.SetDirty(item.asset);
                     }
@@ -199,7 +199,7 @@ namespace Tl.Unity.Editor
                 if (AssetDatabase.Contains(timeline) && !AssetDatabase.Contains(item))
                     AssetDatabase.AddObjectToAsset(item, timeline);
                 var data = (TlMarkerData)Activator.CreateInstance(mirror);
-                Fill(data, Unpack(marker.Type, marker.Data), made, timeline, "the marker at tick " + marker.Tick);
+                Fill(data, Unpack(marker.Type, marker.Data), made, typed.Texts, timeline, "the marker at tick " + marker.Tick);
                 item.Data = data;
                 EditorUtility.SetDirty(item);
             }
@@ -217,7 +217,7 @@ namespace Tl.Unity.Editor
             EditorUtility.SetDirty(timeline);
         }
 
-        static void Fill(TlClipData data, object value, List<TimelineAsset> made, TimelineAsset timeline, string where)
+        static void Fill(TlClipData data, object value, List<TimelineAsset> made, List<string> texts, TimelineAsset timeline, string where)
         {
             foreach (var field in data.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
             {
@@ -229,6 +229,8 @@ namespace Tl.Unity.Editor
                     field.SetValue(data, read);
                 else if (read is TlCurve curve && field.FieldType == typeof(AnimationCurve))
                     field.SetValue(data, TlCurveAuthoring.Curve(curve));
+                else if (read is TlText text && field.FieldType == typeof(string))
+                    field.SetValue(data, text.IsNone ? "" : texts.FirstOrDefault(t => TlText.Of(t) == text) ?? "");
                 else if (read is TimelineId id && field.FieldType == typeof(TimelineAsset))
                     field.SetValue(data, id.IsNone || id.Value > made.Count ? null : made[id.Value - 1]);
                 else if (read is TlTimeline reference && field.FieldType == typeof(TimelineAsset))

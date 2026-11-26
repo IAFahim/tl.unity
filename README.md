@@ -342,7 +342,7 @@ public struct TeleportClip { public float Distance; public bool ComeBack; }
 
 - Plain data, no logic. Every field becomes an Inspector field on the clip.
 - The text in `[TlClip("...")]` is the name in the Timeline window's **+** menu. A slash makes a submenu.
-- Fields must be **unmanaged**: numbers, bool, enums, structs of those, `float3`. No `string`, no classes. A `TlCurve` field shows as an `AnimationCurve` and is sampled to 16 points.
+- Fields must be **unmanaged**: numbers, bool, enums, structs of those, `float3`. No `string`, no classes. A `TlCurve` field shows as an `AnimationCurve` and is sampled to 16 points. For text, use a `TlText` field (see 8.5).
 - Another timeline as a field: use `TlTimeline` (the designer drags a timeline in, you can start it from code, see 8.4).
 
 ### 3.2 Track: "what value does this clip produce?"
@@ -846,6 +846,7 @@ Run it from a system in `TlSimulationGroup` with `OrderLast = true` (events are 
 ### 8.5 Curves, markers, baking
 
 - A `TlCurve` clip field is an `AnimationCurve` in the Inspector, sampled to 16 points. Read it with `curve.Evaluate(frame.Progress)`.
+- A `TlText` clip or marker field is a text box in the Inspector. The clip holds an 8-byte key, and the baked library stores the string once. Read it on the main thread with `library.Text(clip.Line)`, or in Burst with `LibraryViewReader.Text(in timelineLibrary.View, clip.Line)`, which gives the UTF-8 bytes. An empty box is `TlText.None`.
 - A marker is a point (not a stretch) on the timeline. Write `struct Bell : IMarker<BellMarker>` with a `[Pulse(typeof(MyKind), On = ClipEvent.Marker)]` method taking `MarkerFrame<BellMarker>`. See the Inventory pack's `PickupMarker`.
 - Need extra components for a clip? Write `ITlBaker<TClip>` and call `baker.AddComponent<T>()`, `AddBuffer<T>()`, `AddBlob(...)`.
 - Ticks per second (default 60) are in Project Settings > **Tl**. Clip times round to whole ticks.

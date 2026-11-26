@@ -10,6 +10,7 @@ public sealed class TypedTimeline
     public string? Channel { get; set; }
     public List<TypedTrack> Tracks { get; } = new();
     public List<TypedMarker> Markers { get; } = new();
+    public List<string> Texts { get; } = new();
 }
 
 public sealed class TypedTrack
@@ -51,6 +52,7 @@ internal static class TypedBake
             ChannelName = timeline.Channel,
             Manifest = manifest,
             Utf8 = [],
+            Texts = TextTable.Of(timeline.Texts, "texts"),
         };
         for (var ti = 0; ti < timeline.Tracks.Count; ti++)
         {

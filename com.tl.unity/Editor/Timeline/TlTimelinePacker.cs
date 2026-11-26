@@ -48,7 +48,7 @@ namespace Tl.Unity.Editor
             var typed = Typed(timeline, tickRate, ref baker, timeline, out var refs, out var channels, out var written);
             channelCount = channels.Length;
             var manifest = LibraryBake.Manifest(refs.Select(r => r.name).ToArray(), channels, tickRate);
-            Fill(written, refs, 0);
+            Fill(written, refs, 0, typed.Texts);
             return TimelineJson.Export(typed, manifest);
         }
 
@@ -147,13 +147,15 @@ namespace Tl.Unity.Editor
 
         static byte[] Bake(TypedTimeline typed, LibraryManifest manifest, List<(object item, TlClipData data)> written, List<TimelineAsset> refs, ushort marker)
         {
-            Fill(written, refs, marker);
+            Fill(written, refs, marker, typed.Texts);
             return LibraryBake.BakeTyped(typed, manifest);
         }
 
-        static void Fill(List<(object item, TlClipData data)> written, List<TimelineAsset> refs, ushort marker)
+        static void Fill(List<(object item, TlClipData data)> written, List<TimelineAsset> refs, ushort marker, List<string> texts)
         {
             TlClipData.LocalIdResolver = asset => asset is TimelineAsset target && refs.IndexOf(target) is var index && index >= 0 ? (ushort)((index + 1) | marker) : (ushort)0;
+            texts.Clear();
+            TlClipData.TextCollector = text => { if (!texts.Contains(text)) texts.Add(text); };
             try
             {
                 foreach (var (item, data) in written)
@@ -169,6 +171,7 @@ namespace Tl.Unity.Editor
             finally
             {
                 TlClipData.LocalIdResolver = null;
+                TlClipData.TextCollector = null;
             }
         }
 

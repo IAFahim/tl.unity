@@ -1084,6 +1084,33 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
+        public void ClipTextFieldsBakeTheirStringsIntoTheLibrary()
+        {
+            var push = Timeline("Push");
+            var track = push.CreateTrack<TlTrack>(null, "Say");
+            track.Template = new SayClip_TlData();
+            foreach (var (start, line) in new[] { (0.0, "Hello there"), (1.0, "Jump"), (2.0, "") })
+            {
+                var clip = track.CreateClip<TlClip>();
+                clip.start = start;
+                clip.duration = 1;
+                var data = (SayClip_TlData)((TlClip)clip.asset).Data;
+                data.Line = line;
+                data.Gain = 1f;
+            }
+            using var baked = new Baked(Director("Cube", push).gameObject);
+            new LiveWorld(baked.World).Step(1);
+            var library = Library(baked.World);
+            Assert.AreEqual("Hello there", library.Text(TlText.Of("Hello there")));
+            Assert.AreEqual("Jump", library.Text(TlText.Of("Jump")));
+            Assert.AreEqual("", library.Text(TlText.Of("Not baked")));
+            Assert.AreEqual(2, library.Component.View.TextCount, "the empty line stores no string");
+            var baker = new TlBaker(null, Entity.Null, new HashSet<ComponentType>(), null);
+            var json = TlTimelinePacker.Json(push, 60, ref baker, out _);
+            StringAssert.Contains("\"Hello there\"", json);
+        }
+
+        [Test]
         public void ExportLibraryWritesATlibThatLoads()
         {
             var push = Timeline("Push");
