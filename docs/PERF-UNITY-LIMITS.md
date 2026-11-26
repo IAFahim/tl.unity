@@ -188,3 +188,23 @@ History:
 - IAFahim/tl#647 (plan and stage comments), IAFahim/tl#648 (A1, .NET), IAFahim/tl.unity#40 (A3, Unity; PR comments carry every measurement round and the second-agent reruns)
 - tl.unity commits: `4169cda` (lazy rows), `4fbb739` (SIMD scan, entry cache), `7f88eba` (enabled masks, per-world stamp), `7b806c1` (rows losing `PlaybackDue`), `8f47456` (inline step lookup), `4a69d46` (step resolved once), `c4d88a6` (cache tied to its index, review fixes)
 - Method notes (profiling Burst with `perf`, decomposition with a `SharedStatic` switch, change-version trust, what did not help): IAFahim/unity-cli-skill `skills/unity-cli-field-notes/references/burst-performance.md`
+
+## 11. Worker scaling and the slot-walk skips (2026-11-26, Unity 7000.0.0a21)
+
+`eng/worker-scaling.sh` (workflow `worker-scaling.yml`, work branch only) runs `OwnerScaleBench` at 20,000 rows x 200 playbacks with `-job-worker-count` 1, 5 and 11, alternating a base build and the head build in each run. Medians of 256 frames, ms.
+
+Before the change (ba011a0, three runs agree): the kind jobs were 97 % of the frame. Lazy duration 3000 was 22.5 ms total on 1 worker and 7.0 ms on 11; the lazy tick alone was 0.58 ms and 0.21 ms. The tick scales about 80 to 90 % per added worker up to 5 workers and flattens past the 6 physical cores. c4d88a6, where section 3.2 was measured, no longer compiles on a21 (`UnityEngine.TypeManagerV2` is gone), so the 0.75 ms kinds figure there cannot be re-measured.
+
+Where the kind time went: each kind's job walked every playback slot of every row (tick, `CellOf`, two `Score.Start` reads) even for a kind with no spans in the library, and the event walk ran `GetTimeline`, `StageAt` and the stage's steps for every slot even when no step carries a consumer pair. 62015b4 adds `KindIndex.SpanKinds` (kinds with any span) and `KindIndex.PairBloom` (one 64-bit filter of step pair keys per timeline). Generated kind jobs skip the walk for a kind outside `SpanKinds` and test the timeline's kind mask before the tick; event walks skip a timeline whose filter has none of the consumer pairs. Only slots the old walk already ignored are skipped.
+
+A/B against 5a15151 (run 45742181282, two runs, kind ms, base -> head):
+
+| Cell | 1 worker | 5 workers | 11 workers |
+| --- | --- | --- | --- |
+| eager d=120 | 17.6, 14.8 -> 10.4, 11.9 | 6.6, 12.3 -> 5.1, 6.0 | 7.3, 10.1 -> 5.9, 10.8 |
+| lazy d=120 | 18.0, 17.8 -> 10.5, 12.2 | 6.5, 11.9 -> 4.7, 5.6 | 6.3, 9.7 -> 5.0, 14.6 |
+| eager d=3000 | 38.2, 30.9 -> 22.8, 32.9 | 10.6, 24.8 -> 10.3, 13.2 | 11.9, 68.8 -> 13.8, 12.7 |
+| lazy d=3000 | 44.0, 32.1 -> 28.2, 27.0 | 10.7, 21.5 -> 10.3, 26.8 | 16.0, 41.7 -> 12.2, 6.1 |
+
+Hashes are equal in every cell for both arms (d=120 475C30B6054A7D25, d=3000 73B879360C251716), allocation 0 B, and the EditMode and PlayMode suite passes on 62015b4. On one worker the kinds are about 35 % faster at duration 120 and about 20 % at 3000. Multi-worker cells vary up to 3x between runs of the same build on this runner, so they show no reliable gain or loss; read only the 1-worker column. What is left is the Locomotion feeder itself, evaluated for every live span every frame (section 8 item 1).
+
