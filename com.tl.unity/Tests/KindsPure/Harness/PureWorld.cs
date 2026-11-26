@@ -64,8 +64,6 @@ namespace KindPure
     [UpdateAfter(typeof(TimelineKindTickSystem))]
     public unsafe partial struct PureSpanWalkMovementSystem : ISystem
     {
-        const int MostKinds = 64;
-
         EntityQuery _query;
         BufferTypeHandle<Playback> _playback;
         ComponentTypeHandle<TimelineClock> _clock;
@@ -84,6 +82,7 @@ namespace KindPure
         ComponentTypeHandle<StatChangeActive> _statChangeActive;
         ComponentTypeHandle<StatChangeEnabled> _statChangeEnabled;
         global::Tl.KindValues* _noTables;
+        int _noTableCount;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -107,15 +106,12 @@ namespace KindPure
             _statChangeEntry = state.GetBufferTypeHandle<StatChangeEntry>(false);
             _statChangeActive = state.GetComponentTypeHandle<StatChangeActive>(false);
             _statChangeEnabled = state.GetComponentTypeHandle<StatChangeEnabled>(true);
-            var bytes = MostKinds * sizeof(global::Tl.KindValues);
-            _noTables = (global::Tl.KindValues*)UnsafeUtility.Malloc(bytes, 16, Allocator.Persistent);
-            UnsafeUtility.MemClear(_noTables, bytes);
         }
 
         public void OnDestroy(ref SystemState state)
         {
             state.CompleteDependency();
-            UnsafeUtility.Free(_noTables, Allocator.Persistent);
+            if (_noTables != null) UnsafeUtility.Free(_noTables, Allocator.Persistent);
         }
 
         [BurstCompile]
@@ -123,6 +119,15 @@ namespace KindPure
         {
             var library = SystemAPI.GetSingleton<TimelineLibrary>();
             var step = SystemAPI.GetSingleton<TimelineStep>();
+            if (_noTables == null || library.Kinds.KindCount > _noTableCount)
+            {
+                state.CompleteDependency();
+                if (_noTables != null) UnsafeUtility.Free(_noTables, Allocator.Persistent);
+                _noTableCount = library.Kinds.KindCount;
+                var bytes = System.Math.Max(1, _noTableCount) * sizeof(global::Tl.KindValues);
+                _noTables = (global::Tl.KindValues*)UnsafeUtility.Malloc(bytes, 16, Allocator.Persistent);
+                UnsafeUtility.MemClear(_noTables, bytes);
+            }
             _playback.Update(ref state);
             _clock.Update(ref state);
             _playing.Update(ref state);
@@ -325,6 +330,11 @@ namespace KindPure
             _library.Publish(Entities);
             if (second != null)
                 _second = TlLibrary.FromBytes(second);
+            if (spanWalk)
+            {
+                WithoutPulseTables(_library);
+                if (_second != null) WithoutPulseTables(_second);
+            }
             _step = Entities.CreateEntityQuery(typeof(TimelineStep));
             _published = Entities.CreateEntityQuery(typeof(TimelineLibrary));
             TickHandle = World.CreateSystem<TimelineKindTickSystem>();
@@ -511,6 +521,21 @@ namespace KindPure
             ticksPerSystem[0] = afterTick - start;
             ticksPerSystem[1] = afterMovement - afterTick;
             ticksPerSystem[2] = afterVitals - afterMovement;
+        }
+
+        static void WithoutPulseTables(TlLibrary library)
+        {
+            var index = library.Component.Kinds;
+            for (var k = 0; k < index.KindCount; k++)
+                index.PulseValuesTable[k].Cells = -1;
+        }
+
+        public bool PulsesPrecombined(string kind)
+        {
+            Entities.CompleteAllTrackedJobs();
+            var index = _published.GetSingleton<TimelineLibrary>().Kinds;
+            var id = index.KindOf(KindIndex.IdOf(kind));
+            return id >= 0 && index.PulseValuesTable[id].Data != null;
         }
 
         public bool Precombined(string kind)
