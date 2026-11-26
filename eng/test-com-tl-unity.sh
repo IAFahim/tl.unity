@@ -64,6 +64,7 @@ for mode in "$@"; do
   echo "$mode exit=$code errorCS=${errors:-0} total=$total passed=$passed failed=$failed skipped=$skipped"
   if [ "$code" -ne 0 ] || [ "${errors:-0}" -ne 0 ] || [ "$total" -eq 0 ] || [ "$failed" -ne 0 ]; then
     status=1
+    grep -o '<test-case [^>]*result="Failed"[^>]*>' "$xml" 2>/dev/null | sed -n 's/.* fullname="\([^"]*\)".*/failed: \1/p' | head -10 >&2
     grep -E 'error CS|Failed|Exception' "$log" | sort -u | head -20 >&2
   fi
 done
