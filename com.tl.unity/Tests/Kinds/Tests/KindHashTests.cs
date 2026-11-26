@@ -22,6 +22,42 @@ namespace KindGame
         }
 
         [Test]
+        public void OneWorkerAndEveryWorkerGiveTheSameHashAcrossChunks()
+        {
+            const int rows = 320;
+            var workers = Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerCount;
+            if (Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerMaximumCount < 2)
+                Assert.Inconclusive("this machine has one job worker");
+            try
+            {
+                var one = new ulong[2];
+                var every = new ulong[2];
+                for (var pass = 0; pass < 2; pass++)
+                {
+                    Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerCount = pass == 0 ? 1 : Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerMaximumCount;
+                    var hashes = pass == 0 ? one : every;
+                    using (var game = new KindWorld(rows))
+                    {
+                        Assert.IsFalse(game.Entities.GetChunk(game.Rows[0]).Equals(game.Entities.GetChunk(game.Rows[rows - 1])), "the rows fit one chunk");
+                        hashes[0] = KindScript.Play(game, 300, rows);
+                        Assert.AreEqual(0, game.Tick.DroppedStarts);
+                    }
+                    using (var game = new KindWorld(rows, true))
+                    {
+                        game.AimEachRowAtTheNext();
+                        hashes[1] = KindScript.PlayCross(game, 300, rows);
+                    }
+                }
+                Assert.AreEqual(one[0], every[0], "kind script");
+                Assert.AreEqual(one[1], every[1], "cross script");
+            }
+            finally
+            {
+                Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerCount = workers;
+            }
+        }
+
+        [Test]
         public void EventScriptRaisesTheSameCuesAsThePlainHost()
         {
             using (var scan = new LogScan())

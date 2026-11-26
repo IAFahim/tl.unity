@@ -320,6 +320,18 @@ namespace KindGame
         }
 
         [Test]
+        public void PulsesQueuedForAnEntityDestroyedBeforeTheTickAreCountedAndDropped()
+        {
+            _game.Damage(0, 5);
+            _game.Damage(1, 5);
+            _game.Entities.DestroyEntity(_game.Rows[0]);
+            _game.Step();
+            _game.Step();
+            Assert.AreEqual(1, _game.Tick.DroppedPulses);
+            Assert.AreEqual(995, _game.Health(1));
+        }
+
+        [Test]
         public void AStartWhoseKindsTheEntityCannotReachIsDroppedAndCounted()
         {
             var bare = _game.Entities.CreateEntity(typeof(Playback), typeof(TimelineRequest), typeof(TimelinePlaying));

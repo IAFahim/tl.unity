@@ -22,7 +22,7 @@ namespace KindGame
 
         static ulong MixInt(ulong h, int v) { var s = new global::Tl.TlStateHash { Value = h }; s.Int(v); return s.Value; }
 
-        public static ulong Play(KindWorld game, int steps)
+        public static ulong Play(KindWorld game, int steps, int rows = Rows)
         {
             var ids = new ushort[] { KindWorld.Jump, KindWorld.PotionHop, KindWorld.Run, KindWorld.SpeedBoost, KindWorld.Stomp };
             var rng = 0x2545F491u;
@@ -30,7 +30,7 @@ namespace KindGame
             for (var step = 0; step < steps; step++)
             {
                 var forward = !(step >= 200 && step < 240);
-                for (var e = 0; e < Rows; e++)
+                for (var e = 0; e < rows; e++)
                 {
                     var r = Next(ref rng);
                     switch (r & 15)
@@ -50,7 +50,7 @@ namespace KindGame
                             break;
                         case 5:
                         case 6:
-                            game.Damage((int)((r >> 8) & 3), 3 + (int)((r >> 10) & 7));
+                            game.Damage((int)((r >> 8) % (uint)rows), 3 + (int)((r >> 10) & 7));
                             break;
                         case 7:
                             game.Stat(e, (int)((r >> 8) & 3) - 1);
@@ -58,7 +58,7 @@ namespace KindGame
                     }
                 }
                 game.Step(forward);
-                for (var e = 0; e < Rows; e++)
+                for (var e = 0; e < rows; e++)
                 {
                     var motion = game.Motion(e);
                     h = Mix(h, motion.X);
@@ -111,7 +111,7 @@ namespace KindGame
             return h;
         }
 
-        public static ulong PlayCross(KindWorld game, int steps)
+        public static ulong PlayCross(KindWorld game, int steps, int rows = Rows)
         {
             var ids = new ushort[] { Timelines.Jump, Timelines.PotionHop, Timelines.Run, Timelines.SpeedBoost, Timelines.Whistle };
             var rng = 0xC2B2AE35u;
@@ -119,7 +119,7 @@ namespace KindGame
             for (var step = 0; step < steps; step++)
             {
                 var forward = !(step >= 200 && step < 240);
-                for (var e = 0; e < Rows; e++)
+                for (var e = 0; e < rows; e++)
                 {
                     var r = Next(ref rng);
                     switch (r & 7)
@@ -137,7 +137,7 @@ namespace KindGame
                     }
                 }
                 game.Step(forward);
-                for (var e = 0; e < Rows; e++)
+                for (var e = 0; e < rows; e++)
                 {
                     h = MixInt(h, game.Cues(e).Length);
                     h = MixInt(h, game.Health(e));
