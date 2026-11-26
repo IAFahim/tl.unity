@@ -251,6 +251,11 @@ The tick path allocates nothing (0 B per warm frame) and holds no managed refere
 - `eng/test-com-tl-unity.sh` runs the package's EditMode and PlayMode tests (both pinned hashes, Burst, live edit, preview, control).
 - The Force demo sample carries its own PlayMode and Edit mode tests (push 4.0333 m, live edit, scrub preview, Control demo).
 - IL2CPP and CoreCLR players: the **Kinds IL2CPP player** sample prints both pinned hashes; the Force demo runs in a player as is.
+- **Deterministic frame recorder** (`Tl.Unity.Editor.TlFrameRecorder`): sets `Time.captureFramerate` from `TlProjectSettings.instance.TicksPerSecond` so every frame advances one Tl tick, writing `ticks.csv` (`frame,tick,x,y,z`, invariant 4 decimals) and `tick_XXXX.png` images (clearing old files first).
+  - Menu: **Tools > Tl > Record Frames** records the open scene (survives Play-mode domain reload via `SessionState`; exits Play mode when finished and resets `Time.captureFramerate = 0` on completion, error, or early exit).
+  - Command line (run without `-quit`): `Unity -batchmode -projectPath <p> -executeMethod Tl.Unity.Editor.TlFrameRecorder.RecordFromCommandLine -tlRecordScene <Assets/...unity> -tlRecordFrames 240 [-tlRecordEvery 2] [-tlRecordOut <dir>] [-tlRecordWidth 1280 -tlRecordHeight 720]` (exits `0` on success, `1` on error).
+  - Defaults (`TlFrameRecorder.Settings`): open scene, `Every = 2`, `1280 x 720`, output `Logs/TlFrames/<scene name>`, `Camera.main`.
+  - Requires a real graphics device for PNG output; under `-nographics` (`GraphicsDeviceType.Null`), only `ticks.csv` is written and one warning is logged. See [com.tl.unity/Documentation~/FRAME-RECORDER.md](../com.tl.unity/Documentation~/FRAME-RECORDER.md).
 
 ## 8. Installers
 

@@ -18,6 +18,7 @@ Then Package Manager > **Tl Unity Playback** > **Samples** > **Hello Tl** > **Im
 
 - [Glossary](Documentation~/GLOSSARY.md): the words Tl uses, in plain language.
 - [Rewind and speed](Documentation~/REWIND-AND-SPEED.md): what comes back when time runs backward, and what does not.
+- [Frame recorder](Documentation~/FRAME-RECORDER.md): deterministic capture via **Tools > Tl > Record Frames** or `-executeMethod Tl.Unity.Editor.TlFrameRecorder.RecordFromCommandLine` (PNG pictures require a real graphics device; `-nographics` writes `ticks.csv` only).
 - [CHANGELOG](CHANGELOG.md).
 - Samples (Package Manager): Hello Tl, Many At Once, Force, Events, Crowd, Motion, Stats, Inventory, Demo hub, and two player probes (Kinds IL2CPP, Bullets IL2CPP, Scene player) that need the package tests.
 
