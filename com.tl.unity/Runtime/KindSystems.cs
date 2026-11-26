@@ -66,6 +66,13 @@ namespace Tl.Unity
         }
     }
 
+    public struct TimelineKindClock : IComponentData
+    {
+        public ushort Now;
+        public int GlideStepDir;
+        public int GlideLimit;
+    }
+
     [BurstCompile]
     [UpdateInGroup(typeof(TimelineSimulationGroup))]
     [UpdateAfter(typeof(TimelineRequestSystem))]
@@ -80,15 +87,12 @@ namespace Tl.Unity
         ComponentTypeHandle<TimelineClock> _clockHandle;
         BufferTypeHandle<PlaybackDue> _dueHandle;
         EntityTypeHandle _entityHandle;
-        ushort _now;
         EntityStorageInfoLookup _storage;
         KindHandleSet _handles;
         TimelineKindTick _tick;
         uint _bound;
         bool _isBound;
         uint _glideGeneration;
-        int _glideStepDir;
-        int _glideLimit;
         ulong _glideIndex;
         DenseSpace* _space;
         EntityQuery _bare;
@@ -106,6 +110,7 @@ namespace Tl.Unity
             _resets = new NativeQueue<Entity>(Allocator.Persistent);
             _resetSet = new NativeHashSet<Entity>(16, Allocator.Persistent);
             state.EntityManager.AddComponentData(state.SystemHandle, _tick);
+            state.EntityManager.AddComponentData(state.SystemHandle, new TimelineKindClock());
             state.EntityManager.AddComponentData(state.SystemHandle, TimelineGlide.Default);
             state.EntityManager.AddComponentData(state.SystemHandle, new TimelineDense());
             _query = new EntityQueryBuilder(Allocator.Temp)
@@ -179,7 +184,8 @@ namespace Tl.Unity
             _clockHandle.Update(ref state);
             _dueHandle.Update(ref state);
             _entityHandle.Update(ref state);
-            _now = (ushort)((_now + 1) & TimelineTicks.Mask);
+            var clock = state.EntityManager.GetComponentData<TimelineKindClock>(state.SystemHandle);
+            var now = (ushort)((clock.Now + 1) & TimelineTicks.Mask);
             var dense = state.EntityManager.GetComponentData<TimelineDense>(state.SystemHandle);
             var denseStep = SystemAPI.GetSingleton<TimelineStep>().Forward ? 1 : -1;
             var denseForget = dense.Direction != denseStep;
@@ -220,11 +226,10 @@ namespace Tl.Unity
             }
             var stepDir = SystemAPI.GetSingleton<TimelineStep>().Forward ? 1 : -1;
             var limit = (int)state.EntityManager.GetComponentData<TimelineGlide>(state.SystemHandle).Limit;
-            var forget = _glideIndex != identity || _glideGeneration != library.Generation || _glideStepDir != stepDir || _glideLimit != limit;
+            var forget = _glideIndex != identity || _glideGeneration != library.Generation || clock.GlideStepDir != stepDir || clock.GlideLimit != limit;
             _glideIndex = identity;
             _glideGeneration = library.Generation;
-            _glideStepDir = stepDir;
-            _glideLimit = limit;
+            state.EntityManager.SetComponentData(state.SystemHandle, new TimelineKindClock { Now = now, GlideStepDir = stepDir, GlideLimit = limit });
             var handles = _handles;
             var counters = _tick.Counters;
             var dependency = state.Dependency;
@@ -246,8 +251,8 @@ namespace Tl.Unity
                 HorizonHandle = _horizonHandle,
                 ClockHandle = _clockHandle,
                 DueHandle = _dueHandle,
-                Now = _now,
-                Sweep = (_now & 63) == 0,
+                Now = now,
+                Sweep = (now & 63) == 0,
                 Handles = handles,
                 Tables = index.Tables,
                 Counters = counters,
