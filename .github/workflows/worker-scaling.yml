@@ -12,8 +12,14 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-        with: {submodules: recursive}
+        with: {submodules: recursive, fetch-depth: 0}
       - run: bash eng/worker-scaling.sh
+        env:
+          TL_SCALING_BASE: c4d88a6
+          TL_SCALING_WORKERS: 1 5 11
+          TL_SCALING_RUNS: 2
       - uses: actions/upload-artifact@v4
         if: always()
-        with: {name: worker-scaling, path: artifacts/worker-scaling/*.log}
+        with:
+          name: worker-scaling
+          path: artifacts/worker-scaling/*.log
