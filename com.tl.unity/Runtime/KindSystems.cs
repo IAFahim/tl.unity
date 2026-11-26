@@ -96,11 +96,15 @@ namespace Tl.Unity
         ulong _spaceIndex;
         uint _spaceGeneration;
         bool _spaceStale;
+        NativeQueue<Entity> _resets;
+        NativeHashSet<Entity> _resetSet;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             _tick = TimelineKindTick.Create();
+            _resets = new NativeQueue<Entity>(Allocator.Persistent);
+            _resetSet = new NativeHashSet<Entity>(16, Allocator.Persistent);
             state.EntityManager.AddComponentData(state.SystemHandle, _tick);
             state.EntityManager.AddComponentData(state.SystemHandle, TimelineGlide.Default);
             state.EntityManager.AddComponentData(state.SystemHandle, new TimelineDense());
@@ -132,6 +136,8 @@ namespace Tl.Unity
         {
             state.CompleteDependency();
             _tick.Dispose();
+            _resets.Dispose();
+            _resetSet.Dispose();
             DenseSpace.Release(_space);
             _space = null;
         }
@@ -257,10 +263,13 @@ namespace Tl.Unity
                 DenseForget = denseForget,
                 Walked = walked,
                 DenseChunkHandle = _denseChunkHandle,
+                Resets = _resets.AsParallelWriter(),
+                TrackResets = senders->Length != 0,
             };
             dependency = tick.ScheduleParallel(_query, dependency);
             if (senders->Length != 0)
             {
+                dependency = new KindResetsJob { Queue = _resets, Set = _resetSet }.Schedule(dependency);
                 var storage = _storage;
                 for (var i = 0; i < senders->Length; i++)
                 {
@@ -274,6 +283,7 @@ namespace Tl.Unity
                         Handles = handles,
                         Counters = counters,
                         Index = index,
+                        Resets = _resetSet,
                     };
                     dependency = merge.Schedule(dependency);
                     dependency = sender.Dispose(dependency);

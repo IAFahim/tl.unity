@@ -193,6 +193,8 @@ namespace Tl.Unity
         public bool DenseForget;
         public bool Walked;
         public ComponentTypeHandle<TimelineDenseChunk> DenseChunkHandle;
+        public NativeQueue<Entity>.ParallelWriter Resets;
+        public bool TrackResets;
 
         [BurstDiscard]
         static void CountManagedRun(int* counters) => System.Threading.Interlocked.Increment(ref counters[KindCounter.ManagedRuns]);
@@ -321,6 +323,8 @@ namespace Tl.Unity
                     {
                         if (queue[r].Op == global::Tl.RequestOp.Start && queue[r].Timeline > Index.TimelineCount)
                             System.Threading.Interlocked.Increment(ref Counters[KindCounter.DroppedStarts]);
+                        if (queue[r].Op == global::Tl.RequestOp.Reset && TrackResets)
+                            Resets.Enqueue(chunk.GetNativeArray(EntityHandle)[row]);
                         global::Tl.PlaybackRules.Apply(ref slots, Index.Timelines, Index.TimelineCount, queue[r].Op, queue[r].Timeline, queue[r].At);
                     }
                     queue.Clear();

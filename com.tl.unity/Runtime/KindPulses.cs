@@ -79,6 +79,20 @@ namespace Tl.Unity
         }
     }
 
+    [BurstCompile]
+    public struct KindResetsJob : IJob
+    {
+        public NativeQueue<Entity> Queue;
+        public NativeHashSet<Entity> Set;
+
+        public void Execute()
+        {
+            Set.Clear();
+            while (Queue.TryDequeue(out var entity))
+                Set.Add(entity);
+        }
+    }
+
     [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
     public unsafe struct KindMergeJob : IJob
     {
@@ -88,9 +102,11 @@ namespace Tl.Unity
         [NativeDisableContainerSafetyRestriction] public KindHandleSet Handles;
         [NativeDisableUnsafePtrRestriction] public int* Counters;
         [NativeDisableUnsafePtrRestriction] public KindIndex Index;
+        [ReadOnly] public NativeHashSet<Entity> Resets;
 
         public void Execute()
         {
+            var resets = !Resets.IsEmpty;
             var buffers = stackalloc UnsafeUntypedBufferAccessor[64];
             var cursor = new KindCursor { Index = (KindIndex*)UnsafeUtility.AddressOf(ref Index), Handles = (KindHandleSet*)UnsafeUtility.AddressOf(ref Handles), Buffers = buffers, Counters = Counters };
             var last = default(ArchetypeChunk);
@@ -104,6 +120,7 @@ namespace Tl.Unity
                     var bytes = Reader.Read<int>();
                     var target = Reader.Read<Entity>();
                     var value = Reader.ReadUnsafePtr(bytes);
+                    if (resets && Resets.Contains(target)) continue;
                     var kind = Index.KindOf(id);
                     if (kind < 0 || Index.Sec.Kinds[kind].Accepts == 0 || bytes != (int)Index.Sec.Kinds[kind].ValueBytes || !Storage.Exists(target))
                     {

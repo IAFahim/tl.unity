@@ -332,6 +332,21 @@ namespace KindGame
         }
 
         [Test]
+        public void AResetDropsTheGamePulsesQueuedForItsEntityBeforeTheStep()
+        {
+            _game.Damage(0, 5);
+            _game.Damage(1, 5);
+            _game.Entities.GetBuffer<TimelineRequest>(_game.Rows[0]).Add(TimelineRequest.Reset(0));
+            _game.Step();
+            Assert.AreEqual(1000, _game.Health(0));
+            Assert.AreEqual(995, _game.Health(1));
+            _game.Damage(0, 5);
+            _game.Step();
+            Assert.AreEqual(995, _game.Health(0));
+            Assert.AreEqual(0, _game.Tick.DroppedPulses);
+        }
+
+        [Test]
         public void AStartOfAnIdPastTheLibraryIsDroppedAndCountedAndIdZeroIsANoOp()
         {
             var before = _game.Slots(0).Length;
