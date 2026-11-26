@@ -155,6 +155,24 @@ public static unsafe class KindRules
         return depth;
     }
 
+    public static int CopiesOf(Playback* copies, int samples, ref int cursor, in Playback slot, out Playback* first)
+    {
+        for (var at = cursor; at < samples;)
+        {
+            var end = at + 1;
+            while (end < samples && copies[end].Phase != 0) end++;
+            if (copies[end - 1].Timeline == slot.Timeline && copies[end - 1].Tick == slot.Tick)
+            {
+                cursor = end;
+                first = copies + at;
+                return end - at;
+            }
+            at = end;
+        }
+        first = null;
+        return 0;
+    }
+
     public static bool Due(KindEntry* entry, int substep, Playback* run, int count) => entry->Timeline != 0 && entry->Slot >= count ? run[entry->Slot].Phase == substep : substep == 0;
 
     public static bool TickEntity<TRows>(in KindTables t, Playback* slots, int count, ref TRows rows, int row, int stepDir) where TRows : struct, IKindRows

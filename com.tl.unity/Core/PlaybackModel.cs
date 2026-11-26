@@ -35,7 +35,7 @@ public readonly struct EntityRef(int index, int version)
 
 public readonly unsafe struct PlaybackView
 {
-    internal PlaybackView(Playback* slots, int* counts, ulong* spilled, Playback* blocks, int entities, int slotsPerEntity, ulong* dense = null, ushort* origins = null, ushort* blockOrigins = null, ushort clock = 0)
+    internal PlaybackView(Playback* slots, int* counts, ulong* spilled, Playback* blocks, int entities, int slotsPerEntity, ulong* dense = null, ushort* origins = null, ushort* blockOrigins = null, ushort clock = 0, ushort lag = 0, bool lagForward = true)
     {
         Slots = slots;
         Counts = counts;
@@ -47,6 +47,8 @@ public readonly unsafe struct PlaybackView
         Origins = origins;
         BlockOrigins = blockOrigins;
         Clock = clock;
+        _lag = lag;
+        _reverse = SlotWord.WorldReverse(lagForward);
     }
 
     public readonly Playback* Slots;
@@ -59,6 +61,8 @@ public readonly unsafe struct PlaybackView
     public readonly ushort* Origins;
     public readonly ushort* BlockOrigins;
     public readonly ushort Clock;
+    readonly int _lag;
+    readonly ulong _reverse;
 
     public int CountOf(int entity) => Counts[entity];
 
@@ -73,6 +77,13 @@ public readonly unsafe struct PlaybackView
 
     [MethodImpl(KindStore.Inline)]
     public Playback* SlotOf(int entity, int slot) => RunOf(entity) + slot;
+
+    [MethodImpl(KindStore.Inline)]
+    public ushort TickOf(Playback* slot)
+    {
+        var word = *(ulong*)slot;
+        return (ushort)(slot->Tick + ((uint)(SlotWord.MovesForward(word, _reverse) ? _lag : -_lag) & (uint)SlotWord.PlainMask(word)));
+    }
 }
 
 public sealed unsafe class PlaybackTable : IDisposable
@@ -172,7 +183,8 @@ public sealed unsafe class PlaybackTable : IDisposable
     public int SlotsPerEntity => _slotsPerEntity;
     public PlaybackView View { get { Escape(); SettleAll(); return RawView; } }
     public PlaybackView SystemView => RawView;
-    internal PlaybackView RawView => new(_slots, _counts, _spilled, _blocks, _entities, _slotsPerEntity, _dense, _origins, _blockOrigins, DenseClock);
+    public ulong* SystemPlaying { get { SettleAll(); return _playing; } }
+    internal PlaybackView RawView => new(_slots, _counts, _spilled, _blocks, _entities, _slotsPerEntity, _dense, _origins, _blockOrigins, DenseClock, Frozen ? Clock : (ushort)0, Forward);
     internal ulong* DenseBits => _dense;
 
     internal bool IsDense(int entity) => _dense != null && (_dense[entity >> 6] >> (entity & 63) & 1) != 0;
@@ -505,7 +517,7 @@ public sealed unsafe class PlaybackTable : IDisposable
 #if TL_CHECKED
             _table._kinds?.ValidateStart(_entity, timeline);
 #else
-            if (_table._kinds?.Unreachable(_entity, timeline) != null) { _table.DroppedStarts++; return false; }
+            if (_table._kinds is { } kinds && !kinds.Reaches(_entity, timeline)) { _table.DroppedStarts++; return false; }
 #endif
             return true;
         }

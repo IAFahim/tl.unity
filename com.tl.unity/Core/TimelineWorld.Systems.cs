@@ -40,10 +40,10 @@ public sealed partial class TimelineWorld
             ref readonly var record = ref queue->Item(i);
             if ((uint)record.Entity >= (uint)players.EntityCapacity)
                 return new ArgumentOutOfRangeException(nameof(record), $"Request names entity {record.Entity} outside the table capacity.");
-            if (record.Op == RequestOp.Start && (record.Timeline == 0 || (uint)(record.Timeline - 1) >= (uint)_view.TimelineCount))
+            if (record.Op == RequestOp.Start && record.Timeline > _view.TimelineCount)
                 return new ArgumentException($"Request starts timeline {record.Timeline}; the loaded library holds {_view.TimelineCount}.");
 #if TL_CHECKED
-            if (record.Op == RequestOp.Start && players.Kinds?.Unreachable(record.Entity, record.Timeline) is { } unreachable) return unreachable;
+            if (record.Op == RequestOp.Start && record.Timeline != 0 && players.Kinds?.Unreachable(record.Entity, record.Timeline) is { } unreachable) return unreachable;
 #endif
         }
         return null;
@@ -197,6 +197,7 @@ public sealed partial class TimelineWorld
 
     unsafe void ApplyRecord(PlaybackTable players, in RequestRecord record)
     {
+        if (record.Op == RequestOp.Start && record.Timeline == 0) return;
         players.Edit(record.Entity);
         try
         {

@@ -49,6 +49,16 @@ namespace Tl.Gen.Unity
             return new List<string>();
         }
 
+        static bool FoldsPulses(ITypeSymbol kind)
+        {
+            foreach (var attribute in kind.GetAttributes())
+                if (attribute.AttributeClass?.ToDisplayString() == "Tl.TimelineKindAttribute")
+                    foreach (var pair in attribute.NamedArguments)
+                        if (pair.Key == "FoldsPulses" && pair.Value.Value is true)
+                            return true;
+            return false;
+        }
+
         internal const int InlineBudgetBytes = 128;
 
         internal static IReadOnlyList<UnityKindInfo> Plan(Compilation compilation, IReadOnlyList<SystemAssignment> assignments, IReadOnlyList<UnitySystemModel?> models, IReadOnlyDictionary<string, int> inline, SourceProductionContext context)
@@ -65,6 +75,10 @@ namespace Tl.Gen.Unity
                             Location.None, kind.Name, kind.Group));
                         continue;
                     }
+                    if (UnityLayout.Resolve(compilation, kind.TypeName) is { } kindType && FoldsPulses(kindType))
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            new DiagnosticDescriptor("TLUNITY9108", "FoldsPulses not supported", "Kind '{0}' sets FoldsPulses; Unity does not fold game pulses and applies each one, so the result differs from .NET where the fold differs from the kind's combine.", "Tl.Unity", DiagnosticSeverity.Warning, true),
+                            kindType.Locations.FirstOrDefault() ?? Location.None, kind.Name));
                     byName[kind.TypeName] = kind;
                 }
                 foreach (var consumer in assignment.Consumers)

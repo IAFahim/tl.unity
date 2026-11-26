@@ -16,6 +16,7 @@ namespace KindGame
         public delegate int HitFn(int amount, bool reverse);
         public delegate int StatPulseFn(int delta, bool reverse);
         public delegate int MarkerFn(int delta);
+        public delegate float MulSubFn(float a, float b, float c);
         public delegate void WalkFn(in Frame<WalkTrack, WalkClip> frame, in WalkStat stat, in Target target, in AnchorLookup anchors, out Speed speed);
 
         [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
@@ -101,6 +102,23 @@ namespace KindGame
         public static void WalkBurst(in Frame<WalkTrack, WalkClip> frame, in WalkStat stat, in Target target, in AnchorLookup anchors, out Speed speed)
         {
             speed = Walk.Evaluate(in frame, in stat, in target, in anchors);
+        }
+
+        [BurstCompile]
+        public static float MulSubDefault(float a, float b, float c) => a * b - c;
+
+        [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
+        public static float MulSubStrict(float a, float b, float c) => a * b - c;
+
+        [Test]
+        public void FmaChainIsBitExactAgainstScalar()
+        {
+            var a = 1f + 1f / (1 << 23);
+            var c = 1f + 1f / (1 << 22);
+            var scalar = (float)(a * a) - c;
+            Assert.AreEqual(0f, scalar);
+            foreach (var fn in new[] { BurstCompiler.CompileFunctionPointer<MulSubFn>(MulSubDefault), BurstCompiler.CompileFunctionPointer<MulSubFn>(MulSubStrict) })
+                Assert.AreEqual(System.BitConverter.SingleToInt32Bits(scalar), System.BitConverter.SingleToInt32Bits(fn.Invoke(a, a, c)), "Burst fused a * b - c; a fused result is 2^-46.");
         }
 
         [Test]

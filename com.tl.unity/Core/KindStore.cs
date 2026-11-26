@@ -222,7 +222,7 @@ public sealed unsafe partial class KindStore : IDisposable
 
     public KindValues* SpanValues<TFill>(int kind, int part, ref TFill fill) where TFill : struct, IKindFill
     {
-        if ((uint)kind >= (uint)_kindCount) return null;
+        if ((uint)kind >= (uint)_kindCount || !SpanValuesEnabled) return null;
         var v = _values + kind;
         var ptr = Volatile.Read(ref *(nint*)&v->Data);
         if (ptr == default)
@@ -441,6 +441,8 @@ public sealed unsafe partial class KindStore : IDisposable
     {
         if (Unreachable(entity, timeline) is { } bad) throw bad;
     }
+
+    internal bool Reaches(int entity, ushort timeline) => (_closure[timeline - 1] & ~_mask[entity]) == 0;
 
     internal ArgumentException? Unreachable(int entity, ushort timeline)
     {

@@ -1756,13 +1756,27 @@ namespace Tl.Gen.Unity
             ulong pairs = 0;
             foreach (var (_, consumer) in consumers)
                 pairs |= 1ul << (int)(consumer.PairKey >> 58);
+            if (!closing) W(writer, "var __pq = 0;");
             W(writer, "for (var __s = 0; __s < __n; __s++)");
             W(writer, "{");
-            W(writer, "var __pb = __pbs + __s;");
             if (closing)
+            {
+                W(writer, "var __pb = __pbs + __s;");
                 W(writer, "if (__pb->Timeline == 0 || (__pb->Flags & global::Tl.PlaybackFlags.Stopping) == 0) continue;");
+            }
             else
-                W(writer, "if (__pb->Timeline == 0 || (__pb->Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Stopping)) != 0) continue;");
+            {
+                W(writer, "var __ps = __pbs + __s;");
+                W(writer, "if (__ps->Timeline == 0) continue;");
+                W(writer, "var __pcopy = *__ps;");
+                W(writer, "global::Tl.Unity.TimelineTicks.Decode(&__pcopy, (__clocks == null ? (ushort)0 : __clocks[__row]));");
+                W(writer, "var __pb = &__pcopy; var __pk = 1; global::Tl.Playback* __pc = null;");
+                W(writer, "if (__pcopy.Rate != 0 && (__pk = global::Tl.KindRules.CopiesOf(__pcs, __smp, ref __pq, in __pcopy, out __pc)) == 0 && global::Tl.PlaybackRules.Crossed(in __pcopy) != 0) __pk = 1;");
+                W(writer, "for (var __j = 0; __j < __pk; __j++)");
+                W(writer, "{");
+                W(writer, "if (__pc != null) __pb = __pc + __j;");
+                W(writer, "if ((__pb->Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Stopping)) != 0) continue;");
+            }
             W(writer, "if (Index.LacksPairs(__pb->Timeline, " + pairs + "UL)) continue;");
             W(writer, "var __tl = global::Tl.LibraryViewReader.GetTimeline(in View, new global::Tl.TimelineId(__pb->Timeline));");
             W(writer, "if (__tl == null || __tl->Duration == 0) continue;");
@@ -1772,7 +1786,7 @@ namespace Tl.Gen.Unity
                 W(writer, "var __tick = __rt < __tl->Duration ? __rt : (ushort)(__tl->Duration - 1);");
             }
             else
-                W(writer, "var __tick = global::Tl.Unity.TimelineTicks.Real(__pb, (__clocks == null ? (ushort)0 : __clocks[__row]));");
+                W(writer, "var __tick = __pb->Tick;");
             W(writer, "var __stage = global::Tl.LibraryViewReader.StageAt(__tl, __tick);");
             W(writer, "if (__stage == null) continue;");
             W(writer, "var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;");
@@ -1797,6 +1811,7 @@ namespace Tl.Gen.Unity
             W(writer, "void Events(in ArchetypeChunk chunk, BufferAccessor<global::Tl.Unity.Playback> __playbacks)");
             W(writer, "{");
             W(writer, "var __clocks = (ushort*)chunk.GetComponentDataPtrRO(ref ClockHandle);");
+            W(writer, "var __copies = (global::Tl.Unity.TimelinePlaying*)chunk.GetComponentDataPtrRO(ref PlayingHandle);");
             for (var e = 0; e < events.Count; e++)
             {
                 var type = events[e].TypeName;
@@ -1809,6 +1824,7 @@ namespace Tl.Gen.Unity
             W(writer, "var __slots = __playbacks[__row];");
             W(writer, "var __pbs = (global::Tl.Playback*)__slots.GetUnsafeReadOnlyPtr();");
             W(writer, "var __n = __slots.Length;");
+            W(writer, "var __smp = __copies == null ? 0 : (int)__copies[__row].Copies; if (__n + __smp > __slots.Capacity) __smp = 0; var __pcs = __pbs + __n;");
             for (var e = 0; e < events.Count; e++)
             {
                 var type = events[e].TypeName;
@@ -1834,6 +1850,7 @@ namespace Tl.Gen.Unity
             }
             EmitSlotHeader(writer, events, consumers, false);
             EmitEventSteps(writer, events, consumers, assignment, false);
+            W(writer, "}");
             W(writer, "}");
             var retry = new StringBuilder();
             for (var e = 0; e < events.Count; e++)

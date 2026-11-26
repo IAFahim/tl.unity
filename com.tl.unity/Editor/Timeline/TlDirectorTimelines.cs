@@ -73,20 +73,22 @@ namespace Tl.Unity.Editor
             return result;
         }
 
-        public static IEnumerable<TlMarker> Markers(TimelineAsset timeline)
+        public static IEnumerable<TlMarker> Markers(TimelineAsset timeline) => AllMarkers(timeline).Where(marker => marker.Data != null);
+
+        public static IEnumerable<TlMarker> AllMarkers(TimelineAsset timeline)
         {
             if (timeline == null)
                 yield break;
             if (timeline.markerTrack != null)
                 foreach (var marker in timeline.markerTrack.GetMarkers())
-                    if (marker is TlMarker tl && tl.Data != null)
+                    if (marker is TlMarker tl)
                         yield return tl;
             foreach (var track in timeline.GetOutputTracks())
             {
                 if (track == timeline.markerTrack || track.mutedInHierarchy)
                     continue;
                 foreach (var marker in track.GetMarkers())
-                    if (marker is TlMarker tl && tl.Data != null)
+                    if (marker is TlMarker tl)
                         yield return tl;
             }
         }

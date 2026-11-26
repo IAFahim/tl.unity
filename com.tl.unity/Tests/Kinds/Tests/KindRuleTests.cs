@@ -209,6 +209,19 @@ namespace KindGame
         }
 
         [Test]
+        public void RequestsInOneBufferApplyInSlotOrderLikeDotNet()
+        {
+            var requests = _game.Entities.GetBuffer<TimelineRequest>(_game.Rows[0]);
+            requests.Add(TimelineRequest.Start(1, KindWorld.Run));
+            requests.Add(TimelineRequest.Stop(0, KindWorld.Run));
+            _game.Step();
+            var slots = _game.Slots(0);
+            Assert.AreEqual(KindWorld.Run, slots[0].Timeline);
+            Assert.AreEqual(0, (int)(slots[0].Flags & global::Tl.PlaybackFlags.Stopping));
+            Assert.AreEqual(1, _game.Spans(0, "KindGame.Locomotion"));
+        }
+
+        [Test]
         public void AFreedSlotIsReusedLowestFirstAndKeepsItsIndexForItsWholeLife()
         {
             _game.Start(0, KindWorld.Run);
@@ -304,6 +317,45 @@ namespace KindGame
             _game.Step();
             Assert.AreEqual(1, _game.Tick.DroppedPulses);
             Assert.AreEqual(1000, _game.Health(0));
+        }
+
+        [Test]
+        public void PulsesQueuedForAnEntityDestroyedBeforeTheTickAreCountedAndDropped()
+        {
+            _game.Damage(0, 5);
+            _game.Damage(1, 5);
+            _game.Entities.DestroyEntity(_game.Rows[0]);
+            _game.Step();
+            _game.Step();
+            Assert.AreEqual(1, _game.Tick.DroppedPulses);
+            Assert.AreEqual(995, _game.Health(1));
+        }
+
+        [Test]
+        public void AResetDropsTheGamePulsesQueuedForItsEntityBeforeTheStep()
+        {
+            _game.Damage(0, 5);
+            _game.Damage(1, 5);
+            _game.Entities.GetBuffer<TimelineRequest>(_game.Rows[0]).Add(TimelineRequest.Reset(0));
+            _game.Step();
+            Assert.AreEqual(1000, _game.Health(0));
+            Assert.AreEqual(995, _game.Health(1));
+            _game.Damage(0, 5);
+            _game.Step();
+            Assert.AreEqual(995, _game.Health(0));
+            Assert.AreEqual(0, _game.Tick.DroppedPulses);
+        }
+
+        [Test]
+        public void AStartOfAnIdPastTheLibraryIsDroppedAndCountedAndIdZeroIsANoOp()
+        {
+            var before = _game.Slots(0).Length;
+            var requests = _game.Entities.GetBuffer<TimelineRequest>(_game.Rows[0]);
+            requests.Add(TimelineRequest.Start(0, 60000));
+            requests.Add(TimelineRequest.Start(0, 0));
+            _game.Step();
+            Assert.AreEqual(1, _game.Tick.DroppedStarts);
+            Assert.AreEqual(before, _game.Slots(0).Length);
         }
 
         [Test]

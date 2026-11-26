@@ -586,6 +586,19 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
+        public void AMarkerWithNoValuesIsSkippedWithAWarning()
+        {
+            var timeline = Timeline("Push");
+            var track = ForceTrack(timeline);
+            Clip(track, 0, 1, 4f);
+            track.CreateMarker<TlMarker>(0.5);
+            LogAssert.Expect(LogType.Warning, new Regex("^The marker at .* has no values\\. The marker is skipped\\.$"));
+            using var baked = new Baked(Director("Cube", timeline).gameObject);
+            LogAssert.NoUnexpectedReceived();
+            Assert.AreEqual(1, baked.Count<TlTimelineSet>(), "the timeline still bakes");
+        }
+
+        [Test]
         public void AnEmptyTrackNextToAFilledOneBakesWithoutALog()
         {
             var timeline = Timeline("Push");
@@ -1090,6 +1103,136 @@ namespace Tl.Unity.Tracks.Tests
             {
                 System.IO.File.Delete(path);
             }
+        }
+
+        static readonly (int Start, int End)[] TollClips = { (5, 7), (7, 8), (8, 11), (12, 13), (13, 16) };
+
+        [Test]
+        public void ClipEventsAtEachSpeedRaiseWhatTheDotNetHostRaisesOnTheSameSteps()
+        {
+            var pinned = new Dictionary<ushort, string[]>
+            {
+                { 8, new[]
+                    {
+                        "10: start 5 end  active 5 chime 5",
+                        "12: start  end 5 active 5 chime 5",
+                        "14: start 7 end 7 active 7 chime 12",
+                        "16: start 8 end  active 8 chime 20",
+                        "18: start  end  active 8 chime 20",
+                        "20: start  end 8 active 8 chime 20"
+                    }
+                },
+                { 16, new[]
+                    {
+                        "5: start 5 end  active 5 chime 5",
+                        "6: start  end 5 active 5 chime 5",
+                        "7: start 7 end 7 active 7 chime 12",
+                        "8: start 8 end  active 8 chime 20",
+                        "9: start  end  active 8 chime 20",
+                        "10: start  end 8 active 8 chime 20",
+                        "12: start 12 end 12 active 12 chime 32",
+                        "13: start 13 end  active 13 chime 45",
+                        "14: start  end  active 13 chime 45",
+                        "15: start  end 13 active 13 chime 45"
+                    }
+                },
+                { 24, new[]
+                    {
+                        "4: start 5 end 5 active 5,5 chime 5",
+                        "5: start 7 end 7 active 7 chime 12",
+                        "6: start 8 end  active 8,8 chime 20",
+                        "7: start  end 8 active 8 chime 20",
+                        "8: start 12 end 12 active 12 chime 32",
+                        "9: start 13 end  active 13 chime 45",
+                        "10: start  end 13 active 13,13 chime 45"
+                    }
+                },
+                { 32, new[]
+                    {
+                        "3: start 5 end 5 active 5,5 chime 5",
+                        "4: start 7,8 end 7 active 7,8 chime 20",
+                        "5: start  end 8 active 8,8 chime 20",
+                        "6: start 12 end 12 active 12 chime 32",
+                        "7: start 13 end  active 13,13 chime 45",
+                        "8: start  end 13 active 13 chime 45"
+                    }
+                },
+                { 40, new[]
+                    {
+                        "2: start 5 end  active 5 chime 5",
+                        "3: start 7 end 5,7 active 5,7 chime 12",
+                        "4: start 8 end 8 active 8,8,8 chime 20",
+                        "5: start 12 end 12 active 12 chime 32",
+                        "6: start 13 end 13 active 13,13,13 chime 45"
+                    }
+                },
+                { 48, new[]
+                    {
+                        "2: start 5 end 5 active 5,5 chime 5",
+                        "3: start 7,8 end 7 active 7,8,8 chime 20",
+                        "4: start 12 end 8,12 active 8,12 chime 32",
+                        "5: start 13 end 13 active 13,13,13 chime 45"
+                    }
+                },
+                { 64, new[]
+                    {
+                        "2: start 5,7,8 end 5,7 active 5,5,7,8 chime 20",
+                        "3: start 12 end 8,12 active 8,8,12 chime 32",
+                        "4: start 13 end 13 active 13,13,13 chime 45"
+                    }
+                },
+            };
+            foreach (var pair in pinned)
+            {
+                var trace = PlayTolls(pair.Key);
+                CollectionAssert.AreEqual(pair.Value, trace, "rate " + pair.Key + ": " + string.Join(" | ", trace));
+            }
+        }
+
+        string[] PlayTolls(ushort rate)
+        {
+            var timeline = Timeline("Tolls");
+            timeline.durationMode = TimelineAsset.DurationMode.FixedLength;
+            timeline.fixedDuration = 20 / 60.0;
+            var track = timeline.CreateTrack<TlTrack>(null, "Toll");
+            track.Template = new AutoKinds_TollClip_TlData();
+            foreach (var (start, end) in TollClips)
+            {
+                var clip = track.CreateClip<TlClip>();
+                clip.start = start / 60.0;
+                clip.duration = (end - start) / 60.0;
+                ((AutoKinds_TollClip_TlData)((TlClip)clip.asset).Data).Rings = start;
+            }
+            using var baked = new Baked(Director("Bell", timeline).gameObject);
+            var entities = baked.World.EntityManager;
+            var entity = baked.Single<TlTimelineSet>();
+            var live = new LiveWorld(baked.World, true, typeof(TlKindSystem<>).MakeGenericType(Type.GetType("Tl.Generated.TlAuto_Tl_Unity_AutoKinds_Jobs, Tl.Unity.AutoKinds", true)));
+            var asset = new TlTimeline { Asset = TlTimelinePacker.AssetOf(timeline).ToAssetId() };
+            var trace = new List<string>();
+            var before = 0;
+            for (var step = 0; step < 24; step++)
+            {
+                if (step == 1 && rate != 16)
+                    entities.GetBuffer<TimelineRequest>(entity).SetSpeed(asset, rate);
+                live.Step(1);
+                var starts = Rings(entities.GetBuffer<TimelineEvent<AutoKinds.Ding>>(entity), static d => d.Rings);
+                var ends = Rings(entities.GetBuffer<TimelineEvent<AutoKinds.Dong>>(entity), static d => d.Rings);
+                var active = Rings(entities.GetBuffer<TimelineEvent<AutoKinds.Hum>>(entity), static h => h.Rings);
+                var chime = entities.GetComponentData<AutoKinds.Chime>(entity).Count;
+                if (starts.Length + ends.Length + active.Length != 0 || chime != before)
+                    trace.Add(step + ": start " + starts + " end " + ends + " active " + active + " chime " + chime);
+                before = chime;
+            }
+            return trace.ToArray();
+        }
+
+        static string Rings<T>(DynamicBuffer<TimelineEvent<T>> events, Func<T, int> rings) where T : unmanaged
+        {
+            var all = new List<int>();
+            foreach (var record in events)
+                all.Add(rings(record.Record.Value));
+            all.Sort();
+            return string.Join(",", all);
         }
 
         [Test]

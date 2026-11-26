@@ -402,7 +402,7 @@ public partial struct Teleported { public float Offset; }
 ```
 
 - A plain struct that Tl turns into an ECS component (that is why it is `partial`) and **adds to the entity for you**, with all fields 0.
-- It must be `partial`, a `struct`, and declared **directly in a namespace** (not nested, not in the global namespace). Otherwise you get error `TLUNITY9107`.
+- It must be `partial`, a `struct`, and not nested in another type (a namespace or the global namespace is fine). Otherwise you get error `TLUNITY9107`.
 - It is added only to entities whose timelines actually reach a kind that writes it. A kind that no clip feeds adds nothing. Tl also keeps a value your own baker already set.
 - It is optional. You can write to your own `IComponentData` instead; then your own baker must add it (the Force demo does this). `[TlState]` saves that step and also works in plain .NET.
 - An entity that is fed **only by game code** (no timeline reaching the kind) never gets the column: add it yourself.
@@ -1008,7 +1008,7 @@ Other facts you need:
 - World rewind can step back through a **Next** handover into the previous timeline.
 - World rewind (`TimelineStep.Forward = false`) also moves playbacks of a library without kinds backward.
 - Pausing: a paused timeline does not move in either direction until **Resume** or **Seek**.
-- **Speed** is in sixteenths of a tick per step. 1.5x crosses 1, 2, 1, 2 ticks. Kinds and pulses are exact at every speed (tests at 0.5x, 1.5x, 2x, 2.5x, 3x, 4x match a 1x run bit for bit). **Limit:** in Unity `ITlTrack` event methods (`OnClipStart`, `OnClipEnd`, `ExecuteActive` with `Events<T>`) run once per step at the last tick; above 1x a boundary crossed earlier in the step raises no event. Use `[Pulse]` when you need every boundary.
+- **Speed** is in sixteenths of a tick per step. 1.5x crosses 1, 2, 1, 2 ticks. Kinds and pulses are exact at every speed (tests at 0.5x, 1.5x, 2x, 2.5x, 3x, 4x match a 1x run bit for bit). `ITlTrack` event methods (`OnClipStart`, `OnClipEnd`, `ExecuteActive` with `Events<T>`) walk crossings as on .NET: each step raises events for the ticks it just crossed, read from the same per-crossing copies the kinds apply, so every clip boundary and active tick is raised once at any speed, across a speed change too, and in the same step as the kind pulse it feeds.
 
 ---
 
@@ -1043,7 +1043,7 @@ Printing the offset when it changes gives exactly the numbers from Unity: `30 â†
 Things to know:
 
 - The system class `Tl.Generated.TlAuto_<AssemblyName>` is **generated at build time**. The name comes from your assembly name with dots turned into underscores. Its column fields are named `C0_<Type>`, `C1_<Type>`; use your editor's completion to see them.
-- **Timeline ids** follow the timelines' **name order** in a baked library. Adding a timeline can renumber them. Keep ids in one place, or look them up with `world.Find(name)` (.NET) and `library.Find(name)` (Unity).
+- **Timeline ids** follow the timelines' **name order** in a library baked on .NET, and the order timelines stream in on Unity (`TlLibrary.FromBytes` keeps the baked order). Adding a timeline can renumber them. Look them up by name with `world.Find(name)` (.NET) and `library.Find(name)` (Unity) rather than keeping ids.
 - You can bake without Unity: `tl bake tl.project.json -o game.tlib --assembly YourGame.dll` (the `tl` command line tool from the tl repository).
 - The exported library contains the kinds of the whole Unity project, so its size depends on what else is in that project. The behaviour for your timeline is the same.
 - **Prove two hosts agree: the state hash.** `Tl.TlStateHash` hashes every playback and every column after each step. Same scene, same hash, in `tl run`, in Unity (Burst), and in IL2CPP and CoreCLR players (tested with the Inventory, Stats and Crowd scenes). Use it in your own tests: run N steps, assert the hash.
@@ -1060,10 +1060,14 @@ Things to know:
 | Game pulse sender | `DamageKind.Pulses(kinds)`, taken once | `DamageKind.Pulses(writer)` per job | the .NET sender holds a managed handle |
 | Generated sender for a derived kind (`Sum<T>`, `Set<T>`) | none; `kinds.Pulses<T>("Tl.Derived.<Name>")` | `Tl.Derived.<Name>Kind.Pulses(writer)` | tl's source budget |
 | One entity's events | `drained.Of(entity)` after `events.Drain()` | `DynamicBuffer<TimelineEvent<T>>` | same run (slot order, then raise order); `Record.Entity` and `Record.Sequence` are host-specific |
-| Event methods above 1x | see tl docs | once per step, at the last tick | use `[Pulse]` (chapter 10) |
-| Legacy consumers (`Fold`, `ExecuteActive` with columns, `ref Requests`) | run | not run, TLUNITY9105 | |
+| Columns | any unmanaged struct | a partial top-level `[TlState]` struct or an `IComponentData`; a kind that writes anything else fits no system | ECS components; the shared rule is open in IAFahim/tl#665 |
+| A declared `[TimelineSystem]` with events and no kinds of its own | its event methods run | not run (the generated job calls an empty `RunStep`); warns `TLUNITY9109`. Consumers outside `[TimelineSystem]` run in the generated system | open in IAFahim/tl#665 |
+| `TLGEN107` (context taken by `ref`) | warning; the system runs sequentially | not reported | ECS schedules the job |
+| `FoldsPulses` | game pulses fold | accepted, not folded; warns `TLUNITY9108` | open: Unity has no folding sender yet |
+| A marker with no data, or a clip whose bake throws | the bake throws | skipped with a warning, so the rest of the timeline still bakes | by design: the Editor keeps baking the scene |
 | Kind groups | run | skipped, TLUNITY9104 | |
 | Starts of timelines not baked onto the object | n/a | dropped with a warning (Also Plays) | per-object kind archetypes |
+| A start of an id past the library | the step throws an `ArgumentException` before any request applies | dropped and counted in `DroppedStarts`, so `TL_CHECKED` throws at the end of the step | a job cannot throw; each buffer is read inside the tick job |
 | Checked builds (throw on a start the entity cannot hold) | `Debug` or `-p:TlChecked=true` | scripting define `TL_CHECKED` | |
 
 ---
@@ -1104,7 +1108,6 @@ Honest list. Some of these are design decisions still to be made.
 - **No Unity track bindings.** A clip cannot hold a reference to a scene object. Put the reference on your own authoring component and bake it (the Events demo does).
 - **Names are not fully consistent yet.** Examples: both `TlKindAttribute` and `TimelineKindAttribute` exist; `TlClip`, `TlKind` have the `Tl` prefix but `Pulse`, `Feeds`, `ClipEvent`, `KindMode`, `Events<T>` do not; `Playback` exists in both `Tl` and `Tl.Unity`; scene JSON says `"states"` where the code says `[TlState]` and the hash is `TlStateHash`; Unity's Wrap Mode is ignored while Tl's own setting hides in a marker. A naming review is planned; expect renames before 1.0 with no compatibility aliases.
 - **Per-tick sums come back one tick short** on rewind (chapter 10). Pulses are exact.
-- **Unity event methods above 1x** (chapter 10).
 - **Kind `Order` across different groups or assemblies, and `Order` in Unity,** are not covered by tests here.
 - **Version:** preview. Tested on Unity 7000.0.0a16, Entities 7.0.0, URP, Windows. The EditMode and PlayMode suites also run on Linux in CI (the runner is described in `docs/CI-RUNNER.md`: who hosts it and how to restart it). The Linux and macOS players and the macOS editor have not been run. IL2CPP and CoreCLR Windows players were run for the scenes and sample listed in chapter 11.
 - **Install** is by git URL (`#main` moves). No tagged release exists yet.

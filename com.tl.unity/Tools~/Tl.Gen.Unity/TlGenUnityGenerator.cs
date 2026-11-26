@@ -284,6 +284,10 @@ namespace Tl.Gen.Unity
                 var autoEvents = isAuto && index >= 0 && model.Events.Count != 0;
                 if (own.Count != 0 || !isAuto || autoEvents)
                 {
+                    if (own.Count == 0 && !isAuto && model.Events.Count != 0)
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            new DiagnosticDescriptor("TLUNITY9109", "Events of a system without kinds do not run", "System '{0}' declares events but runs no kinds of its own; Unity does not run its event methods. Move its consumers out of the [TimelineSystem] struct so the generated system runs them, or give it a kind.", "Tl.Unity", DiagnosticSeverity.Warning, true),
+                            Microsoft.CodeAnalysis.Location.None, model.SystemTypeName));
                     var text = own.Count == 0 && !autoEvents
                         ? UnitySystemEmitter.Emit(model)
                         : UnityKindJobEmitter.Emit(model, assignments[index], index, own);

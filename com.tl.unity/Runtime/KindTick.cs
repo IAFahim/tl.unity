@@ -193,6 +193,8 @@ namespace Tl.Unity
         public bool DenseForget;
         public bool Walked;
         public ComponentTypeHandle<TimelineDenseChunk> DenseChunkHandle;
+        public NativeQueue<Entity>.ParallelWriter Resets;
+        public bool TrackResets;
 
         [BurstDiscard]
         static void CountManagedRun(int* counters) => System.Threading.Interlocked.Increment(ref counters[KindCounter.ManagedRuns]);
@@ -316,8 +318,15 @@ namespace Tl.Unity
                     else if (Space != null && DenseSlots.IsDense((global::Tl.Playback*)playbacks[row].GetUnsafePtr(), playbacks[row].Length))
                         DenseSlots.Settle(Space, (global::Tl.Playback*)playbacks[row].GetUnsafePtr(), playbacks[row].Length, DenseFrom);
                     var slots = new KindSlots(playbacks[row], &ctx, row);
+                    BySlot((TimelineRequest*)queue.GetUnsafePtr(), queue.Length);
                     for (var r = 0; r < queue.Length; r++)
+                    {
+                        if (queue[r].Op == global::Tl.RequestOp.Start && queue[r].Timeline > Index.TimelineCount)
+                            System.Threading.Interlocked.Increment(ref Counters[KindCounter.DroppedStarts]);
+                        if (queue[r].Op == global::Tl.RequestOp.Reset && TrackResets)
+                            Resets.Enqueue(chunk.GetNativeArray(EntityHandle)[row]);
                         global::Tl.PlaybackRules.Apply(ref slots, Index.Timelines, Index.TimelineCount, queue[r].Op, queue[r].Timeline, queue[r].At);
+                    }
                     queue.Clear();
                     if (clocks != null)
                     {
@@ -433,6 +442,21 @@ namespace Tl.Unity
 
     public unsafe partial struct KindTickJob
     {
+        static void BySlot(TimelineRequest* items, int count)
+        {
+            for (var i = 1; i < count; i++)
+            {
+                var item = items[i];
+                var j = i - 1;
+                while (j >= 0 && items[j].Slot > item.Slot)
+                {
+                    items[j + 1] = items[j];
+                    j--;
+                }
+                items[j + 1] = item;
+            }
+        }
+
         void TickDense(in ArchetypeChunk chunk, in global::Tl.KindTables tables, ref KindCursor ctx, ref UnityPulseSink sink, BufferAccessor<Playback> playbacks, v128 playing, TimelinePlaying* copiesRo, bool anyClosed, byte* horizons, ulong reverse, bool playbackChanged, TimelineDenseChunk* info, ulong requested0, ulong requested1)
         {
             var count = chunk.Count;
@@ -687,7 +711,7 @@ namespace Tl.Unity
         {
             _cursor->EnsureReach();
             if (_cursor->Tables->Reaches(timeline, _cursor->Reach)) return true;
-            _cursor->Counters[KindCounter.DroppedStarts]++;
+            System.Threading.Interlocked.Increment(ref _cursor->Counters[KindCounter.DroppedStarts]);
             return false;
         }
 
