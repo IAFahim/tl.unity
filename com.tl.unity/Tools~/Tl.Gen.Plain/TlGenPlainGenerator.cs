@@ -12,17 +12,35 @@ namespace Tl.Gen.Plain
     {
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
-            var systems = context.SyntaxProvider.ForAttributeWithMetadataName(
-                "Tl.TimelineSystemAttribute",
-                static (node, _) => node is StructDeclarationSyntax,
-                static (_, _) => true);
-            var combined = systems.Collect().Combine(context.CompilationProvider);
-            context.RegisterSourceOutput(combined, static (production, pair) => Generate(production, pair.Left.Length, pair.Right));
+            IncrementalValueProvider<int> Count(string name, bool method) => context.SyntaxProvider.ForAttributeWithMetadataName(
+                name,
+                method ? static (node, _) => node is MethodDeclarationSyntax : static (node, _) => node is TypeDeclarationSyntax,
+                static (_, _) => true).Collect().Select(static (found, _) => found.Length);
+            var tracks = context.SyntaxProvider.CreateSyntaxProvider(
+                static (node, _) => node is TypeDeclarationSyntax syntax && (syntax.Identifier.ValueText.StartsWith("TlCompiled_", StringComparison.Ordinal) || syntax.BaseList is not null && syntax.BaseList.Types.Any(static candidate => Base(candidate.Type) is "ITlTrack" or "ITrack" or "IMarker")),
+                static (_, _) => true).Collect().Select(static (found, _) => found.Length);
+            var declarations = Count("Tl.TimelineSystemAttribute", false)
+                .Combine(Count("Tl.TlKindAttribute", false)).Select(static (pair, _) => pair.Left + pair.Right)
+                .Combine(Count("Tl.TimelineKindAttribute", false)).Select(static (pair, _) => pair.Left + pair.Right)
+                .Combine(Count("Tl.TlStateAttribute", false)).Select(static (pair, _) => pair.Left + pair.Right)
+                .Combine(Count("Tl.FeedsAttribute", true)).Select(static (pair, _) => pair.Left + pair.Right)
+                .Combine(Count("Tl.PulseAttribute", true)).Select(static (pair, _) => pair.Left + pair.Right)
+                .Combine(tracks).Select(static (pair, _) => pair.Left + pair.Right);
+            var combined = declarations.Combine(context.CompilationProvider);
+            context.RegisterSourceOutput(combined, static (production, pair) => Generate(production, pair.Left, pair.Right));
         }
 
-        static void Generate(SourceProductionContext context, int systems, Compilation compilation)
+        static string Base(TypeSyntax type) => type switch
         {
-            if (systems == 0 || compilation is not CSharpCompilation csharp)
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+            QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText,
+            GenericNameSyntax generic => generic.Identifier.ValueText,
+            _ => "",
+        };
+
+        static void Generate(SourceProductionContext context, int declarations, Compilation compilation)
+        {
+            if (declarations == 0 || compilation is not CSharpCompilation csharp || csharp.AssemblyName is "Tl.Core" or "Tl.Unity")
                 return;
             var id = Sanitize(csharp.AssemblyName ?? "Game");
             var emitted = Tl.Gen.CSharp.SystemGeneration.Emit(csharp, id);
