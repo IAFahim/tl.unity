@@ -49,13 +49,13 @@ public sealed partial class TimelineWorld
         return null;
     }
 
-    public unsafe void Tick(PlaybackTable players, bool forward = true)
+    public unsafe void Tick(PlaybackTable players, bool forward = true, TlWorkers? workers = null)
     {
         if (players is null) throw new ArgumentNullException(nameof(players));
         var kinds = players.Kinds ?? throw new InvalidOperationException("Tick needs a KindStore attached to the PlaybackTable; use Advance for kind-free playback.");
         ClosingList.Clear(players.Closing);
         ApplyRequests(players);
-        kinds.TickPass(forward);
+        kinds.TickPass(forward, workers);
     }
 
     public unsafe void Advance(PlaybackTable players, bool forward = true)
@@ -66,7 +66,7 @@ public sealed partial class TimelineWorld
         var timelines = _view.Timelines;
         if (timelines == null) return;
         var count = _view.TimelineCount;
-        if (players.Lazy(_glideViewEscaped ? null : this, forward)) AdvanceLazy(players, timelines, count, forward);
+        if (players.Lazy(_glideViewEscaped ? null : this, forward)) { AdvanceLazy(players, timelines, count, forward); players.Judge(); }
         else
             for (var w = 0; w < players.PlayingWords; w++)
                 for (var bits = players.PlayingBits[w]; bits != 0; bits &= bits - 1)
@@ -113,6 +113,7 @@ public sealed partial class TimelineWorld
 #if !NET
         for (var k = 0; k < held; k++) System.Threading.Volatile.Read(ref players.SlotsOf((int)(hits[k] >> 16))[(ushort)hits[k]].Tick);
 #endif
+        players.Landed += held;
         for (var k = 0; k < held; k++)
         {
             var entity = (int)(hits[k] >> 16);
@@ -165,10 +166,11 @@ public sealed partial class TimelineWorld
 
     unsafe void Drain(PlaybackTable players, RequestQueue* queue)
     {
-        if (queue->Count == 0) { RequestQueue.Trim(queue); return; }
+        var drained = queue->Count;
         RequestQueue.SortStable(queue);
         for (var i = 0; i < queue->Count; i++) ApplyRecord(players, queue->Item(i));
         RequestQueue.Clear(queue);
+        RequestQueue.Trim(queue, drained);
     }
 
     unsafe void SyncPlaybacks(PlaybackTable players)

@@ -1,6 +1,3 @@
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-
 namespace Tl;
 
 public unsafe interface IKindSteps
@@ -26,7 +23,7 @@ public unsafe struct KindScore
     public int Cells;
     public int TimelineCount;
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     public int CellOf(ushort timeline, int tick, int kind)
     {
         if ((uint)(timeline - 1) >= (uint)TimelineCount) return -1;
@@ -211,7 +208,7 @@ public unsafe struct KindValues
     public int Reversed;
     public long Bytes;
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     public uint* HeadOf(ushort timeline, ushort tick)
     {
         var t = (uint)(timeline - 1);
@@ -219,7 +216,7 @@ public unsafe struct KindValues
         return (uint*)(Data + (nuint)(Row[t] + tick) * (nuint)Stride);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     public byte* RowOf(ushort timeline, ushort tick)
     {
         var head = HeadOf(timeline, tick);

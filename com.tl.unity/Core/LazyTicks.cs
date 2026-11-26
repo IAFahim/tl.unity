@@ -1,6 +1,6 @@
 using System;
-#if NET
 using System.Numerics;
+#if NET
 using System.Runtime.Intrinsics;
 #endif
 
@@ -56,6 +56,22 @@ internal static unsafe class LazyTicks
             best = Vector128.Min(best, (best.AsUInt64() >> 16).AsUInt16());
             best = Vector128.Min(best, (best.AsUInt64() >> 32).AsUInt16());
             near = Math.Min(best[0], best[4]);
+        }
+#else
+        var w = Vector<ushort>.Count;
+        if (Vector.IsHardwareAccelerated && n >= w)
+        {
+            var best = new Vector<ushort>(Far);
+            var far = best;
+            for (; i <= n - w; i += w)
+            {
+                var d = *(Vector<ushort>*)(due + i) - new Vector<ushort>((ushort)(tick + 1));
+                best = Vector.Min(best, d);
+                if (Vector.EqualsAny(d, far))
+                    for (var j = 0; j < w; j++)
+                        if (d[j] == Far) hits[held++] = key + (ulong)(i + j);
+            }
+            for (var j = 0; j < w; j++) near = Math.Min(near, best[j]);
         }
 #endif
         for (; i < n; i++)

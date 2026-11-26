@@ -32,18 +32,11 @@ public struct LibraryPart
     public uint[]? Refs;
 }
 
-public readonly struct KindOverride
+public readonly struct KindOverride(int? inline = null, int? gamePulses = null, int? maxInlineBytes = null)
 {
-    public readonly int? Inline;
-    public readonly int? GamePulses;
-    public readonly int? MaxInlineBytes;
-
-    public KindOverride(int? inline = null, int? gamePulses = null, int? maxInlineBytes = null)
-    {
-        Inline = inline;
-        GamePulses = gamePulses;
-        MaxInlineBytes = maxInlineBytes;
-    }
+    public readonly int? Inline = inline;
+    public readonly int? GamePulses = gamePulses;
+    public readonly int? MaxInlineBytes = maxInlineBytes;
 }
 
 public struct LibrarySettings
@@ -56,24 +49,15 @@ public struct LibrarySettings
     public static LibrarySettings Default => new() { StackDepth = 1, MaxInlineBytes = 64 };
 }
 
-public readonly struct KindCapacity
+public readonly struct KindCapacity(string name, bool group, int worst, int capacity, int entryBytes, string setBy)
 {
-    public readonly string Name;
-    public readonly bool Group;
-    public readonly int Worst;
-    public readonly int Capacity;
-    public readonly int EntryBytes;
-    public readonly string SetBy;
+    public readonly string Name = name;
+    public readonly bool Group = group;
+    public readonly int Worst = worst;
+    public readonly int Capacity = capacity;
+    public readonly int EntryBytes = entryBytes;
+    public readonly string SetBy = setBy;
 
-    public KindCapacity(string name, bool group, int worst, int capacity, int entryBytes, string setBy)
-    {
-        Name = name;
-        Group = group;
-        Worst = worst;
-        Capacity = capacity;
-        EntryBytes = entryBytes;
-        SetBy = setBy;
-    }
 }
 
 public static class LibraryAssembler

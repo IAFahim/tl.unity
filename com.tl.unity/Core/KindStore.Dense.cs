@@ -1,5 +1,3 @@
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 #if NET
 using System.Numerics;
 using System.Runtime.Intrinsics;
@@ -9,14 +7,15 @@ namespace Tl;
 
 public sealed unsafe partial class KindStore
 {
-    const MethodImplOptions Optimized = (MethodImplOptions)512;
+    internal const MethodImplOptions Optimized = (MethodImplOptions)512, Inline = MethodImplOptions.AggressiveInlining;
     const int WordSlots = 4096, ExactAt = WordSlots * 2 + WordSlots / 64 + WordSlots * 3 / 8;
     int* _rowBase;
     int _rowHalf = -1;
     ushort* _gap;
     ulong* _leave;
     ulong* _leaveKinds;
-    ulong* _scratch;
+    KindPulseBuffer* _lanes;
+    int _laneCount;
     byte* _eligible;
     int _denseEpoch;
     int _eligibleEpoch = -1;
@@ -37,7 +36,6 @@ public sealed unsafe partial class KindStore
 
     void BuildLeave()
     {
-        _scratch = (ulong*)Zeroed((ExactAt + PlaybackTable.MaxSlots) * 8 + PlaybackTable.MaxSlots);
         _gap = (ushort*)Zeroed((nuint)Math.Max(1, 2 * _rowHalf) * 2);
         for (var t = 0; t < _timelineCount; t++)
         {
@@ -96,9 +94,11 @@ public sealed unsafe partial class KindStore
     void ReleaseRows()
     {
         Free4(_rowBase, _gap, _eligible, _leave);
-        Free4(_leaveKinds, _scratch, null, null);
+        for (var i = 0; i < _laneCount; i++) _lanes[i].Free();
+        Free4(_leaveKinds, _lanes, null, null);
         _leaveKinds = null;
-        _scratch = null;
+        _lanes = null;
+        _laneCount = 0;
         _rowBase = null;
         _gap = null;
         _leave = null;
@@ -139,20 +139,20 @@ public sealed unsafe partial class KindStore
         _denseDir = step;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(Inline)]
     int Duration(int t) => (int)(_spanMeta[t] & 0x3FFF_FFFFu);
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(Inline)]
     int RowOf(int t, bool reverse, int tick) => _rowBase[t] + (reverse ? _rowHalf + Duration(t) - 1 - tick : tick);
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(Inline)]
     int TickAt(int t, bool reverse, int row)
     {
         var j = row - _rowBase[t] - (reverse ? _rowHalf : 0);
         return reverse ? Duration(t) - 1 - j : j;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(Inline)]
     ushort GapOf(int t, int direction, int tick) => _gap[(direction > 0 ? 0 : _rowHalf) + _rowBase[t] - 1 + tick];
 
     [MethodImpl(Optimized)]
@@ -224,7 +224,7 @@ public sealed unsafe partial class KindStore
     }
 
     [MethodImpl(Optimized)]
-    void DenseRange(int stepDir, int firstWord, int endWord)
+    void DenseRange(int stepDir, int firstWord, int endWord, KindPulseBuffer* buffers)
     {
         var playing = _players.PlayingBits;
         var p = _players.RawView;
@@ -238,10 +238,9 @@ public sealed unsafe partial class KindStore
         var to = (ushort)(from + stepDir);
         var leave = _leave + (stepDir > 0 ? 0 : 1 + 2 * _rowHalf);
         var kindsOf = _leaveKinds;
-        var buffers = _pulseHits;
         var ep = _t.EntryPulse;
         var fastPulse = _t.FastPulseMask;
-        var recs = _scratch;
+        var recs = stackalloc ulong[ExactAt];
         var cap = 64 * Math.Min(stride, WordSlots / 64);
         var map = recs + cap;
         var pulses = map + cap / 64;
@@ -297,27 +296,30 @@ public sealed unsafe partial class KindStore
                 }
                 if (h == held) break;
                 int next = ents[h];
-                for (var r = rest & ((1ul << next) - 1); r != 0; r &= r - 1) Exact(baseE + Tz(r), stepDir, from, to, playing, w, dense[w], spilled[w], dueBase, stride, counts);
+                for (var r = rest & ((1ul << next) - 1); r != 0; r &= r - 1) Exact(baseE + Tz(r), stepDir, from, to, playing, w, dense[w], spilled[w], dueBase, stride, counts, buffers);
                 rest &= ~0ul << next;
                 if ((bad >> next & 1) == 0) continue;
                 bad &= ~(1ul << next);
                 Undense(baseE + next);
-                Tick(baseE + next, stepDir, to, playing, w);
+                Tick(baseE + next, stepDir, to, playing, w, buffers);
                 while (h < held && ents[h] == next) h++;
             }
-            for (; rest != 0; rest &= rest - 1) Exact(baseE + Tz(rest), stepDir, from, to, playing, w, dense[w], spilled[w], dueBase, stride, counts);
+            for (; rest != 0; rest &= rest - 1) Exact(baseE + Tz(rest), stepDir, from, to, playing, w, dense[w], spilled[w], dueBase, stride, counts, buffers);
         }
     }
 
     [MethodImpl(Optimized)]
-    void Exact(int e, int stepDir, ushort from, ushort to, ulong* playing, int w, ulong dense, ulong spilled, ushort* dueBase, int stride, int* counts)
+    void Exact(int e, int stepDir, ushort from, ushort to, ulong* playing, int w, ulong dense, ulong spilled, ushort* dueBase, int stride, int* counts, KindPulseBuffer* buffers)
     {
         if ((dense >> e & 1) != 0)
         {
             var dues = (spilled >> e & 1) == 0 ? dueBase + (nuint)e * (nuint)stride : _players.DuesOf(e);
-            var records = _scratch + ExactAt;
+            var records = stackalloc ulong[PlaybackTable.MaxSlots + PlaybackTable.MaxSlots / 8];
             var due = (byte*)(records + PlaybackTable.MaxSlots);
-            var held = DueSlots(dues, counts[e], to, due);
+            var held = 0;
+            var map = stackalloc ulong[4];
+            for (int m = 0, words = DueMap(dues, counts[e], to, map); m < words; m++)
+                for (var bits = map[m]; bits != 0; bits &= bits - 1) due[held++] = (byte)((m << 6) + Tz(bits));
             var origins = _players.OriginsOf(e);
             var leave = _leave + (stepDir > 0 ? 0 : 1 + 2 * _rowHalf);
             var fast = _t.EntryPulse != null && (_t.EntryPulse[w] >> (e & 63) & 1) != 0 ? 0ul : _t.FastPulseMask;
@@ -333,7 +335,7 @@ public sealed unsafe partial class KindStore
                 {
                     var record = records[h];
                     var kinds = _leaveKinds[(byte)(record >> 48)];
-                    for (var cell = (int)(ushort)(record >> 32); kinds != 0; kinds &= kinds - 1) _pulseHits[Tz(kinds)].Push(e, cell);
+                    for (var cell = (int)(ushort)(record >> 32); kinds != 0; kinds &= kinds - 1) buffers[Tz(kinds)].Push(e, cell);
                     var at = due[h];
                     var origin = (ushort)(origins[at] + (ushort)(record >> 16));
                     if (origins[at] != origin) origins[at] = origin;
@@ -343,17 +345,22 @@ public sealed unsafe partial class KindStore
             }
             Undense(e);
         }
-        Tick(e, stepDir, to, playing, w);
+        Tick(e, stepDir, to, playing, w, buffers);
     }
 
-    void Tick(int e, int stepDir, ushort to, ulong* playing, int w)
+    void Tick(int e, int stepDir, ushort to, ulong* playing, int w, KindPulseBuffer* buffers)
     {
+        if (buffers != _pulseHits)
+        {
+            buffers[_kindCount].Push(e, 0);
+            return;
+        }
         var pulse = default(BufferPulseSink);
         if (!KindRules.TickEntity(in _t, _players.SlotsOf(e), _players.CountOf(e), ref _kindRows, e, stepDir, ref pulse)) playing[w] &= ~(1ul << (e & 63));
         else Densify(e, to, stepDir);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(Inline)]
     static int DueMap(ushort* dues, int n, ushort at, ulong* map)
     {
         var words = (n + 63) >> 6;
@@ -369,19 +376,52 @@ public sealed unsafe partial class KindStore
         return words;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static int DueSlots(ushort* dues, int n, ushort at, byte* hits)
+    void Lanes(int step, int words, TlWorkers workers)
     {
-        var held = 0;
-        var i = 0;
-#if NET
-        if (Vector256.IsHardwareAccelerated)
-            for (var target = Vector256.Create(at); i + 16 <= n; i += 16)
-                for (var m = Vector256.Equals(Vector256.Load(dues + i), target).ExtractMostSignificantBits(); m != 0; m &= m - 1)
-                    hits[held++] = (byte)(i + BitOperations.TrailingZeroCount(m));
-#endif
-        for (; i < n; i++)
-            if (dues[i] == at) hits[held++] = (byte)i;
-        return held;
+        int chunks = Math.Min(workers.WorkerCount * 4, words), per = _kindCount + 1, n = chunks * per;
+        if (_laneCount < n)
+        {
+            var lanes = (KindPulseBuffer*)Zeroed((nuint)(n * sizeof(KindPulseBuffer)));
+            Buffer.MemoryCopy(_lanes, lanes, n * sizeof(KindPulseBuffer), _laneCount * sizeof(KindPulseBuffer));
+            NativeMemory.AlignedFree(_lanes);
+            _lanes = lanes;
+            _laneCount = n;
+        }
+        var ends = stackalloc int[chunks];
+        var start = stackalloc int[per];
+        TlWorkers.Split(_players.PlayingBits, words, ends, chunks);
+        var state = stackalloc IntPtr[] { TlWorkers.Pin(this), (IntPtr)step };
+        try { workers.Run(&Lane, state, ends, chunks); }
+        finally { TlWorkers.Free(state[0]); }
+        for (var k = 0; k < _kindCount; k++) start[k] = _pulseHits[k].Count;
+        for (var c = _kindCount; c < n; c += per)
+        {
+            for (var i = 0; i < _lanes[c].Count; i++) Tick(_lanes[c].Items[i].Entity, step, (ushort)(_players.DenseClock + step), _players.PlayingBits, _lanes[c].Items[i].Entity >> 6, _pulseHits);
+            _lanes[c].Count = 0;
+        }
+        for (var k = 0; k < _kindCount; k++)
+        {
+            var dst = _pulseHits + k;
+            int a = dst->Count, o = a;
+            for (var c = k; c < n; c += per) o += _lanes[c].Count;
+            dst->Room(o - a--);
+            dst->Count = o;
+            for (var c = n - per + k; c >= 0; c -= per)
+            {
+                for (var b = _lanes[c].Count - 1; b >= 0; b--)
+                {
+                    var hit = _lanes[c].Items[b];
+                    while (a >= start[k] && dst->Items[a].Entity > hit.Entity) dst->Items[--o] = dst->Items[a--];
+                    dst->Items[--o] = hit;
+                }
+                _lanes[c].Count = 0;
+            }
+        }
+    }
+
+    static void Lane(void* state, int first, int end, int chunk)
+    {
+        var store = (KindStore)TlWorkers.Target(*(IntPtr*)state)!;
+        store.DenseRange((int)((IntPtr*)state)[1], first, end, store._lanes + chunk * (store._kindCount + 1));
     }
 }

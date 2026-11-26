@@ -1,14 +1,9 @@
 namespace Tl;
 
 [AttributeUsage(AttributeTargets.Struct)]
-public sealed class TlClipAttribute : Attribute
+public sealed class TlClipAttribute(string menu) : Attribute
 {
-    public TlClipAttribute(string menu)
-    {
-        Menu = menu;
-    }
-
-    public string Menu { get; }
+    public string Menu { get; } = menu;
 }
 
 [AttributeUsage(AttributeTargets.Struct)]
@@ -100,20 +95,13 @@ public unsafe struct TlCurve
 }
 
 [Serializable]
-public struct TlAssetId : IEquatable<TlAssetId>
+public struct TlAssetId(uint x, uint y, uint z, uint w) : IEquatable<TlAssetId>
 {
-    public uint X;
-    public uint Y;
-    public uint Z;
-    public uint W;
+    public uint X = x;
+    public uint Y = y;
+    public uint Z = z;
+    public uint W = w;
 
-    public TlAssetId(uint x, uint y, uint z, uint w)
-    {
-        X = x;
-        Y = y;
-        Z = z;
-        W = w;
-    }
 
     public bool IsValid => (X | Y | Z | W) != 0;
 

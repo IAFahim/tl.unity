@@ -1,11 +1,9 @@
-using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Tl;
 
 public enum KindEventOp : byte { Remove, Insert, PulseStart, PulseEnd, PulseMarker }
 
-[StructLayout(LayoutKind.Sequential)]
 public struct LibraryKind
 {
     public uint NameOffset;
@@ -22,7 +20,6 @@ public struct LibraryKind
     public uint GroupCapacity;
 }
 
-[StructLayout(LayoutKind.Sequential)]
 public struct LibraryFeeder
 {
     public ushort Kind;
@@ -36,7 +33,6 @@ public struct LibraryFeeder
     public uint MethodLength;
 }
 
-[StructLayout(LayoutKind.Sequential)]
 public struct LibraryKindTimeline
 {
     public ulong KindMask;
@@ -52,7 +48,6 @@ public struct LibraryKindTimeline
     public uint WrapBackwardCount;
 }
 
-[StructLayout(LayoutKind.Sequential)]
 public struct LibraryWindow
 {
     public ushort Track;
@@ -63,7 +58,6 @@ public struct LibraryWindow
     public uint Flags;
 }
 
-[StructLayout(LayoutKind.Sequential)]
 public struct LibraryKindEvent
 {
     public ushort Window;
@@ -73,7 +67,6 @@ public struct LibraryKindEvent
     public ushort _p1;
 }
 
-[StructLayout(LayoutKind.Sequential)]
 public unsafe struct KindSectionView
 {
     public byte* Base;

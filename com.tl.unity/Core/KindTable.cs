@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace Tl;
 
 [Flags]
@@ -71,19 +69,14 @@ public unsafe struct KindTable
         if (t->_heap != null)
         {
             for (var r = 0; r < t->Rows; r++)
-                if (t->_heap[r] != null) NativeMemory.AlignedFree(t->_heap[r]);
+                NativeMemory.AlignedFree(t->_heap[r]);
             NativeMemory.AlignedFree(t->_heap);
         }
         if (t->Inline != 0)
             for (var r = 0; r < t->Rows; r++)
                 if (t->IsSpilled(r)) NativeMemory.AlignedFree(*(byte**)(t->_inline + (nuint)r * (nuint)t->Inline * (nuint)t->Stride));
-        NativeMemory.AlignedFree(t->Entity);
-        NativeMemory.AlignedFree(t->_inline);
-        NativeMemory.AlignedFree(t->Length);
-        NativeMemory.AlignedFree(t->Spilled);
-        NativeMemory.AlignedFree(t->Active);
-        NativeMemory.AlignedFree(t->Enabled);
-        NativeMemory.AlignedFree(t);
+        KindStore.Free4(t->Entity, t->_inline, t->Length, t->Spilled);
+        KindStore.Free4(t->Active, t->Enabled, t, null);
     }
 
     public long StorageBytesPerRow => 6 + (long)Inline * Stride;
@@ -158,6 +151,12 @@ public unsafe struct KindTable
 
     public void Clear(int row)
     {
+        if (Length[row] > 32 && IsSpilled(row))
+        {
+            NativeMemory.AlignedFree(HeapOf(row));
+            if (Inline == 0) _heap[row] = null;
+            SetSpilled(row, false);
+        }
         Length[row] = 0;
         Active[row >> 6] &= ~(1ul << (row & 63));
     }
