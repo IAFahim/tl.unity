@@ -987,11 +987,13 @@ namespace Tl.Gen.Unity
 
         static void EmitSlotWalk(StringBuilder writer, string kindIdVar)
         {
-            W(writer, "for (var __q = 0; __q < __cnt + __smp; __q++)");
+            W(writer, "var __spans = (Index.SpanKinds >> " + kindIdVar + " & 1) != 0;");
+            W(writer, "for (var __q = 0; __spans && __q < __cnt + __smp; __q++)");
             W(writer, "{");
             W(writer, "var __i = __q < __smp ? __cnt + __q : __q - __smp;");
             W(writer, "var __pb = __run + __i;");
             W(writer, "if (__pb->Timeline == 0 || !global::Tl.KindScore.Listed(__pb->Flags)) continue;");
+            W(writer, "if ((uint)(__pb->Timeline - 1) >= (uint)Index.Score.TimelineCount || (Index.Score.Masks[__pb->Timeline - 1].KindMask >> " + kindIdVar + " & 1) == 0) continue;");
             W(writer, "ushort __tick = __i < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;");
             W(writer, "var __cell = Index.Score.CellOf(__pb->Timeline, __tick, " + kindIdVar + ");");
             W(writer, "if (__cell < 0 || Index.Score.Start[__cell] == Index.Score.Start[__cell + 1]) continue;");
@@ -1749,8 +1751,11 @@ namespace Tl.Gen.Unity
             W(writer, "}");
         }
 
-        static void EmitSlotHeader(StringBuilder writer, IReadOnlyList<UnityContext> events, bool closing)
+        static void EmitSlotHeader(StringBuilder writer, IReadOnlyList<UnityContext> events, List<(int index, SystemConsumer consumer)> consumers, bool closing)
         {
+            ulong pairs = 0;
+            foreach (var (_, consumer) in consumers)
+                pairs |= 1ul << (int)(consumer.PairKey >> 58);
             W(writer, "for (var __s = 0; __s < __n; __s++)");
             W(writer, "{");
             W(writer, "var __pb = __pbs + __s;");
@@ -1758,6 +1763,7 @@ namespace Tl.Gen.Unity
                 W(writer, "if (__pb->Timeline == 0 || (__pb->Flags & global::Tl.PlaybackFlags.Stopping) == 0) continue;");
             else
                 W(writer, "if (__pb->Timeline == 0 || (__pb->Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Stopping)) != 0) continue;");
+            W(writer, "if (Index.LacksPairs(__pb->Timeline, " + pairs + "UL)) continue;");
             W(writer, "var __tl = global::Tl.LibraryViewReader.GetTimeline(in View, new global::Tl.TimelineId(__pb->Timeline));");
             W(writer, "if (__tl == null || __tl->Duration == 0) continue;");
             if (closing)
@@ -1822,11 +1828,11 @@ namespace Tl.Gen.Unity
             }
             if (closes)
             {
-                EmitSlotHeader(writer, events, true);
+                EmitSlotHeader(writer, events, consumers, true);
                 EmitEventSteps(writer, events, consumers, assignment, true);
                 W(writer, "}");
             }
-            EmitSlotHeader(writer, events, false);
+            EmitSlotHeader(writer, events, consumers, false);
             EmitEventSteps(writer, events, consumers, assignment, false);
             W(writer, "}");
             var retry = new StringBuilder();

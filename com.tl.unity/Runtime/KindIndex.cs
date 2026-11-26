@@ -119,6 +119,14 @@ namespace Tl.Unity
         public UnsafeUntypedBufferAccessor* WorkerBuffers;
         public EnabledMask* WorkerMasks;
         public KindDense* Dense;
+        public ulong* PairBloom;
+        public ulong SpanKinds;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ulong PairBit(ulong pairKey) => 1ul << (int)(pairKey >> 58);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool LacksPairs(ushort timeline, ulong pairs) => PairBloom != null && (uint)(timeline - 1) < (uint)TimelineCount && (PairBloom[timeline - 1] & pairs) == 0;
 
         public bool IsCreated => Timelines != null || KindCount == 0 && Closure != null;
 
@@ -449,6 +457,17 @@ namespace Tl.Unity
                 var calm = Math.Max(1, global::Tl.KindCalm.Length(in tables));
                 index.Calm = global::Tl.KindCalm.Build(in tables, Zeroed<byte>(calm), Zeroed<byte>(calm), Zeroed<int>(Math.Max(1, count)));
                 BuildSteps(ref index, view, world);
+                index.PairBloom = Zeroed<ulong>(Math.Max(1, count));
+                for (var t = 0; t < count; t++)
+                {
+                    var tl = view.Timelines + t;
+                    ulong bloom = 0;
+                    for (var s = 0; s < tl->StageCount; s++)
+                        for (var i = 0; i < tl->Stages[s].StepCount; i++)
+                            bloom |= PairBit(tl->Stages[s].Steps[i].PairKey);
+                    index.PairBloom[t] = bloom;
+                    if (index.KindCount != 0) index.SpanKinds |= index.Sec.Timelines[t].KindMask;
+                }
                 var steps = new ScoreSteps { Index = index };
                 index.Score = global::Tl.KindScore.Build(in tables, ref steps);
                 index.Values = Zeroed<global::Tl.KindValues>(Math.Max(1, index.KindCount));
@@ -721,6 +740,7 @@ namespace Tl.Unity
 
         public void Dispose()
         {
+            Free(PairBloom);
             Free(Closure);
             Free(Pairs);
             Free(PairStart);
