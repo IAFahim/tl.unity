@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace Tl;
 
 public enum RequestOp : byte
@@ -21,27 +19,16 @@ public enum RequestOp : byte
     Reset = 14,
 }
 
-public readonly struct RequestRecord
+public readonly struct RequestRecord(int entity, int slot, ushort timeline, ushort at, RequestOp op, int sequence)
 {
-    public RequestRecord(int entity, int slot, ushort timeline, ushort at, RequestOp op, int sequence)
-    {
-        Entity = entity;
-        Slot = slot;
-        Timeline = timeline;
-        At = at;
-        Op = op;
-        Sequence = sequence;
-    }
-
-    public readonly int Entity;
-    public readonly int Slot;
-    public readonly ushort Timeline;
-    public readonly ushort At;
-    public readonly RequestOp Op;
-    public readonly int Sequence;
+    public readonly int Entity = entity;
+    public readonly int Slot = slot;
+    public readonly ushort Timeline = timeline;
+    public readonly ushort At = at;
+    public readonly RequestOp Op = op;
+    public readonly int Sequence = sequence;
 }
 
-[StructLayout(LayoutKind.Sequential)]
 public unsafe struct RequestQueue
 {
     RequestRecord* _items;
@@ -119,9 +106,9 @@ public unsafe struct RequestQueue
 
     internal static int CapacityOf(RequestQueue* queue) => queue->_capacity;
 
-    internal static void Trim(RequestQueue* queue)
+    internal static void Trim(RequestQueue* queue, int drained = 0)
     {
-        if (queue->_count != 0 || queue->_capacity <= 4096) return;
+        if (queue->_count != 0 || queue->_capacity <= Math.Max(4096, drained * 8)) return;
         NativeMemory.AlignedFree(queue->_items);
         NativeMemory.AlignedFree(queue->_scratch);
         queue->_items = queue->_scratch = null;
@@ -137,8 +124,8 @@ public unsafe struct RequestQueue
 
     public static void Free(RequestQueue* queue)
     {
-        if (queue->_items != null) NativeMemory.AlignedFree(queue->_items);
-        if (queue->_scratch != null) NativeMemory.AlignedFree(queue->_scratch);
+        NativeMemory.AlignedFree(queue->_items);
+        NativeMemory.AlignedFree(queue->_scratch);
         NativeMemory.AlignedFree(queue);
     }
 
@@ -151,14 +138,13 @@ public unsafe struct RequestQueue
             new ReadOnlySpan<RequestRecord>(queue->_items, queue->_count).CopyTo(new Span<RequestRecord>(block, next));
             NativeMemory.AlignedFree(queue->_items);
         }
-        if (queue->_scratch != null) NativeMemory.AlignedFree(queue->_scratch);
+        NativeMemory.AlignedFree(queue->_scratch);
         queue->_scratch = (RequestRecord*)NativeMemory.AlignedAlloc((nuint)next * (nuint)sizeof(RequestRecord), 8u);
         queue->_items = block;
         queue->_capacity = next;
     }
 }
 
-[StructLayout(LayoutKind.Sequential)]
 public unsafe struct ClosingList
 {
     int* _entities;
@@ -196,10 +182,7 @@ public unsafe struct ClosingList
 
     public static void Free(ClosingList* list)
     {
-        if (list->_entities != null) NativeMemory.AlignedFree(list->_entities);
-        if (list->_slots != null) NativeMemory.AlignedFree(list->_slots);
-        if (list->_playbacks != null) NativeMemory.AlignedFree(list->_playbacks);
-        NativeMemory.AlignedFree(list);
+        KindStore.Free4(list->_entities, list->_slots, list->_playbacks, list);
     }
 
     static void Grow(ClosingList* list)
@@ -224,18 +207,12 @@ public unsafe struct ClosingList
     }
 }
 
-public readonly unsafe struct Requests
+public readonly unsafe struct Requests(RequestQueue* queue, int entity, int slot)
 {
-    readonly RequestQueue* _queue;
-    readonly int _entity;
-    readonly int _slot;
+    readonly RequestQueue* _queue = queue;
+    readonly int _entity = entity;
+    readonly int _slot = slot;
 
-    public Requests(RequestQueue* queue, int entity, int slot)
-    {
-        _queue = queue;
-        _entity = entity;
-        _slot = slot;
-    }
     public Requests For(int entity, int slot) => new(_queue, entity, slot);
     void Add(ushort timeline, ushort at, RequestOp op) => RequestQueue.Add(_queue, _entity, _slot, timeline, at, op);
     public void Start(ushort timeline, ushort at = 0) => Add(timeline, at, RequestOp.Start);

@@ -1,6 +1,3 @@
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-
 namespace Tl;
 
 [StructLayout(LayoutKind.Sequential, Size = 8)]
@@ -16,14 +13,14 @@ public unsafe struct KindPulseBuffer
     public int Count;
     internal int Capacity;
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     internal void Push(int entity, int cell)
     {
         if (Count == Capacity) Grow(1);
         Items[Count++] = new KindPulseHit { Entity = entity, Cell = cell };
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     internal void Room(int count)
     {
         if (Capacity - Count < count) Grow(count);
@@ -84,7 +81,7 @@ public unsafe struct KindTables
     internal ulong* EntryPulse;
     public ulong FastPulseMask;
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     public bool Reaches(ushort timeline, ulong reach) => KindCount == 0 || (Closure[timeline - 1] & ~reach) == 0;
 }
 
@@ -361,7 +358,7 @@ public static unsafe class KindRules
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     static void PulseAt<TRows, TPulse>(in KindTables t, ref TRows rows, int row, int slot, ushort id, int tick, int dir, ulong fastMask, ref ulong hitFast, ref TPulse pulse) where TRows : struct, IKindRows where TPulse : struct, IKindPulseSink
     {
         var pb = t.PulseBase[id - 1];
@@ -372,13 +369,13 @@ public static unsafe class KindRules
         RouteEvents(in t, ref rows, row, slot, id, tick, dir, cell, t.PulseMasks[cell], fastMask, ref hitFast, ref pulse);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     static void Events<TRows>(in KindTables t, ref TRows rows, int row, int i, ushort id, int tick, int dir) where TRows : struct, IKindRows
     {
         if (t.KindCount != 0 && t.Sec.Timelines[id - 1].KindMask != 0 && (t.Sec.EventBitsAt(t.Sec.Timelines + (id - 1), tick) & (dir > 0 ? 1 : 2)) != 0) ApplyEventsFiltered(in t, ref rows, row, i, id, tick, dir);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     static void RouteEvents<TRows, TPulse>(in KindTables t, ref TRows rows, int row, int slot, ushort id, int tick, int dir, int cell, ulong km, ulong fastMask, ref ulong hitFast, ref TPulse pulse) where TRows : struct, IKindRows where TPulse : struct, IKindPulseSink
     {
         var fast = pulse.Active ? km & fastMask : 0ul;
@@ -462,7 +459,7 @@ public static unsafe class KindRules
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     static void Append<TRows>(ref TRows rows, int row, LibraryFeeder* feeder, int slot, ushort timeline, int window, KindEntryFlags flags) where TRows : struct, IKindRows
     {
         var entry = rows.Append(row, feeder);

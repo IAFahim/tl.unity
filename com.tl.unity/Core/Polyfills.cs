@@ -1,3 +1,5 @@
+global using System.Runtime.CompilerServices;
+global using System.Runtime.InteropServices;
 #if !NET
 global using NativeMemory = Tl.NativeAlloc;
 global using Unsafe = Tl.UPoly;

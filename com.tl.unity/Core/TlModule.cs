@@ -34,16 +34,10 @@ public static class TlGenerated
 
 sealed class SystemRegistry
 {
-    internal readonly struct Entry
+    internal readonly struct Entry(ITlModule module, int index)
     {
-        public Entry(ITlModule module, int index)
-        {
-            Module = module;
-            Index = index;
-        }
-
-        public readonly ITlModule Module;
-        public readonly int Index;
+        public readonly ITlModule Module = module;
+        public readonly int Index = index;
     }
     internal int ModuleVersion;
 

@@ -1,9 +1,7 @@
 using System;
-using System.Runtime.InteropServices;
 
 namespace Tl
 {
-    [StructLayout(LayoutKind.Sequential)]
     public readonly struct TimelineId
     {
         public readonly ushort Value;
@@ -12,7 +10,6 @@ namespace Tl
         public static TimelineId None => default;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
     public unsafe struct LibraryView
     {
         public const uint AbiVersion = 2u;
@@ -23,7 +20,6 @@ namespace Tl
         public KindSectionView Kinds;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
     public unsafe struct LibraryTimeline
     {
         public ushort Id;
@@ -39,7 +35,6 @@ namespace Tl
         public ulong* EventTickBits;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
     public unsafe struct LibraryStage
     {
         public uint Start;
@@ -48,7 +43,6 @@ namespace Tl
         public LibraryStep* Steps;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
     public unsafe struct LibraryStep
     {
         public uint Pair;
@@ -65,7 +59,6 @@ namespace Tl
         public void* FrameRow;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
     public struct LibraryEvent
     {
         public uint Tick;

@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Runtime.InteropServices;
 
 namespace Tl;
 
@@ -35,7 +34,6 @@ struct NativeHeader
     public uint Reserved0, Reserved1, Reserved2;
 }
 
-[StructLayout(LayoutKind.Sequential)]
 struct NativePair
 {
     public ulong Key;
@@ -52,7 +50,6 @@ struct NativePair
 struct NativeStage { public uint Start, End, ProgramOffset, ProgramCount; }
 struct NativeStep { public uint Slot, Pair; }
 
-[StructLayout(LayoutKind.Sequential)]
  struct SlotRow
 {
 	internal const ushort NoClipValue = 0xFFFF;

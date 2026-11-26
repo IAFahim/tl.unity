@@ -1,4 +1,4 @@
 # Tl.Core (generated)
 
-Copied from [IAFahim/tl@d87d1998985e](https://github.com/IAFahim/tl/tree/d87d1998985e2abdb68dbcfc6b3f7a270c7e0a5d/src/Tl.Core) `src/Tl.Core` by `eng/sync-tl-core.sh`.
+Copied from [IAFahim/tl@06a1c71008d3](https://github.com/IAFahim/tl/tree/06a1c71008d3b5396baafbf0a43678978cbe9374/src/Tl.Core) `src/Tl.Core` by `eng/sync-tl-core.sh`.
 Do not edit here: change tl, move the `external/tl-kinds` submodule, and run the script again.

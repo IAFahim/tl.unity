@@ -1,5 +1,3 @@
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace Tl;
@@ -29,16 +27,10 @@ public struct Playback
     public byte Phase;
 }
 
-public readonly struct EntityRef
+public readonly struct EntityRef(int index, int version)
 {
-    public EntityRef(int index, int version)
-    {
-        Index = index;
-        Version = version;
-    }
-
-    public readonly int Index;
-    public readonly int Version;
+    public readonly int Index = index;
+    public readonly int Version = version;
 }
 
 public readonly unsafe struct PlaybackView
@@ -70,16 +62,16 @@ public readonly unsafe struct PlaybackView
 
     public int CountOf(int entity) => Counts[entity];
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     public bool IsDense(int entity) => Dense != null && (Dense[entity >> 6] >> (entity & 63) & 1) != 0;
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     public Playback* RunOf(int entity)
         => (Spilled[entity >> 6] & (1ul << (entity & 63))) == 0
             ? Slots + (nuint)entity * (nuint)SlotsPerEntity
             : Blocks + *(int*)(Slots + (nuint)entity * (nuint)SlotsPerEntity);
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     public Playback* SlotOf(int entity, int slot) => RunOf(entity) + slot;
 }
 
@@ -116,6 +108,9 @@ public sealed unsafe class PlaybackTable : IDisposable
     ushort* _blockOrigins;
     internal ushort DenseClock;
     internal bool Settled;
+    int _wait = -1, _back = 32, _seen, _total;
+    internal int Landed;
+    internal bool Resting => _wait >= 0;
 
     public PlaybackTable(int entityCapacity, int slotsPerEntity = 4) : this(entityCapacity, slotsPerEntity, 0)
     {
@@ -255,14 +250,25 @@ public sealed unsafe class PlaybackTable : IDisposable
 
     internal bool Lazy(TimelineWorld? world, bool forward)
     {
-        if (_limit == 0 || world == null) { Thaw(); return false; }
+        if (_limit == 0 || world == null || _wait >= 0 && _wait-- > 0) { Thaw(); return false; }
         if (_owner != world || Forward != forward) Thaw();
         _owner = world;
         Forward = forward;
         if (Frozen) return true;
         Frozen = true;
-        for (var e = 0; e < _entities; e++) Seal(e);
+        Landed = _total = 0;
+        _seen = -8;
+        for (var e = 0; e < _entities; e++) { Seal(e); _total += _counts[e]; }
         return true;
+    }
+
+    internal void Judge()
+    {
+        if (++_seen <= 0) Landed = 0;
+        if (_seen < 16) return;
+        if (Landed > _total && _total >= 64) { Thaw(); _wait = _back; _back = Math.Min(_back * 2, 4096); }
+        else _back = 32;
+        _seen = Landed = 0;
     }
 
     public RequestQueue* Pending => _pending;
@@ -469,13 +475,13 @@ public sealed unsafe class PlaybackTable : IDisposable
 
         public int Length
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(KindStore.Inline)]
             get => _table._counts[_entity];
         }
 
         public ref Playback this[int index]
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(KindStore.Inline)]
             get => ref _items[index];
         }
 
@@ -533,19 +539,12 @@ public sealed unsafe class PlaybackTable : IDisposable
         if (_disposed) return;
         _disposed = true;
         _kinds?.Dispose();
-        NativeMemory.AlignedFree(_playing);
         RequestQueue.Free(_pending);
         RequestQueue.Free(_consumer);
         ClosingList.Free(_closing);
-        NativeMemory.AlignedFree(_slots);
-        NativeMemory.AlignedFree(_counts);
-        NativeMemory.AlignedFree(_spilled);
-        NativeMemory.AlignedFree(Next);
-        NativeMemory.AlignedFree(_blockDue);
-        NativeMemory.AlignedFree(_dense);
-        NativeMemory.AlignedFree(_origins);
-        NativeMemory.AlignedFree(_blockOrigins);
-        if (_blocks != null) NativeMemory.AlignedFree(_blocks);
+        KindStore.Free4(_playing, _slots, _counts, _spilled);
+        KindStore.Free4(Next, _blockDue, _dense, _origins);
+        KindStore.Free4(_blockOrigins, _blocks, null, null);
         GC.SuppressFinalize(this);
     }
 }

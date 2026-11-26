@@ -1,5 +1,3 @@
-using System.Runtime.CompilerServices;
-
 namespace Tl;
 
 public interface IPlaybackSlots
@@ -50,7 +48,7 @@ public static unsafe class PlaybackRules
 
     public const PlaybackFlags Parked = PlaybackFlags.StartPending | PlaybackFlags.Ended;
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     public static bool IsParked(PlaybackFlags flags) => (flags & Parked) == Parked;
 
     public static bool Resumes(PlaybackFlags flags, bool forward)
@@ -63,7 +61,7 @@ public static unsafe class PlaybackRules
         return true;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     public static bool IsLive(in Playback slot) => slot.Timeline != 0 && (slot.Flags & PlaybackFlags.Stopping) == 0;
 
     public static void Apply<TSlots>(ref TSlots slots, LibraryTimeline* timelines, int timelineCount, RequestOp op, ushort timeline, ushort at)
@@ -245,10 +243,10 @@ public static unsafe class PlaybackRules
         return true;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     public static int Crossings(in Playback slot) => slot.Rate == 0 ? 1 : (slot.Phase + slot.Rate) >> 4;
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(KindStore.Inline)]
     public static int Cross(ref Playback slot)
     {
         if (slot.Rate == 0) return 1;
