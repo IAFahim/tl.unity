@@ -206,5 +206,7 @@ A/B against 5a15151 (run 45742181282, two runs, kind ms, base -> head):
 | eager d=3000 | 38.2, 30.9 -> 22.8, 32.9 | 10.6, 24.8 -> 10.3, 13.2 | 11.9, 68.8 -> 13.8, 12.7 |
 | lazy d=3000 | 44.0, 32.1 -> 28.2, 27.0 | 10.7, 21.5 -> 10.3, 26.8 | 16.0, 41.7 -> 12.2, 6.1 |
 
-Hashes are equal in every cell for both arms (d=120 475C30B6054A7D25, d=3000 73B879360C251716), allocation 0 B, and the EditMode and PlayMode suite passes on 62015b4. On one worker the kinds are about 35 % faster at duration 120 and about 20 % at 3000. Multi-worker cells vary up to 3x between runs of the same build on this runner, so they show no reliable gain or loss; read only the 1-worker column. What is left is the Locomotion feeder itself, evaluated for every live span every frame (section 8 item 1).
+A second A/B (run 45745441638, same base, head 20e47bd) gave, on 1 worker: eager d=120 22.1, 24.5 -> 18.2, 15.6; lazy d=120 15.2, 26.7 -> 17.0, 17.3; eager d=3000 30.7, 33.9 -> 32.2, 37.9; lazy d=3000 26.7, 30.2 -> 31.0, 35.3.
+
+Hashes are equal in every cell for both arms in both runs (d=120 475C30B6054A7D25, d=3000 73B879360C251716), allocation 0 B, and the EditMode and PlayMode suite passes on 62015b4 and 20e47bd. Over the four 1-worker samples per arm, the median kind time drops about 30 % for eager and about 18 % for lazy at duration 120; at duration 3000 the medians are within noise (eager 32.4 vs 32.5 ms, lazy 31.1 vs 29.6 ms). Samples of the same build vary up to 3x between runs on this runner, including at 5 and 11 workers, so only the duration 120 gain is supported. What is left is the Locomotion feeder itself, evaluated for every live span every frame (section 8 item 1).
 
