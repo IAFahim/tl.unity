@@ -13,13 +13,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {submodules: recursive, fetch-depth: 0}
+      - run: bash eng/cpu-topology.sh 2>&1 | tee artifacts-topology.log
       - run: bash eng/worker-scaling.sh
         env:
-          TL_SCALING_BASE: 5a15151
-          TL_SCALING_WORKERS: 1 5 11
-          TL_SCALING_RUNS: 2
+          TL_SCALING_WORKERS: 1 2 3 4 5 6 7 8 9 11
+          TL_SCALING_RUNS: 1
+          TL_SCALING_DURATIONS: "120"
+          TL_SCALING_MODES: lazy
+      - if: always()
+        run: mkdir -p artifacts/worker-scaling && cp artifacts-topology.log artifacts/worker-scaling/topology.log || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: worker-scaling
           path: artifacts/worker-scaling/*.log
+      - if: always()
+        run: rm -rf artifacts/worker-scaling/probe-* artifacts/worker-scaling/base-src; git worktree prune
