@@ -402,7 +402,7 @@ public partial struct Teleported { public float Offset; }
 ```
 
 - A plain struct that Tl turns into an ECS component (that is why it is `partial`) and **adds to the entity for you**, with all fields 0.
-- It must be `partial`, a `struct`, and declared **directly in a namespace** (not nested, not in the global namespace). Otherwise you get error `TLUNITY9107`.
+- It must be `partial`, a `struct`, and not nested in another type (a namespace or the global namespace is fine). Otherwise you get error `TLUNITY9107`.
 - It is added only to entities whose timelines actually reach a kind that writes it. A kind that no clip feeds adds nothing. Tl also keeps a value your own baker already set.
 - It is optional. You can write to your own `IComponentData` instead; then your own baker must add it (the Force demo does this). `[TlState]` saves that step and also works in plain .NET.
 - An entity that is fed **only by game code** (no timeline reaching the kind) never gets the column: add it yourself.
@@ -1043,7 +1043,7 @@ Printing the offset when it changes gives exactly the numbers from Unity: `30 â†
 Things to know:
 
 - The system class `Tl.Generated.TlAuto_<AssemblyName>` is **generated at build time**. The name comes from your assembly name with dots turned into underscores. Its column fields are named `C0_<Type>`, `C1_<Type>`; use your editor's completion to see them.
-- **Timeline ids** follow the timelines' **name order** in a baked library. Adding a timeline can renumber them. Keep ids in one place, or look them up with `world.Find(name)` (.NET) and `library.Find(name)` (Unity).
+- **Timeline ids** follow the timelines' **name order** in a library baked on .NET, and the order timelines stream in on Unity (`TlLibrary.FromBytes` keeps the baked order). Adding a timeline can renumber them. Look them up by name with `world.Find(name)` (.NET) and `library.Find(name)` (Unity) rather than keeping ids.
 - You can bake without Unity: `tl bake tl.project.json -o game.tlib --assembly YourGame.dll` (the `tl` command line tool from the tl repository).
 - The exported library contains the kinds of the whole Unity project, so its size depends on what else is in that project. The behaviour for your timeline is the same.
 - **Prove two hosts agree: the state hash.** `Tl.TlStateHash` hashes every playback and every column after each step. Same scene, same hash, in `tl run`, in Unity (Burst), and in IL2CPP and CoreCLR players (tested with the Inventory, Stats and Crowd scenes). Use it in your own tests: run N steps, assert the hash.
@@ -1061,7 +1061,11 @@ Things to know:
 | Generated sender for a derived kind (`Sum<T>`, `Set<T>`) | none; `kinds.Pulses<T>("Tl.Derived.<Name>")` | `Tl.Derived.<Name>Kind.Pulses(writer)` | tl's source budget |
 | One entity's events | `drained.Of(entity)` after `events.Drain()` | `DynamicBuffer<TimelineEvent<T>>` | same run (slot order, then raise order); `Record.Entity` and `Record.Sequence` are host-specific |
 | Event methods above 1x | see tl docs | once per step, at the last tick | use `[Pulse]` (chapter 10) |
-| Legacy consumers (`Fold`, `ExecuteActive` with columns, `ref Requests`) | run | not run, TLUNITY9105 | |
+| Columns | any unmanaged struct | a partial top-level `[TlState]` struct or an `IComponentData`; a kind that writes anything else fits no system | ECS components; the shared rule is open in IAFahim/tl#665 |
+| A declared `[TimelineSystem]` with events and no kinds of its own | its event methods run | not run (the generated job calls an empty `RunStep`) | open in IAFahim/tl#665 |
+| `TLGEN107` (context taken by `ref`) | warning; the system runs sequentially | not reported | ECS schedules the job |
+| `FoldsPulses` | game pulses fold | accepted, not folded, no warning | open in IAFahim/tl#665 |
+| A marker with no data, or a clip whose bake throws | the bake throws | skipped (a warning for a throwing bake) | open in IAFahim/tl#665 |
 | Kind groups | run | skipped, TLUNITY9104 | |
 | Starts of timelines not baked onto the object | n/a | dropped with a warning (Also Plays) | per-object kind archetypes |
 | Checked builds (throw on a start the entity cannot hold) | `Debug` or `-p:TlChecked=true` | scripting define `TL_CHECKED` | |
