@@ -326,41 +326,43 @@ public sealed unsafe class PlaybackTable : IDisposable
             NativeMemory.Clear(_blocks + (nuint)head, (nuint)size * 8u);
             return head;
         }
-        if (_blocksUsed + size > _blocksCapacity)
-        {
-            var needed = _blocksUsed + size;
-            var capacity = _blocksCapacity == 0 ? 256 : Math.Max(_blocksCapacity * 2, needed);
-            var blocks = (Playback*)NativeMemory.AlignedAlloc((nuint)capacity * 8u, 64u);
-            if (_blocks != null)
-            {
-                new ReadOnlySpan<Playback>(_blocks, _blocksUsed).CopyTo(new Span<Playback>(blocks, _blocksUsed));
-                NativeMemory.AlignedFree(_blocks);
-            }
-            if (_origins != null)
-            {
-                var origins = (ushort*)KindStore.Zeroed((nuint)capacity * 4u);
-                if (_blockOrigins != null)
-                {
-                    new ReadOnlySpan<ushort>(_blockOrigins, _blocksUsed).CopyTo(new Span<ushort>(origins, _blocksUsed));
-                    new ReadOnlySpan<ushort>(_blockOrigins + _blocksCapacity, _blocksUsed).CopyTo(new Span<ushort>(origins + capacity, _blocksUsed));
-                    NativeMemory.AlignedFree(_blockOrigins);
-                }
-                _blockOrigins = origins;
-            }
-            _blocks = blocks;
-            _blocksCapacity = capacity;
-            if (Next != null)
-            {
-                var due = (ushort*)NativeMemory.AlignedAlloc((nuint)capacity * 2u, 64u);
-                new ReadOnlySpan<ushort>(_blockDue, _blocksUsed).CopyTo(new Span<ushort>(due, _blocksUsed));
-                NativeMemory.AlignedFree(_blockDue);
-                _blockDue = due;
-            }
-        }
+        Reserve(_blocksUsed + size);
         var offset = _blocksUsed;
         _blocksUsed += size;
         NativeMemory.Clear(_blocks + (nuint)offset, (nuint)size * 8u);
         return offset;
+    }
+
+    void Reserve(int needed)
+    {
+        if (needed <= _blocksCapacity) return;
+        var capacity = Math.Max(_blocksCapacity == 0 ? 256 : _blocksCapacity * 2, needed);
+        var blocks = (Playback*)NativeMemory.AlignedAlloc((nuint)capacity * 8u, 64u);
+        if (_blocks != null)
+        {
+            new ReadOnlySpan<Playback>(_blocks, _blocksUsed).CopyTo(new Span<Playback>(blocks, _blocksUsed));
+            NativeMemory.AlignedFree(_blocks);
+        }
+        if (_origins != null)
+        {
+            var origins = (ushort*)KindStore.Zeroed((nuint)capacity * 4u);
+            if (_blockOrigins != null)
+            {
+                new ReadOnlySpan<ushort>(_blockOrigins, _blocksUsed).CopyTo(new Span<ushort>(origins, _blocksUsed));
+                new ReadOnlySpan<ushort>(_blockOrigins + _blocksCapacity, _blocksUsed).CopyTo(new Span<ushort>(origins + capacity, _blocksUsed));
+                NativeMemory.AlignedFree(_blockOrigins);
+            }
+            _blockOrigins = origins;
+        }
+        _blocks = blocks;
+        _blocksCapacity = capacity;
+        if (Next != null)
+        {
+            var due = (ushort*)NativeMemory.AlignedAlloc((nuint)capacity * 2u, 64u);
+            new ReadOnlySpan<ushort>(_blockDue, _blocksUsed).CopyTo(new Span<ushort>(due, _blocksUsed));
+            NativeMemory.AlignedFree(_blockDue);
+            _blockDue = due;
+        }
     }
 
     void FreeBlock(int offset, int capacity)
@@ -533,6 +535,42 @@ public sealed unsafe class PlaybackTable : IDisposable
     public void SetSpeed(int entity, ushort timeline, ushort sixteenths) => Add(entity, timeline, sixteenths, RequestOp.Speed);
     public void SetChannelSpeed(int entity, byte channel, ushort sixteenths) => Add(entity, channel, sixteenths, RequestOp.SpeedChannel);
     public void Reset(int entity) => Add(entity, 0, 0, RequestOp.Reset);
+
+    public void Save(PlaybackImage image) => Image(image, true);
+
+    public void Restore(PlaybackImage image) => Image(image, false);
+
+    void Image(PlaybackImage m, bool saving)
+    {
+        if (m is null) throw new ArgumentNullException(nameof(m));
+        m.Begin(saving);
+        Thaw();
+        _kinds?.Sync();
+        _kinds?.UndenseAll();
+        m.Same(_entities);
+        m.Same(_slotsPerEntity);
+        m.Same((long)LibraryGeneration);
+        m.Same(_kinds?.Shape ?? -1);
+        m.Io(_slots, (long)_entities * _slotsPerEntity * 8);
+        m.Io(_counts, _entities * 4L);
+        m.Io(_spilled, _spilledWords * 8L);
+        m.Io(_playing, _playingWords * 8L);
+        var used = m.Of(_blocksUsed);
+        Reserve(used);
+        m.Io(_blocks, used * 8L);
+        _blocksUsed = used;
+        fixed (int* heads = _freeHeads) m.Io(heads, _freeHeads.Length * 4L);
+        Clock = m.Of(Clock);
+        DenseClock = m.Of(DenseClock);
+        DroppedStarts = m.Of(DroppedStarts);
+        _wait = m.Of(_wait);
+        _back = m.Of(_back);
+        RequestQueue.Image(_consumer, m);
+        RequestQueue.Image(_pending, m);
+        ClosingList.Image(_closing, m);
+        _kinds?.Image(m);
+        m.End();
+    }
 
     public void Dispose()
     {
