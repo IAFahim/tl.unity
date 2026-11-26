@@ -539,12 +539,19 @@ if (__has0) { __o0.EnsureCapacity(__cap0); __eb0 = new global::Tl.Events<global:
 else __eb0 = new global::Tl.Events<global::KindGame.Cue>(__h0, null, 0);
 for (var __s = 0; __s < __n; __s++)
 {
-var __pb = __pbs + __s;
-if (__pb->Timeline == 0 || (__pb->Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Stopping)) != 0) continue;
+var __ps = __pbs + __s;
+if (__ps->Timeline == 0 || (__ps->Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Stopping)) != 0) continue;
+var __pcopy = *__ps;
+global::Tl.Unity.TimelineTicks.Decode(&__pcopy, (__clocks == null ? (ushort)0 : __clocks[__row]));
+var __pb = &__pcopy;
+var __pk = global::Tl.PlaybackRules.Crossings(in __pcopy);
+for (var __j = 0; __j < __pk; __j++)
+{
+if (__j > 0 && (global::Tl.PlaybackRules.Advance(ref __pcopy, View.Timelines, View.TimelineCount, Forward) != global::Tl.AdvanceResult.Kept || (__pcopy.Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused)) != 0)) break;
 if (Index.LacksPairs(__pb->Timeline, 4096UL)) continue;
 var __tl = global::Tl.LibraryViewReader.GetTimeline(in View, new global::Tl.TimelineId(__pb->Timeline));
 if (__tl == null || __tl->Duration == 0) continue;
-var __tick = global::Tl.Unity.TimelineTicks.Real(__pb, (__clocks == null ? (ushort)0 : __clocks[__row]));
+var __tick = __pb->Tick;
 var __stage = global::Tl.LibraryViewReader.StageAt(__tl, __tick);
 if (__stage == null) continue;
 var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;
@@ -568,6 +575,7 @@ ushort __within4 = (ushort)(__tick - __def->WindowStart);
 sbyte __dir4 = __backward ? (sbyte)-1 : (sbyte)1;
 global::TlUnityGenerated.TlUnityFrames.Frame_0_4(__row4, __first4, __second4, __blend4, __tick, __len4, __within4, (ushort)__def->TrackIndex, (ushort)__tl->Duration, __dir4, __kflags, out var __t4, out var __cc4, out var __f4);
 if (__tick == __def->WindowStart && (__pb->Flags & global::Tl.PlaybackFlags.ReenterPending) == 0) global::KindGame.Whistle.OnClipStart(in __f4, ref __eb0);
+}
 }
 }
 }

@@ -1758,11 +1758,23 @@ namespace Tl.Gen.Unity
                 pairs |= 1ul << (int)(consumer.PairKey >> 58);
             W(writer, "for (var __s = 0; __s < __n; __s++)");
             W(writer, "{");
-            W(writer, "var __pb = __pbs + __s;");
             if (closing)
+            {
+                W(writer, "var __pb = __pbs + __s;");
                 W(writer, "if (__pb->Timeline == 0 || (__pb->Flags & global::Tl.PlaybackFlags.Stopping) == 0) continue;");
+            }
             else
-                W(writer, "if (__pb->Timeline == 0 || (__pb->Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Stopping)) != 0) continue;");
+            {
+                W(writer, "var __ps = __pbs + __s;");
+                W(writer, "if (__ps->Timeline == 0 || (__ps->Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Stopping)) != 0) continue;");
+                W(writer, "var __pcopy = *__ps;");
+                W(writer, "global::Tl.Unity.TimelineTicks.Decode(&__pcopy, (__clocks == null ? (ushort)0 : __clocks[__row]));");
+                W(writer, "var __pb = &__pcopy;");
+                W(writer, "var __pk = global::Tl.PlaybackRules.Crossings(in __pcopy);");
+                W(writer, "for (var __j = 0; __j < __pk; __j++)");
+                W(writer, "{");
+                W(writer, "if (__j > 0 && (global::Tl.PlaybackRules.Advance(ref __pcopy, View.Timelines, View.TimelineCount, Forward) != global::Tl.AdvanceResult.Kept || (__pcopy.Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused)) != 0)) break;");
+            }
             W(writer, "if (Index.LacksPairs(__pb->Timeline, " + pairs + "UL)) continue;");
             W(writer, "var __tl = global::Tl.LibraryViewReader.GetTimeline(in View, new global::Tl.TimelineId(__pb->Timeline));");
             W(writer, "if (__tl == null || __tl->Duration == 0) continue;");
@@ -1772,7 +1784,7 @@ namespace Tl.Gen.Unity
                 W(writer, "var __tick = __rt < __tl->Duration ? __rt : (ushort)(__tl->Duration - 1);");
             }
             else
-                W(writer, "var __tick = global::Tl.Unity.TimelineTicks.Real(__pb, (__clocks == null ? (ushort)0 : __clocks[__row]));");
+                W(writer, "var __tick = __pb->Tick;");
             W(writer, "var __stage = global::Tl.LibraryViewReader.StageAt(__tl, __tick);");
             W(writer, "if (__stage == null) continue;");
             W(writer, "var __backward = Forward ? (__pb->Flags & global::Tl.PlaybackFlags.Reverse) != 0 : (__pb->Flags & global::Tl.PlaybackFlags.Reverse) == 0;");
@@ -1834,6 +1846,7 @@ namespace Tl.Gen.Unity
             }
             EmitSlotHeader(writer, events, consumers, false);
             EmitEventSteps(writer, events, consumers, assignment, false);
+            W(writer, "}");
             W(writer, "}");
             var retry = new StringBuilder();
             for (var e = 0; e < events.Count; e++)

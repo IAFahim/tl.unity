@@ -40,7 +40,7 @@ Install for users: Package Manager > Install package from git URL `https://githu
 ## Open items
 
 - **Naming review** (see the main README, chapter 13, for the list of inconsistencies).
-- Unity `ITlTrack` event methods run once per step; above 1x a boundary crossed earlier in the step raises no event.
+- `ITlTrack` event methods look one step ahead above 1x on both hosts, so they lead the kinds by up to a step and a speed change can skip or repeat a tick. Decide whether events should cover the ticks the step crossed instead.
 - Per-tick sums come back **one tick short** on rewind (pulses are exact). Decide whether that is intended.
 - Kind `Order` across groups and assemblies, and a foreign feeder at a rate on the Unity host, are untested.
 - Bug 3 of tl.unity #24 (load context not unloaded): editor hooks are now released before reload, unverified on Linux (needs the Linux Editor log).

@@ -69,6 +69,34 @@ namespace AutoKinds
         public static void OnClipStart(in TlFrame<ChimeClip> frame, ref Events<Ding> dings) => dings.Raise(new Ding { Rings = frame.Clip.Rings });
     }
 
+    [TlClip("AutoKinds/Toll")]
+    public struct TollClip
+    {
+        public int Rings;
+    }
+
+    public struct Dong
+    {
+        public int Rings;
+    }
+
+    public struct Hum
+    {
+        public int Rings;
+    }
+
+    public struct TollTrack : ITlTrack<TollClip>
+    {
+        [Pulse(typeof(ChimeKind), On = ClipEvent.Start)]
+        public static int Ring(in TlFrame<TollClip> frame) => frame.Direction * frame.Clip.Rings;
+
+        public static void OnClipStart(in TlFrame<TollClip> frame, ref Events<Ding> dings) => dings.Raise(new Ding { Rings = frame.Clip.Rings });
+
+        public static void OnClipEnd(in TlFrame<TollClip> frame, ref Events<Dong> dongs) => dongs.Raise(new Dong { Rings = frame.Clip.Rings });
+
+        public static void ExecuteActive(in TlFrame<TollClip> frame, ref Events<Hum> hums) => hums.Raise(new Hum { Rings = frame.Clip.Rings });
+    }
+
     [TlState]
     public partial struct Abilities
     {

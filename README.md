@@ -1008,7 +1008,7 @@ Other facts you need:
 - World rewind can step back through a **Next** handover into the previous timeline.
 - World rewind (`TimelineStep.Forward = false`) also moves playbacks of a library without kinds backward.
 - Pausing: a paused timeline does not move in either direction until **Resume** or **Seek**.
-- **Speed** is in sixteenths of a tick per step. 1.5x crosses 1, 2, 1, 2 ticks. Kinds and pulses are exact at every speed (tests at 0.5x, 1.5x, 2x, 2.5x, 3x, 4x match a 1x run bit for bit). **Limit:** in Unity `ITlTrack` event methods (`OnClipStart`, `OnClipEnd`, `ExecuteActive` with `Events<T>`) run once per step at the last tick; above 1x a boundary crossed earlier in the step raises no event. Use `[Pulse]` when you need every boundary.
+- **Speed** is in sixteenths of a tick per step. 1.5x crosses 1, 2, 1, 2 ticks. Kinds and pulses are exact at every speed (tests at 0.5x, 1.5x, 2x, 2.5x, 3x, 4x match a 1x run bit for bit). `ITlTrack` event methods (`OnClipStart`, `OnClipEnd`, `ExecuteActive` with `Events<T>`) walk crossings as on .NET: each step raises events at the playback's tick and at the ticks its next step crosses, so at a steady speed every clip boundary and active tick is raised once. Above 1x they lead the kinds by up to a step, and a speed change shifts that window (a rise skips the ticks the changing step crosses before its last, a fall raises some twice). Use `[Pulse]` when a boundary must land in the same step as the kinds at every speed.
 
 ---
 
@@ -1060,7 +1060,6 @@ Things to know:
 | Game pulse sender | `DamageKind.Pulses(kinds)`, taken once | `DamageKind.Pulses(writer)` per job | the .NET sender holds a managed handle |
 | Generated sender for a derived kind (`Sum<T>`, `Set<T>`) | none; `kinds.Pulses<T>("Tl.Derived.<Name>")` | `Tl.Derived.<Name>Kind.Pulses(writer)` | tl's source budget |
 | One entity's events | `drained.Of(entity)` after `events.Drain()` | `DynamicBuffer<TimelineEvent<T>>` | same run (slot order, then raise order); `Record.Entity` and `Record.Sequence` are host-specific |
-| Event methods above 1x | see tl docs | once per step, at the last tick | use `[Pulse]` (chapter 10) |
 | Columns | any unmanaged struct | a partial top-level `[TlState]` struct or an `IComponentData`; a kind that writes anything else fits no system | ECS components; the shared rule is open in IAFahim/tl#665 |
 | A declared `[TimelineSystem]` with events and no kinds of its own | its event methods run | not run (the generated job calls an empty `RunStep`); warns `TLUNITY9109`. Consumers outside `[TimelineSystem]` run in the generated system | open in IAFahim/tl#665 |
 | `TLGEN107` (context taken by `ref`) | warning; the system runs sequentially | not reported | ECS schedules the job |
@@ -1109,7 +1108,7 @@ Honest list. Some of these are design decisions still to be made.
 - **No Unity track bindings.** A clip cannot hold a reference to a scene object. Put the reference on your own authoring component and bake it (the Events demo does).
 - **Names are not fully consistent yet.** Examples: both `TlKindAttribute` and `TimelineKindAttribute` exist; `TlClip`, `TlKind` have the `Tl` prefix but `Pulse`, `Feeds`, `ClipEvent`, `KindMode`, `Events<T>` do not; `Playback` exists in both `Tl` and `Tl.Unity`; scene JSON says `"states"` where the code says `[TlState]` and the hash is `TlStateHash`; Unity's Wrap Mode is ignored while Tl's own setting hides in a marker. A naming review is planned; expect renames before 1.0 with no compatibility aliases.
 - **Per-tick sums come back one tick short** on rewind (chapter 10). Pulses are exact.
-- **Unity event methods above 1x** (chapter 10).
+- **Event methods at a changing speed** lead the kinds by up to a step above 1x, and a speed change can skip or repeat a tick, on both hosts (chapter 10).
 - **Kind `Order` across different groups or assemblies, and `Order` in Unity,** are not covered by tests here.
 - **Version:** preview. Tested on Unity 7000.0.0a16, Entities 7.0.0, URP, Windows. The EditMode and PlayMode suites also run on Linux in CI (the runner is described in `docs/CI-RUNNER.md`: who hosts it and how to restart it). The Linux and macOS players and the macOS editor have not been run. IL2CPP and CoreCLR Windows players were run for the scenes and sample listed in chapter 11.
 - **Install** is by git URL (`#main` moves). No tagged release exists yet.
