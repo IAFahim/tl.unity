@@ -586,6 +586,19 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
+        public void AMarkerWithNoValuesIsSkippedWithAWarning()
+        {
+            var timeline = Timeline("Push");
+            var track = ForceTrack(timeline);
+            Clip(track, 0, 1, 4f);
+            track.CreateMarker<TlMarker>(0.5);
+            LogAssert.Expect(LogType.Warning, new Regex("^The marker at .* has no values\\. The marker is skipped\\.$"));
+            using var baked = new Baked(Director("Cube", timeline).gameObject);
+            LogAssert.NoUnexpectedReceived();
+            Assert.AreEqual(1, baked.Count<TlTimelineSet>(), "the timeline still bakes");
+        }
+
+        [Test]
         public void AnEmptyTrackNextToAFilledOneBakesWithoutALog()
         {
             var timeline = Timeline("Push");

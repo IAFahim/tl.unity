@@ -113,9 +113,14 @@ namespace Tl.Unity.Editor
                 if (typedTrack.Clips.Count > 0)
                     typed.Tracks.Add(typedTrack);
             }
-            foreach (var marker in TlDirectorTimelines.Markers(timeline).OrderBy(m => m.time))
+            foreach (var marker in TlDirectorTimelines.AllMarkers(timeline).OrderBy(m => m.time))
             {
                 var data = marker.Data;
+                if (data == null)
+                {
+                    Debug.LogWarning("The marker at " + Seconds(marker.time) + " in " + name + " (" + NameOf(context) + ") has no values. The marker is skipped.", marker);
+                    continue;
+                }
                 try
                 {
                     if (baker.IsActive)

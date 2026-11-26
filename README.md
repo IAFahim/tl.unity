@@ -1065,7 +1065,7 @@ Things to know:
 | A declared `[TimelineSystem]` with events and no kinds of its own | its event methods run | not run (the generated job calls an empty `RunStep`) | open in IAFahim/tl#665 |
 | `TLGEN107` (context taken by `ref`) | warning; the system runs sequentially | not reported | ECS schedules the job |
 | `FoldsPulses` | game pulses fold | accepted, not folded; warns `TLUNITY9108` | open: Unity has no folding sender yet |
-| A marker with no data, or a clip whose bake throws | the bake throws | skipped (a warning for a throwing bake) | open in IAFahim/tl#665 |
+| A marker with no data, or a clip whose bake throws | the bake throws | skipped with a warning, so the rest of the timeline still bakes | by design: the Editor keeps baking the scene |
 | Kind groups | run | skipped, TLUNITY9104 | |
 | Starts of timelines not baked onto the object | n/a | dropped with a warning (Also Plays) | per-object kind archetypes |
 | Checked builds (throw on a start the entity cannot hold) | `Debug` or `-p:TlChecked=true` | scripting define `TL_CHECKED` | |
