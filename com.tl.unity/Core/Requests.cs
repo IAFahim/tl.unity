@@ -129,6 +129,15 @@ public unsafe struct RequestQueue
         NativeMemory.AlignedFree(queue);
     }
 
+    internal static void Image(RequestQueue* queue, PlaybackImage m)
+    {
+        var n = m.Of(queue->_count);
+        while (n > queue->_capacity) Grow(queue);
+        m.Io(queue->_items, (long)n * sizeof(RequestRecord));
+        queue->_count = n;
+        queue->_sequence = m.Of(queue->_sequence);
+    }
+
     static void Grow(RequestQueue* queue)
     {
         var next = queue->_capacity == 0 ? 16 : queue->_capacity * 2;
@@ -185,6 +194,16 @@ public unsafe struct ClosingList
         KindStore.Free4(list->_entities, list->_slots, list->_playbacks, list);
     }
 
+    internal static void Image(ClosingList* list, PlaybackImage m)
+    {
+        var n = m.Of(list->_count);
+        while (n > list->_capacity) Grow(list);
+        m.Io(list->_entities, n * 4L);
+        m.Io(list->_slots, n * 4L);
+        m.Io(list->_playbacks, n * 8L);
+        list->_count = n;
+    }
+
     static void Grow(ClosingList* list)
     {
         var next = list->_capacity == 0 ? 8 : list->_capacity * 2;
@@ -196,10 +215,8 @@ public unsafe struct ClosingList
             new ReadOnlySpan<int>(list->_entities, list->_count).CopyTo(new Span<int>(entities, next));
             new ReadOnlySpan<int>(list->_slots, list->_count).CopyTo(new Span<int>(slots, next));
             new ReadOnlySpan<Playback>(list->_playbacks, list->_count).CopyTo(new Span<Playback>(playbacks, next));
-            NativeMemory.AlignedFree(list->_entities);
-            NativeMemory.AlignedFree(list->_slots);
-            NativeMemory.AlignedFree(list->_playbacks);
         }
+        KindStore.Free4(list->_entities, list->_slots, list->_playbacks, null);
         list->_entities = entities;
         list->_slots = slots;
         list->_playbacks = playbacks;

@@ -175,7 +175,7 @@ public sealed unsafe partial class KindStore
         _players.SetDense(entity, false);
     }
 
-    void UndenseAll()
+    internal void UndenseAll()
     {
         var dense = _players.DenseBits;
         if (dense == null) return;

@@ -557,6 +557,45 @@ public sealed unsafe partial class KindStore : IDisposable
         public Playback* Reserve(int entity, int used, int length) => Players.Reserve(entity, length, used);
     }
 
+    internal long Shape => (long)_generation << 8 | (uint)_kindCount;
+
+    internal void Image(PlaybackImage m)
+    {
+        var words = _players.PlayingWords;
+        m.Io(_samples, _players.EntityCapacity + 1);
+        if (_closedEntity != null) m.Io(_closedEntity, words * 8L);
+        _hasClosed = m.Of(_hasClosed);
+        _tickTablePulses = m.Of(_tickTablePulses);
+        _slowPulseMask = m.Of(_slowPulseMask);
+        DroppedPulses = m.Of(DroppedPulses);
+        for (var k = 0; k < _kindCount; k++)
+        {
+            var t = _tables[k];
+            if (t != null && _owner[k] == k) t->Image(m);
+            m.Io(_listed[k], t == null ? 8 : t->Words * 8L);
+            var q = _queues + k;
+            var n = m.Of(q->Count);
+            if (n > q->Capacity)
+            {
+                NativeMemory.AlignedFree(q->Items);
+                q->Items = (byte*)NativeMemory.AlignedAlloc((nuint)n * (nuint)q->Stride, 8);
+                q->Capacity = n;
+            }
+            m.Io(q->Items, (long)n * q->Stride);
+            q->Count = n;
+            if (_pulseHits == null) continue;
+            var h = _pulseHits + k;
+            n = m.Of(h->Count);
+            if (!m.Saving)
+            {
+                h->Count = 0;
+                h->Room(n);
+            }
+            m.Io(h->Items, n * (long)sizeof(KindPulseHit));
+            h->Count = n;
+        }
+    }
+
     internal void Sync()
     {
         if (_generation != _world._generation) Rebuild();

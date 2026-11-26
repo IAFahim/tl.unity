@@ -128,6 +128,19 @@ public unsafe struct KindTable
         SetSpilled(row, true);
     }
 
+    internal void Image(PlaybackImage m)
+    {
+        m.Io(Active, Words * 8L);
+        m.Io(Enabled, Words * 8L);
+        for (var r = 0; r < Rows; r++)
+        {
+            var n = m.Of(Length[r]);
+            for (Length[r] = 0; Capacity(r) < n;) Grow(r);
+            Length[r] = n;
+            m.Io(Data(r), (long)n * Stride);
+        }
+    }
+
     internal int ColdMaxLength() { var m = 0; for (var r = 0; r < Rows; r++) if (Length[r] > m) m = Length[r]; return m; }
     internal int ColdOverflows() { var s = 0; for (var r = 0; r < Rows; r++) if (IsSpilled(r)) s++; return s; }
 
