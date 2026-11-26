@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # usage: eng/sync-parity.sh [--check]
 # Copies tl's host-parity fixture (tests/Tl.Systems.Tests/Parity: the two domain sources, the library, the request script and the
-# expected column bytes per tick) into com.tl.unity/Tests/Parity. The sources compile unchanged on both hosts; the data is embedded.
+# expected column bytes per tick) into com.tl.unity/Tests/Parity, and the pure control script whose digests tl pins into Tests/KindsPure/Bench. The sources compile unchanged on both hosts; the data is embedded.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 src="$root/external/tl-kinds/tests/Tl.Systems.Tests/Parity"
@@ -29,6 +29,14 @@ for file in "${files[@]}"; do
     cp "$stage/$file" "$dst/$file"
   fi
 done
+controls="$root/external/tl-kinds/tests/Tl.Systems.Tests/PureControls/PureControls.cs"
+bench="$root/com.tl.unity/Tests/KindsPure/Bench/PureControls.cs"
+[ -f "$controls" ] || { echo "external/tl-kinds has no PureControls script: move it to a tl commit that carries tests/Tl.Systems.Tests/PureControls" >&2; exit 1; }
+if [ "${1:-}" = "--check" ]; then
+  if cmp -s <(tr -d '\r' < "$controls") <(tr -d '\r' < "$bench" 2>/dev/null); then :; else echo "Tests/KindsPure/Bench/PureControls.cs differs from tl" >&2; status=1; fi
+else
+  tr -d '\r' < "$controls" > "$bench"
+fi
 if [ "${1:-}" = "--check" ]; then
   [ "$status" = 0 ] && echo "Parity fixture matches tl"
   exit "$status"

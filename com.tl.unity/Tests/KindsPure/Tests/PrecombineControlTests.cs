@@ -102,9 +102,11 @@ namespace KindPure
                     Assert.Fail(control + " with " + rows + " rows: the precombined path first differs from the span walk at step " + step + " (" + actual.ToString("X16") + " vs " + expected.ToString("X16") + ").");
                 digest.Lane(actual);
                 reached.Add(precombined);
+                if (!precombined.Precombined("KindPure.Locomotion") || !precombined.Precombined("KindPure.Lift"))
+                    Assert.Fail(control + " with " + rows + " rows: Locomotion and Lift stopped reading precombined tables in the fast world at step " + step + ".");
+                if (spanWalk.Precombined("KindPure.Locomotion") || spanWalk.Precombined("KindPure.Lift") || spanWalk.PulsesPrecombined("KindPure.Damage") || spanWalk.PulsesPrecombined("KindPure.StatChange"))
+                    Assert.Fail(control + ": the reference world built a table at step " + step + "; it must walk spans and pulse entries.");
             }
-            Assert.IsTrue(precombined.Precombined("KindPure.Locomotion") && precombined.Precombined("KindPure.Lift"), "Locomotion and Lift must read precombined tables in the fast world");
-            Assert.IsFalse(spanWalk.Precombined("KindPure.Locomotion") || spanWalk.Precombined("KindPure.Lift"), "the reference world must walk spans and never build a table");
             Assert.AreEqual(DotNetDigest(control).ToString("X16"), digest.Value.ToString("X16"), control + ": the per-step state hashes differ from the .NET host's");
             Assert.GreaterOrEqual(reached.MostListed, 2, "the script never kept two listed playbacks on one row");
             switch (control)
