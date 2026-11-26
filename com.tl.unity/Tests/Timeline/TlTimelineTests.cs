@@ -1392,6 +1392,39 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
+        public void ImportBuildsTimelinesThatExportToTheSameJson()
+        {
+            var push = Timeline("Push");
+            Clip(ForceTrack(push), 0, 2, 4f).Falloff = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+            Clip(ForceTrack(push), 1, 2, 6f);
+            var dash = Timeline("Dash");
+            Clip(ForceTrack(dash), 0, 1, 8f);
+            ThenPlayClipOn(push, dash, dash);
+            TlInspectorModel.SetSettings(push, TlEnd.Next, dash, 0);
+            TlInspectorModel.SetSettings(dash, TlEnd.Loop, null, 0);
+            var first = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tl-import-" + Guid.NewGuid().ToString("N"));
+            var second = first + "-again";
+            try
+            {
+                TlExport.ExportJson(new[] { push }, first);
+                var imported = TlExport.ImportJson(System.IO.Path.Combine(first, "tl.project.json"));
+                _made.AddRange(imported);
+                CollectionAssert.AreEquivalent(new[] { "Push", "Dash" }, imported.Select(t => t.name));
+                TlExport.ExportJson(imported, second);
+                var files = System.IO.Directory.GetFiles(first).Select(f => System.IO.Path.GetFileName(f)).OrderBy(n => n, StringComparer.Ordinal).ToArray();
+                CollectionAssert.AreEqual(files, System.IO.Directory.GetFiles(second).Select(f => System.IO.Path.GetFileName(f)).OrderBy(n => n, StringComparer.Ordinal).ToArray());
+                foreach (var file in files)
+                    Assert.AreEqual(System.IO.File.ReadAllText(System.IO.Path.Combine(first, file)), System.IO.File.ReadAllText(System.IO.Path.Combine(second, file)), file + " exports the same after an import");
+            }
+            finally
+            {
+                foreach (var directory in new[] { first, second })
+                    if (System.IO.Directory.Exists(directory))
+                        System.IO.Directory.Delete(directory, true);
+            }
+        }
+
+        [Test]
         public void TheProjectSettingDefaultsToSixtyTicksPerSecond()
         {
             Assert.AreEqual(60, TlProjectSettings.DefaultTicksPerSecond);

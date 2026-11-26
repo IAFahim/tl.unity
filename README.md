@@ -1020,7 +1020,7 @@ The first four pieces of `Teleport.cs` use only `using Tl;`, so they are plain C
 
 **The recipe** (this is how the Hello Tl example was run outside Unity):
 
-1. **Export from Unity:** menu **Tl > Export** writes one JSON per timeline plus `tl.project.json`. **Tl > Export Library** writes the baked `game.tlib` directly. **Tl > Export Scene JSON** also writes a scene (entities, starting columns, what plays).
+1. **Export from Unity:** menu **Tl > Export** writes one JSON per timeline plus `tl.project.json`. **Tl > Export Library** writes the baked `game.tlib` directly. **Tl > Export Scene JSON** also writes a scene (entities, starting columns, what plays). **Tl > Import** goes the other way: pick a `tl.project.json` and a folder under `Assets`, and it builds one Timeline asset per timeline listed there. A curve comes back as a 16-point curve through the baked samples; what a Unity timeline has no place for, such as track settings or a timeline asset outside the import, is skipped with a warning.
 2. **A console project** that references `Tl.Core` and the Tl code generator from https://github.com/IAFahim/tl (MIT), and contains your `Teleport.cs`.
 3. **Run it:**
 
@@ -1028,13 +1028,13 @@ The first four pieces of `Teleport.cs` use only `using Tl;`, so they are plain C
 using var world   = new TimelineWorld(File.ReadAllBytes("HelloTl.tlib"));
 using var players = new PlaybackTable(1);                  // 1 entity
 using var kinds   = new KindStore(world, players);
-var state = new Teleported[1];                             // your column, one slot per entity
+var state = kinds.Column<Teleported>();                    // your column, one slot per entity
 
 players.Start(0, 1);                                       // entity 0 plays timeline id 1
 for (var step = 0; step < 150; step++)
 {
     world.Tick(players, true);                             // true = forward
-    new Tl.Generated.TlAuto_HelloTl { C0_Teleported = state }.Run(world, players, true);
+    new Tl.Generated.TlAuto_HelloTl().Run(world, players, true);
 }
 ```
 
@@ -1042,7 +1042,7 @@ Printing the offset when it changes gives exactly the numbers from Unity: `30 â†
 
 Things to know:
 
-- The system class `Tl.Generated.TlAuto_<AssemblyName>` is **generated at build time**. The name comes from your assembly name with dots turned into underscores. Its column fields are named `C0_<Type>`, `C1_<Type>`; use your editor's completion to see them.
+- The system class `Tl.Generated.TlAuto_<AssemblyName>` is **generated at build time**. The name comes from your assembly name with dots turned into underscores. A system left without columns runs on the store's own, one per type, which `kinds.Column<T>()` hands back to read. To run it on arrays of your own instead, set its column fields, named `C0_<Type>`, `C1_<Type>`; use your editor's completion to see them.
 - **Timeline ids** follow the timelines' **name order** in a library baked on .NET, and the order timelines stream in on Unity (`TlLibrary.FromBytes` keeps the baked order). Adding a timeline can renumber them. Look them up by name with `world.Find(name)` (.NET) and `library.Find(name)` (Unity) rather than keeping ids.
 - You can bake without Unity: `tl bake tl.project.json -o game.tlib --assembly YourGame.dll` (the `tl` command line tool from the tl repository).
 - The exported library contains the kinds of the whole Unity project, so its size depends on what else is in that project. The behaviour for your timeline is the same.
@@ -1060,7 +1060,7 @@ Things to know:
 | Game pulse sender | `DamageKind.Pulses(kinds)`, taken once | `DamageKind.Pulses(writer)` per job | the .NET sender holds a managed handle |
 | Generated sender for a derived kind (`Sum<T>`, `Set<T>`) | none; `kinds.Pulses<T>("Tl.Derived.<Name>")` | `Tl.Derived.<Name>Kind.Pulses(writer)` | tl's source budget |
 | One entity's events | `drained.Of(entity)` after `events.Drain()` | `DynamicBuffer<TimelineEvent<T>>` | same run (slot order, then raise order); `Record.Entity` and `Record.Sequence` are host-specific |
-| Columns | any unmanaged struct | a partial top-level `[TlState]` struct or an `IComponentData`; a kind that writes anything else fits no system | ECS components; the shared rule is open in IAFahim/tl#665 |
+| Columns | any unmanaged struct; a kind column that is not a `[TlState]` struct warns `TLGEN117`, and a later version requires it | a partial top-level `[TlState]` struct or an `IComponentData`; a kind that writes anything else fits no system and warns `TLGEN117` | ECS components |
 | A declared `[TimelineSystem]` with events and no kinds of its own | its event methods run | not run (the generated job calls an empty `RunStep`); warns `TLUNITY9109`. Consumers outside `[TimelineSystem]` run in the generated system | open in IAFahim/tl#665 |
 | `TLGEN107` (context taken by `ref`) | warning; the system runs sequentially | not reported | ECS schedules the job |
 | `FoldsPulses` | game pulses fold | accepted, not folded; warns `TLUNITY9108` | open: Unity has no folding sender yet |
