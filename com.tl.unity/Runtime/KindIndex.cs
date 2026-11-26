@@ -86,6 +86,8 @@ namespace Tl.Unity
         public int PairCount;
         public ComponentType* EntryTypes;
         public ComponentType* ActiveTypes;
+        public ComponentType* GrowTypes;
+        public int* GrowStart;
         public ulong Bound;
         public int* IdKeys;
         public int* IdKinds;
@@ -344,6 +346,26 @@ namespace Tl.Unity
                 ActiveTypes[k] = ComponentType.ReadWrite(d.Active);
                 Bound |= 1ul << k;
             }
+            var grow = new List<ComponentType>();
+            GrowStart = Zeroed<int>(KindCount + 2);
+            for (var k = 0; k < KindCount; k++)
+            {
+                GrowStart[k] = grow.Count;
+                if ((Bound & (1ul << k)) == 0) continue;
+                var d = registry[registry.IndexOf(Sec.NameOf(k))];
+                grow.Add(ComponentType.ReadWrite(d.Entry));
+                grow.Add(ComponentType.ReadWrite(d.Active));
+                grow.Add(ComponentType.ReadWrite(d.Enabled));
+                foreach (var column in d.Columns)
+                    grow.Add(ComponentType.ReadWrite(column));
+            }
+            GrowStart[KindCount] = grow.Count;
+            foreach (var buffer in registry.EventBuffers)
+                grow.Add(ComponentType.ReadWrite(buffer));
+            GrowStart[KindCount + 1] = grow.Count;
+            GrowTypes = Zeroed<ComponentType>(Math.Max(1, grow.Count));
+            for (var i = 0; i < grow.Count; i++)
+                GrowTypes[i] = grow[i];
             OwnerCount = owners.Count;
             OwnerKeys = Zeroed<int>(Math.Max(1, owners.Count));
             OwnerKinds = Zeroed<int>(Math.Max(1, owners.Count));
@@ -753,6 +775,8 @@ namespace Tl.Unity
             Free(MarkerValues);
             Free(EntryTypes);
             Free(ActiveTypes);
+            Free(GrowTypes);
+            Free(GrowStart);
             Free(IdKeys);
             Free(IdKinds);
             Free(Routes);

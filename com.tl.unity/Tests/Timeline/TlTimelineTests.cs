@@ -1023,7 +1023,7 @@ namespace Tl.Unity.Tracks.Tests
         }
 
         [Test]
-        public void StartingATimelineTheObjectCannotPlayWarnsAndStartsNothing()
+        public void StartingATimelineThatIsNotInTheLibraryWarnsAndStartsNothing()
         {
             var push = Timeline("Push");
             Clip(ForceTrack(push), 0, 2, 4f);
@@ -1034,7 +1034,7 @@ namespace Tl.Unity.Tracks.Tests
             live.Step(2);
             var stranger = new TlTimeline { Asset = new TlAssetId(9, 9, 9, 9) };
             entities.GetBuffer<TimelineRequest>(entity).Start(stranger);
-            LogAssert.Expect(LogType.Warning, new Regex("cannot play. Drag that timeline into Also Plays"));
+            LogAssert.Expect(LogType.Warning, new Regex("not in the loaded library. Drag that timeline into Also Plays"));
             live.Step(2);
             Assert.AreEqual(1, entities.GetBuffer<Playback>(entity).AsNativeArray().ToArray().Count(p => p.Timeline != 0));
         }

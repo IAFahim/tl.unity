@@ -936,7 +936,7 @@ What this shows:
 
 - `AddComponent(player, new Health { Value = ... })` sets the **starting value**. Tl keeps it (9.1).
 - `GetEntity(otherObject, ...)` turns a scene object into an entity reference. This is also how you give a clip's game code a **target**, since Tl clips cannot hold object references (chapter 13).
-- `TlBaking.GetTimeline(this, timeline)` turns a Timeline asset into a `TlTimeline` your code can pass to `requests.Start(...)`. The timeline must be on the object's Playable Director or its **Also Plays**.
+- `TlBaking.GetTimeline(this, timeline)` turns a Timeline asset into a `TlTimeline` your code can pass to `requests.Start(...)`. The timeline must be in the loaded library: on some object's Playable Director, its **Also Plays** or a `TlTimeline` field, or in a library you load. Any Tl object can then play it; an object gets the components of a kind the first time it starts a timeline that needs them.
 
 ### 9.4 A baker per clip: `ITlBaker<TClip>`
 
@@ -1066,7 +1066,7 @@ Things to know:
 | `FoldsPulses` | game pulses fold | accepted, not folded; warns `TLUNITY9108` | open: Unity has no folding sender yet |
 | A marker with no data, or a clip whose bake throws | the bake throws | skipped with a warning, so the rest of the timeline still bakes | by design: the Editor keeps baking the scene |
 | Kind groups | run | skipped, TLUNITY9104 | |
-| Starts of timelines not baked onto the object | n/a | dropped with a warning (Also Plays) | per-object kind archetypes |
+| A start that needs kinds the object was not baked with | the row has every kind | the object gets those kinds' components on that start, in the same step, and moves to another chunk once | per-object kind archetypes |
 | A start of an id past the library | the step throws an `ArgumentException` before any request applies | dropped and counted in `DroppedStarts`, so `TL_CHECKED` throws at the end of the step | a job cannot throw; each buffer is read inside the tick job |
 | Checked builds (throw on a start the entity cannot hold) | `Debug` or `-p:TlChecked=true` | scripting define `TL_CHECKED` | |
 

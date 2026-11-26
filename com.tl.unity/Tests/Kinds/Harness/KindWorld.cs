@@ -105,11 +105,13 @@ namespace KindGame
         public readonly EntityManager Entities;
         public readonly SystemHandle LibraryHandle;
         public readonly SystemHandle TickHandle;
+        public readonly SystemHandle ReachHandle;
         public readonly SystemHandle MovementHandle;
         public readonly SystemHandle VitalsHandle;
         public readonly Entity[] Rows;
         readonly EntityQuery _step;
         readonly bool _events;
+        readonly bool _kinds;
         readonly TlLibrary _library;
         bool _forward = true;
         SystemHandle _aim;
@@ -127,9 +129,12 @@ namespace KindGame
         {
         }
 
-        KindWorld(int count, bool events, Func<World, SystemHandle> library, byte[] bytes)
+        public static KindWorld WithoutKinds(int count, bool events = false) => new KindWorld(count, events, null, null, false);
+
+        KindWorld(int count, bool events, Func<World, SystemHandle> library, byte[] bytes, bool kinds = true)
         {
             _events = events;
+            _kinds = kinds;
             World = new World("TlKinds");
             Entities = World.EntityManager;
             if (library == null)
@@ -139,6 +144,7 @@ namespace KindGame
             }
             else
                 LibraryHandle = library(World);
+            ReachHandle = World.CreateSystem<TlKindReachSystem>();
             TickHandle = World.CreateSystem<TimelineKindTickSystem>();
             MovementHandle = World.CreateSystem<MovementSystem>();
             VitalsHandle = World.CreateSystem<VitalsSystem>();
@@ -164,18 +170,24 @@ namespace KindGame
                 typeof(Movement_StaminaData),
                 typeof(Vitals_HealthData),
             };
-            types.AddRange(LocomotionKind.Types);
-            types.AddRange(LiftKind.Types);
-            types.AddRange(StatChangeKind.Types);
-            types.AddRange(DamageKind.Types);
+            if (_kinds)
+            {
+                types.AddRange(LocomotionKind.Types);
+                types.AddRange(LiftKind.Types);
+                types.AddRange(StatChangeKind.Types);
+                types.AddRange(DamageKind.Types);
+            }
             if (_events)
                 types.Add(typeof(TimelineEvent<Cue>));
             var entity = Entities.CreateEntity(types.ToArray());
             Entities.SetComponentEnabled<TimelinePlaying>(entity, false);
-            LocomotionKind.Init(Entities, entity);
-            LiftKind.Init(Entities, entity);
-            StatChangeKind.Init(Entities, entity);
-            DamageKind.Init(Entities, entity);
+            if (_kinds)
+            {
+                LocomotionKind.Init(Entities, entity);
+                LiftKind.Init(Entities, entity);
+                StatChangeKind.Init(Entities, entity);
+                DamageKind.Init(Entities, entity);
+            }
             Entities.SetComponentData(entity, new Movement_WalkStatData { Value = new WalkStat { Value = 1f } });
             Entities.SetComponentData(entity, new Movement_JumpPowerData { Value = new JumpPower { Value = 2f } });
             Entities.SetComponentData(entity, new Vitals_HealthData { Value = new Health { Value = 1000 } });
@@ -209,6 +221,7 @@ namespace KindGame
                 _step.SetSingleton(new TimelineStep { Forward = forward });
                 _forward = forward;
             }
+            ReachHandle.Update(World.Unmanaged);
             TickHandle.Update(World.Unmanaged);
             MovementHandle.Update(World.Unmanaged);
             VitalsHandle.Update(World.Unmanaged);
