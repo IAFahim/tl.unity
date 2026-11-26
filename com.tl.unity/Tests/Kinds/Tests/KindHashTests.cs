@@ -85,6 +85,30 @@ namespace KindGame
         }
 
         [Test]
+        public void CrossScriptOnRowsSpawnedWithoutKindsHashesLikeThePlainHost()
+        {
+            using (var scan = new LogScan())
+            using (var game = KindWorld.WithoutKinds(KindScript.Rows, true))
+            {
+                var before = Bytes(game);
+                game.AimEachRowAtTheNext();
+                var hash = KindScript.PlayCross(game, KindScript.Steps);
+                Assert.AreEqual("", scan.Report(), "warnings or errors logged during the steps");
+                Assert.AreEqual(KindScript.CrossPinned, hash);
+                Assert.AreEqual(0, game.Tick.DroppedStarts);
+                TestContext.WriteLine("bytes per entity in its chunk: " + before + " spawned without kinds, " + Bytes(game) + " after the script");
+            }
+        }
+
+        static int Bytes(KindWorld game)
+        {
+            var most = 0;
+            foreach (var row in game.Rows)
+                most = System.Math.Max(most, 16 * 1024 / System.Math.Max(1, game.Entities.GetChunk(row).Capacity));
+            return most;
+        }
+
+        [Test]
         public void AWhistleOnOneRowStartsAStompOnTheRowItAimsAtWhichHitsTwoTicksLater()
         {
             using (var game = new KindWorld(3, true))

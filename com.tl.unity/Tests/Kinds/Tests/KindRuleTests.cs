@@ -359,23 +359,29 @@ namespace KindGame
         }
 
         [Test]
-        public void AStartWhoseKindsTheEntityCannotReachIsDroppedAndCounted()
+        public void AStartOnAnEntityWithoutTheKindsAddsThemAndPlaysInTheSameStep()
         {
             var bare = _game.Entities.CreateEntity(typeof(Playback), typeof(TimelineRequest), typeof(TimelinePlaying));
+            _game.Entities.SetComponentEnabled<TimelinePlaying>(bare, false);
             _game.Entities.GetBuffer<TimelineRequest>(bare).Add(TimelineRequest.Start(0, KindWorld.Run));
+            _game.Start(0, KindWorld.Run);
             _game.Step();
-            Assert.AreEqual(1, _game.Tick.DroppedStarts);
-            Assert.AreEqual(0, _game.Entities.GetBuffer<Playback>(bare).Length);
+            Assert.AreEqual(0, _game.Tick.DroppedStarts);
+            foreach (var type in LocomotionKind.Types)
+                Assert.IsTrue(_game.Entities.HasComponent(bare, type), type.ToString());
+            Assert.IsTrue(_game.Entities.HasComponent<Movement_MotionData>(bare));
+            Assert.AreEqual(1, _game.Entities.GetBuffer<Playback>(bare).Length);
+            Assert.AreEqual(KindWorld.Run, _game.Entities.GetBuffer<Playback>(bare)[0].Timeline);
+            Assert.AreEqual(_game.Entities.GetBuffer<Playback>(_game.Rows[0])[0].Tick, _game.Entities.GetBuffer<Playback>(bare)[0].Tick);
         }
 
         [Test]
         public void TheCheckedStartsSystemThrowsOnceForEachNewDroppedStart()
         {
             var check = _game.World.CreateSystem<TlCheckedStartsSystem>();
-            var bare = _game.Entities.CreateEntity(typeof(Playback), typeof(TimelineRequest), typeof(TimelinePlaying));
             _game.Step();
             check.Update(_game.World.Unmanaged);
-            global::Tl.TlRequests.Start(_game.Entities.GetBuffer<TimelineRequest>(bare), KindWorld.Run);
+            _game.Start(0, 60000);
             _game.Step();
             UnityEngine.TestTools.LogAssert.Expect(UnityEngine.LogType.Exception, new System.Text.RegularExpressions.Regex(@"InvalidOperationException: Tl: 1 start\(s\) dropped"));
             check.Update(_game.World.Unmanaged);
@@ -384,22 +390,31 @@ namespace KindGame
         }
 
         [Test]
-        public void ADroppedStartLeavesTheChannelItWouldHaveReplacedPlaying()
+        public void AnEntityWithSomeKindsGetsTheRestOnTheStartThatNeedsThemAndPlaysLikeAFullRow()
         {
             var partial = _game.Entities.CreateEntity(typeof(Playback), typeof(TimelineRequest), typeof(TimelinePlaying));
+            _game.Entities.SetComponentEnabled<TimelinePlaying>(partial, false);
             foreach (var type in LocomotionKind.Types)
                 _game.Entities.AddComponent(partial, type);
             LocomotionKind.Init(_game.Entities, partial);
             global::Tl.TlRequests.Start(_game.Entities.GetBuffer<TimelineRequest>(partial), KindWorld.Run);
+            _game.Start(0, KindWorld.Run);
             Steps(2);
             Assert.AreEqual(0, _game.Tick.DroppedStarts);
+            Assert.IsFalse(_game.Entities.HasComponent(partial, LiftKind.Types[0]));
             global::Tl.TlRequests.Start(_game.Entities.GetBuffer<TimelineRequest>(partial), KindWorld.Jump);
+            _game.Start(0, KindWorld.Jump);
             Steps(1);
-            Assert.AreEqual(1, _game.Tick.DroppedStarts);
-            var playing = _game.Entities.GetBuffer<Playback>(partial);
-            Assert.AreEqual(1, playing.Length);
-            Assert.AreEqual(KindWorld.Run, playing[0].Timeline);
-            Assert.AreEqual(0, (int)(playing[0].Flags & global::Tl.PlaybackFlags.Stopping));
+            Assert.AreEqual(0, _game.Tick.DroppedStarts);
+            var row = _game.Entities.GetBuffer<Playback>(_game.Rows[0]).AsNativeArray().ToArray();
+            var played = _game.Entities.GetBuffer<Playback>(partial).AsNativeArray().ToArray();
+            Assert.AreEqual(row.Length, played.Length);
+            for (var i = 0; i < row.Length; i++)
+            {
+                Assert.AreEqual(row[i].Timeline, played[i].Timeline, "slot " + i);
+                Assert.AreEqual(row[i].Tick, played[i].Tick, "slot " + i);
+                Assert.AreEqual(row[i].Flags, played[i].Flags, "slot " + i);
+            }
         }
 
         [Test]
