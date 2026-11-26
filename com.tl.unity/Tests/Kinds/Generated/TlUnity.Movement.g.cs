@@ -118,11 +118,13 @@ for (var __sj = 0; __sj < __sk; __sj++)
 {
 float __total = default;
 var __has = false;
-for (var __q = 0; __q < __cnt + __smp; __q++)
+var __spans = (Index.SpanKinds >> __kid & 1) != 0;
+for (var __q = 0; __spans && __q < __cnt + __smp; __q++)
 {
 var __i = __q < __smp ? __cnt + __q : __q - __smp;
 var __pb = __run + __i;
 if (__pb->Timeline == 0 || !global::Tl.KindScore.Listed(__pb->Flags)) continue;
+if ((uint)(__pb->Timeline - 1) >= (uint)Index.Score.TimelineCount || (Index.Score.Masks[__pb->Timeline - 1].KindMask >> __kid & 1) == 0) continue;
 ushort __tick = __i < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;
 var __cell = Index.Score.CellOf(__pb->Timeline, __tick, __kid);
 if (__cell < 0 || Index.Score.Start[__cell] == Index.Score.Start[__cell + 1]) continue;
@@ -293,11 +295,13 @@ for (var __sj = 0; __sj < __sk; __sj++)
 {
 global::KindGame.Speed __total = default;
 var __has = false;
-for (var __q = 0; __q < __cnt + __smp; __q++)
+var __spans = (Index.SpanKinds >> __kid & 1) != 0;
+for (var __q = 0; __spans && __q < __cnt + __smp; __q++)
 {
 var __i = __q < __smp ? __cnt + __q : __q - __smp;
 var __pb = __run + __i;
 if (__pb->Timeline == 0 || !global::Tl.KindScore.Listed(__pb->Flags)) continue;
+if ((uint)(__pb->Timeline - 1) >= (uint)Index.Score.TimelineCount || (Index.Score.Masks[__pb->Timeline - 1].KindMask >> __kid & 1) == 0) continue;
 ushort __tick = __i < __cnt ? global::Tl.Unity.TimelineTicks.Real(__pb, __clock) : __pb->Tick;
 var __cell = Index.Score.CellOf(__pb->Timeline, __tick, __kid);
 if (__cell < 0 || Index.Score.Start[__cell] == Index.Score.Start[__cell + 1]) continue;
@@ -537,6 +541,7 @@ for (var __s = 0; __s < __n; __s++)
 {
 var __pb = __pbs + __s;
 if (__pb->Timeline == 0 || (__pb->Flags & (global::Tl.PlaybackFlags.Ended | global::Tl.PlaybackFlags.Paused | global::Tl.PlaybackFlags.Stopping)) != 0) continue;
+if (Index.LacksPairs(__pb->Timeline, 4096UL)) continue;
 var __tl = global::Tl.LibraryViewReader.GetTimeline(in View, new global::Tl.TimelineId(__pb->Timeline));
 if (__tl == null || __tl->Duration == 0) continue;
 var __tick = global::Tl.Unity.TimelineTicks.Real(__pb, (__clocks == null ? (ushort)0 : __clocks[__row]));

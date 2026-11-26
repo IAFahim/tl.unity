@@ -1,0 +1,25 @@
+name: worker scaling
+on:
+  push:
+    branches: [claude/project-thread-tuyrnt]
+  workflow_dispatch:
+concurrency:
+  group: worker-scaling-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  scaling:
+    runs-on: [self-hosted, unity]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive, fetch-depth: 0}
+      - run: bash eng/worker-scaling.sh
+        env:
+          TL_SCALING_BASE: 5a15151
+          TL_SCALING_WORKERS: 1 5 11
+          TL_SCALING_RUNS: 2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: worker-scaling
+          path: artifacts/worker-scaling/*.log
