@@ -72,6 +72,26 @@ namespace KindGame
         }
 
         [Test]
+        public void NoBurstCodeOnTheKindPathRelaxesFloatMath()
+        {
+            foreach (var assembly in new[] { typeof(TimelineKindTickSystem).Assembly, typeof(MovementSystem).Assembly })
+                foreach (var type in assembly.GetTypes())
+                {
+                    Strict(type.GetCustomAttribute<BurstCompileAttribute>(), type.FullName);
+                    foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))
+                        Strict(method.GetCustomAttribute<BurstCompileAttribute>(), type.FullName + "." + method.Name);
+                }
+        }
+
+        static void Strict(BurstCompileAttribute burst, string name)
+        {
+            if (burst == null)
+                return;
+            Assert.IsTrue(burst.FloatMode == FloatMode.Default || burst.FloatMode == FloatMode.Strict, name + " compiles with FloatMode." + burst.FloatMode);
+            Assert.IsTrue(burst.FloatPrecision == FloatPrecision.Standard || burst.FloatPrecision == FloatPrecision.High, name + " compiles with FloatPrecision." + burst.FloatPrecision);
+        }
+
+        [Test]
         public void TheLibrarySingletonCarriesKindsAndStepDirectionPerWorld()
         {
             using (var game = new KindWorld(1))

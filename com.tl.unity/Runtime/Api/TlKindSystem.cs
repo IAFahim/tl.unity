@@ -17,7 +17,7 @@ namespace Tl.Unity
     {
     }
 
-    [BurstCompile]
+    [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
     [UpdateInGroup(typeof(TlFeedGroup))]
     public partial struct TlFeedSystem<TJobs> : ISystem
         where TJobs : unmanaged, ITlKindJobs
@@ -34,7 +34,7 @@ namespace Tl.Unity
             _jobs.Create(ref state);
         }
 
-        [BurstCompile]
+        [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
         public void OnUpdate(ref SystemState state)
         {
             var library = _library.GetSingleton<TimelineLibrary>();
@@ -43,7 +43,7 @@ namespace Tl.Unity
         }
     }
 
-    [BurstCompile]
+    [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
     [UpdateInGroup(typeof(TlSimulationGroup))]
     [UpdateAfter(typeof(TimelineSimulationGroup))]
     [UpdateAfter(typeof(TlFeedGroup))]
@@ -62,7 +62,7 @@ namespace Tl.Unity
             _jobs.Create(ref state);
         }
 
-        [BurstCompile]
+        [BurstCompile(FloatMode = FloatMode.Strict, FloatPrecision = FloatPrecision.Standard)]
         public void OnUpdate(ref SystemState state)
         {
             var library = _library.GetSingleton<TimelineLibrary>();

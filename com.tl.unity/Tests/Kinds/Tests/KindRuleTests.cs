@@ -209,6 +209,19 @@ namespace KindGame
         }
 
         [Test]
+        public void RequestsInOneBufferApplyInSlotOrderLikeDotNet()
+        {
+            var requests = _game.Entities.GetBuffer<TimelineRequest>(_game.Rows[0]);
+            requests.Add(TimelineRequest.Start(1, KindWorld.Run));
+            requests.Add(TimelineRequest.Stop(0, KindWorld.Run));
+            _game.Step();
+            var slots = _game.Slots(0);
+            Assert.AreEqual(KindWorld.Run, slots[0].Timeline);
+            Assert.AreEqual(0, (int)(slots[0].Flags & global::Tl.PlaybackFlags.Stopping));
+            Assert.AreEqual(1, _game.Spans(0, "KindGame.Locomotion"));
+        }
+
+        [Test]
         public void AFreedSlotIsReusedLowestFirstAndKeepsItsIndexForItsWholeLife()
         {
             _game.Start(0, KindWorld.Run);
