@@ -3,7 +3,7 @@
 Tl plays timelines on entities with Burst `ISystem`s over unmanaged data. A designer builds the timelines in Unity's own Timeline window;
 a coder writes a clip struct, a kind and a track. There is no extra file, asset, menu step or generated file to keep.
 
-Tested on the newest Unity 7 editor (7000.0.0a16) with Entities 7.0.0, Entities Graphics 7.0.0, Timeline and URP.
+Tested on the newest Unity 7 editor (7000.0.0a20 or newer; CI runs 7000.0.0a22) with Entities 7.0.0, Entities Graphics 7.0.0, Timeline and URP.
 
 Other guides:
 

@@ -5,7 +5,7 @@ Editor cannot show: the real Timeline window, Undo/Redo, duplicating and draggin
 
 ## Setup (once, about 1 minute)
 
-1. Unity Hub > **New project** > **Universal 3D**, editor 7000.0.0a16. Open it.
+1. Unity Hub > **New project** > **Universal 3D**, the newest Unity 7 editor (7000.0.0a20 or newer). Open it.
 2. `Window > Package Management > Package Manager` > **+** > **Install package from git URL** > paste
    `https://github.com/IAFahim/tl.unity.git?path=/com.tl.unity#main` > **Install**.
 3. In Package Manager select **Tl Unity Playback** > **Samples** > **Force demo** > **Import**.
