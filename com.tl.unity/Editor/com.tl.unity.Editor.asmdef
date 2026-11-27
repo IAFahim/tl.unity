@@ -7,7 +7,9 @@
     "Tl.Unity.Bake",
     "Unity.Collections",
     "Unity.Entities",
-    "Unity.Entities.Hybrid"
+    "Unity.Entities.Hybrid",
+    "Unity.Mathematics",
+    "Unity.Transforms"
   ],
   "includePlatforms": [
     "Editor"
