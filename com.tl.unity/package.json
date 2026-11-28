@@ -1,6 +1,6 @@
 {
   "name": "com.tl.unity",
-  "version": "0.2.0-preview.1",
+  "version": "0.3.0-preview.1",
   "displayName": "Tl Unity Playback",
   "description": "Tl timelines for Unity ECS with Burst. Designers build timelines in Unity's Timeline window with Tl tracks; a Playable Director in a SubScene bakes them, and Burst ISystems play them. Coders write a clip struct, a kind and a track; no extra files, assets or steps.",
   "unity": "7000.0",
