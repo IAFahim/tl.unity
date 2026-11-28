@@ -4,6 +4,10 @@ Newest first. Taken from the commit history since the zero-config plan started (
 
 ## Unreleased
 
+## 0.3.0-preview.1
+
+Everything since `0.2.0-preview.1`. Pins tl main `9379e1ad` (the tl `4.0.0-preview.2` source).
+
 ### Changed
 - The package asks for Unity 7000.0.0a20 or newer (`unityRelease` was `0a16`), and the setup guides say to use the newest Unity 7: editors before a20 cannot compile the generated type registration (#44). CI runs 7000.0.0a22.
 - The pin is tl main `d286cdbb` (was `06a1c710`): Core gains `PlaybackImage` and `PlaybackTable.Save`/`Restore` (IAFahim/tl#681), which the Plain and .NET hosts use for exact rewind with kinds; the ECS tick does not use them. Core, Bake tools, the parity fixture and both generators resynced.
