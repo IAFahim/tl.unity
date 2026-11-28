@@ -45,18 +45,18 @@ With Tl the programmer writes **one small file once** (chapter 1). After that th
 
 ## 1. Run your first timeline (10 minutes)
 
-**Setup:** Unity **7000.0.0a16**, project from the **Universal 3D (URP)** template. Package Manager > **+** > **Install package from git URL**:
+**Setup:** the newest Unity 7 editor (7000.0.0a20 or newer; CI runs 7000.0.0a22), project from the **Universal 3D (URP)** template. Package Manager > **+** > **Install package from git URL**:
 
 ```
 https://github.com/IAFahim/tl.unity.git?path=/com.tl.unity#main
 ```
 
-> **Use exactly this editor.** 7000.0.0a16 is an alpha, so the Unity Hub does not offer it in its normal list; open
-> `unityhub://7000.0.0a16/0745a91df592` (Hub installs it), then check **Help > About Unity** says `7000.0.0a16 (0745a91df592)`.
+> **Use the newest Unity 7 editor.** Unity 7 is an alpha, so the Unity Hub does not offer it in its normal list; install it with the
+> Unity CLI (`unity install 7`), then check **Help > About Unity** says `7000.0.0a20` or newer. Editors before a20 fail to compile the
+> generated type registration (192 `CS0234` errors, #44), and the package manifest asks for a20.
 > Entities 7 and Entities Graphics 7 are built into that editor. Unity 6 (6000.x, what the Hub recommends) has no such packages
 > (the registry stops at Entities Graphics 1.x), and installing Tl there fails with
 > `com.unity.entities.graphics: Dependency was not resolved`. If you see that line, you are on the wrong editor.
-> Other 7000.0 alphas are untested.
 
 Then Package Manager > **Tl Unity Playback** > **Samples** > **Hello Tl** > **Import**. Menu **Tl Hello > Build Scene**, then press **Play**.
 
@@ -1110,7 +1110,7 @@ Honest list. Some of these are design decisions still to be made.
 - **Names are not fully consistent yet.** Examples: both `TlKindAttribute` and `TimelineKindAttribute` exist; `TlClip`, `TlKind` have the `Tl` prefix but `Pulse`, `Feeds`, `ClipEvent`, `KindMode`, `Events<T>` do not; `Playback` exists in both `Tl` and `Tl.Unity`; scene JSON says `"states"` where the code says `[TlState]` and the hash is `TlStateHash`; Unity's Wrap Mode is ignored while Tl's own setting hides in a marker. A naming review is planned; expect renames before 1.0 with no compatibility aliases.
 - **Per-tick sums come back one tick short** on rewind (chapter 10). Pulses are exact.
 - **Kind `Order` across different groups or assemblies, and `Order` in Unity,** are not covered by tests here.
-- **Version:** preview. Tested on Unity 7000.0.0a16, Entities 7.0.0, URP, Windows. The EditMode and PlayMode suites also run on Linux in CI (the runner is described in `docs/CI-RUNNER.md`: who hosts it and how to restart it). The Linux and macOS players and the macOS editor have not been run. IL2CPP and CoreCLR Windows players were run for the scenes and sample listed in chapter 11.
+- **Version:** preview. Tested on the newest Unity 7 (CI: 7000.0.0a22), Entities 7.0.0, URP, Windows. The EditMode and PlayMode suites also run on Linux in CI (the runner is described in `docs/CI-RUNNER.md`: who hosts it and how to restart it). The Linux and macOS players and the macOS editor have not been run. IL2CPP and CoreCLR Windows players were run for the scenes and sample listed in chapter 11.
 - **Install** is by git URL (`#main` moves). No tagged release exists yet.
 - **Floats:** the Motion pack's float results matched bit for bit between .NET and Burst in tests. Other CPUs and compilers are untested.
 
